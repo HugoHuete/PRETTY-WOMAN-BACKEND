@@ -14,5 +14,6 @@ public class OrderTrackingNumber
 
     // Foreign Keys
     public ShippingCompany? ShippingCompany { get; set; }
+    public Order? Order { get; set; }
     public ProductReceipt? ProductReceipt { get; set; }
 }

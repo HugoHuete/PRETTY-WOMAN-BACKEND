@@ -15,5 +15,6 @@ public class Order
 
     public OrderStatus? OrderStatus { get; set; }
     public Supplier? Supplier { get; set; }
-    public List<OrderTrackingNumber> OrderTrackingNumbers = [];
+    public List<OrderTrackingNumber> OrderTrackingNumbers { get; set; } = [];
+    public List<Product> Products { get; set; } = [];
 }
