@@ -1,0 +1,109 @@
+# Build results
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+
+# .NET
+*.user
+*.rsuser
+*.suo
+*.userosscache
+*.sln.docstates
+*.nupkg
+*.snupkg
+project.lock.json
+project.assets.json
+artifacts/
+
+# ASP.NET / local config
+appsettings.Development.json
+appsettings.Local.json
+appsettings.*.local.json
+
+# Environment variables / secrets
+.env
+.env.*
+!.env.example
+secrets.json
+
+# EF Core temporary / generated bundles
+efbundle
+efbundle.exe
+*.db
+*.db-shm
+*.db-wal
+
+# Logs
+logs/
+Logs/
+*.log
+*.trace
+
+# Test results / coverage
+TestResults/
+coverage/
+coverage.xml
+coverage.json
+*.trx
+*.coverage
+*.coveragexml
+
+# Visual Studio
+.vs/
+*.vscode.csproj
+*.pidb
+*.svclog
+
+# VS Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.example.json
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# OS files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# NuGet
+packages/
+*.nuget.props
+*.nuget.targets
+
+# Node / frontend, if you later add React
+node_modules/
+dist/
+build/
+.next/
+.vite/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Docker / local volumes
+docker-data/
+postgres-data/
+pgdata/
+
+# Generated files / exports
+exports/
+reports/
+temp/
+tmp/
+
+# Uploaded or processed local files
+uploads/
+wwwroot/uploads/
+wwwroot/generated/

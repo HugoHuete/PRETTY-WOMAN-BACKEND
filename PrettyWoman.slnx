@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PrettyWoman.Api/PrettyWoman.Api.csproj" />
+    <Project Path="src/PrettyWoman.Application/PrettyWoman.Application.csproj" />
+    <Project Path="src/PrettyWoman.Domain/PrettyWoman.Domain.csproj" />
+    <Project Path="src/PrettyWoman.Infrastructure/PrettyWoman.Infrastructure.csproj" />
+    <Project Path="src/PrettyWoman.Workers/PrettyWoman.Workers.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/PrettyWoman.Application.Tests/PrettyWoman.Application.Tests.csproj" />
+    <Project Path="tests/PrettyWoman.Infrastructure.Tests/PrettyWoman.Infrastructure.Tests.csproj" />
+  </Folder>
+</Solution>
