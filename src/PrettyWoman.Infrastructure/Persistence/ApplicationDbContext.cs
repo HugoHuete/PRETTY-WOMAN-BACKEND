@@ -16,6 +16,7 @@ public class ApplicationDbContext : IdentityDbContext<User>
 
     }
 
+
     // Orders 
     public DbSet<Supplier> Suppliers { get; set; }
     public DbSet<ShippingCompany> ShippingCompanies { get; set; }
@@ -32,5 +33,22 @@ public class ApplicationDbContext : IdentityDbContext<User>
     public DbSet<ProductDetail> ProductDetails { get; set; }
     public DbSet<ProductImage> ProductImages { get; set; }
     public DbSet<Product> Products { get; set; }
+    public DbSet<ProductHold> ProductHolds { get; set; }
+
+
+    // Discounts
+    public DbSet<DiscountType> DiscountTypes { get; set; }
+    public DbSet<DiscountSource> DiscountSources { get; set; }
+    public DbSet<DiscountCampaign> DiscountCampaigns { get; set; }
+    public DbSet<DiscountCampaignProduct> DiscountCampaignProducts { get; set; }
+
+
+    // Sales
+    public DbSet<Client> Clients { get; set; }
+    public DbSet<Sale> Sales { get; set; }
+    public DbSet<SaleChannel> SaleChannels { get; set; }
+    public DbSet<SaleStatus> SaleStatuses { get; set; }
+    public DbSet<SaleProductStatus> SaleProductStatuses { get; set; }
+    public DbSet<SaleProduct> SaleProducts { get; set; }
 
 }

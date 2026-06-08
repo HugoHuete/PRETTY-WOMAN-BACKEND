@@ -83,6 +83,19 @@ namespace PrettyWoman.Infrastructure.Migrations
                     table.PrimaryKey("pk_suppliers", x => x.id);
                 });
 
+            migrationBuilder.InsertData(
+                table: "order_statuses",
+                columns: new[] { "id", "name" },
+                values: new object[,]
+                {
+                    { 1, "Pending" },
+                    { 2, "PartiallyReceived" },
+                    { 3, "Received" },
+                    { 4, "Cancelled" }
+                });
+
+            migrationBuilder.Sql("ALTER TABLE order_statuses ALTER COLUMN id RESTART WITH 5;");
+
             migrationBuilder.CreateTable(
                 name: "order_tracking_numbers",
                 columns: table => new

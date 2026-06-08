@@ -1,0 +1,16 @@
+namespace PrettyWoman.Domain.Entities;
+
+public class DiscountCampaignProduct
+{
+    public int Id { get; set; }
+    public int ProductId { get; set; }
+    public int DiscountCampaignId { get; set; }
+    public int DiscountTypeId { get; set; }
+    public decimal DiscountValue { get; set; }
+
+
+
+    public DiscountType? DiscountType { get; set; }
+    public DiscountCampaign? DiscountCampaign { get; set; }
+    public Product? Product { get; set; }
+}

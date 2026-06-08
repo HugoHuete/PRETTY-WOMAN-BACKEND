@@ -27,7 +27,7 @@ Cancelar o reembolsar una línea específica de una venta sin cancelar toda la v
 2. Validar que esté activa.
 3. Cambiar estado a `Cancelled` o `Refunded`.
 4. Devolver inventario si el producto debe regresar a stock.
-5. Crear `inventory_movements` tipo `SaleDetailCancelled` o `Return`.
+5. Crear `inventory_movements` tipo `SaleProductCancelled` o `Return`.
 6. Si corresponde, crear movimiento financiero de reembolso.
 7. Recalcular totales de la venta si el sistema lo requiere.
 8. Recalcular ganancia de la venta.
