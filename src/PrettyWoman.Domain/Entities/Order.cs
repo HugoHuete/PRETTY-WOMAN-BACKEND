@@ -11,9 +11,11 @@ public class Order
     public decimal ReceivedAmount { get; set; }
     public decimal TotalShippingCost { get; set; }
     public string Comments { get; set; } = string.Empty;
+    public int DollarExchangeRateId { get; set; }
 
 
     public OrderStatus? OrderStatus { get; set; }
+    public DollarExchangeRate? DollarExchangeRate { get; set; }
     public Supplier? Supplier { get; set; }
     public List<OrderTrackingNumber> OrderTrackingNumbers { get; set; } = [];
     public List<Product> Products { get; set; } = [];

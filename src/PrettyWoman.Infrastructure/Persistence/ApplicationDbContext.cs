@@ -65,4 +65,20 @@ public class ApplicationDbContext : IdentityDbContext<User>
     public DbSet<Municipality> Municipalities { get; set; }
 
 
+    // Finances
+    public DbSet<ExpenseCategory> ExpenseCategories { get; set; }
+    public DbSet<MovementDirection> MovementDirections { get; set; }
+    public DbSet<FinancialMovementType> FinancialMovementTypes { get; set; }
+    public DbSet<FinancialMovement> FinancialMovements { get; set; }
+    public DbSet<LoanOwner> LoanOwners { get; set; }
+    public DbSet<Loan> Loans { get; set; }
+    public DbSet<DollarExchangeRate> DollarExchangeRates { get; set; }
+
+
+    // Inventory
+    public DbSet<InventoryMovementType> InventoryMovementTypes { get; set; }
+    public DbSet<InventoryMovement> InventoryMovements { get; set; }
+    
+
+
 }

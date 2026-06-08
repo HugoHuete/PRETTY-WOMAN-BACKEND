@@ -21,4 +21,5 @@ public class Product
     public Order? Order { get; set; }
     public ProductDetail? ProductDetail { get; set; }
     public Size? Size { get; set; }
+    public List<InventoryMovement> InventoryMovements {get;set;} = [];
 }
