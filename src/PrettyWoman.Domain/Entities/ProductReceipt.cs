@@ -5,5 +5,5 @@ public class ProductReceipt
     public int Id { get; set; }
     public DateTime ReceivedDate { get; set; }
 
-    public List<OrderTrackingNumber> OrderTrackingNumbers = [];
+    public ICollection<OrderTrackingNumber> OrderTrackingNumbers = [];
 }

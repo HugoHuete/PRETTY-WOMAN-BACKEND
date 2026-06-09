@@ -15,5 +15,5 @@ public class Client
     public string? Comments { get; set; }
 
 
-    public List<Sale> Sales { get; set; } = [];
+    public ICollection<Sale> Sales { get; set; } = [];
 }
