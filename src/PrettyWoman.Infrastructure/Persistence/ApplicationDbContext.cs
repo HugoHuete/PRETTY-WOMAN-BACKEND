@@ -1,10 +1,11 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using PrettyWoman.Application.Interfaces;
 using PrettyWoman.Domain.Entities;
 
 namespace PrettyWoman.Infrastructure.Persistence;
 
-public class ApplicationDbContext : IdentityDbContext<User>
+public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbContext
 {
     public ApplicationDbContext(DbContextOptions options) : base(options)
     {
