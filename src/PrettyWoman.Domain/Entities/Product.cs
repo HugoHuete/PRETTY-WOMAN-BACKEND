@@ -22,4 +22,7 @@ public class Product
     public ProductDetail? ProductDetail { get; set; }
     public Size? Size { get; set; }
     public ICollection<InventoryMovement> InventoryMovements {get;set;} = [];
+    public ICollection<ProductHold> ProductHolds {get;set;} = [];
+    public ICollection<ProductReceiptDetail> ProductReceiptDetails {get;set;} = [];
+    public ICollection<DiscountCampaignProduct> DiscountCampaignProducts {get;set;} = [];
 }

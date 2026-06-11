@@ -1,6 +1,6 @@
 namespace PrettyWoman.Domain.Enums;
 
-public enum SaleStatusCode
+public enum SaleStatusOption
 {
     Pending = 1,
     Completed = 2,

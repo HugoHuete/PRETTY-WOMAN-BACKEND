@@ -6,5 +6,5 @@ public enum SaleChannelOption
     Whatsapp = 2,
     Instagram = 3,
     Messenger = 4,
-    Others = 5
+    Other = 5
 }

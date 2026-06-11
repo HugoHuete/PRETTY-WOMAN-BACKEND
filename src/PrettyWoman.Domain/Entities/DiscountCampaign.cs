@@ -7,4 +7,6 @@ public class DiscountCampaign
     public DateTime StartDate { get; set; } = DateTime.UtcNow;
     public DateTime EndDate { get; set; }
     public bool Enabled { get; set; } = true;
+
+    public ICollection<DiscountCampaignProduct> DiscountCampaignProducts { get; set; } = [];
 }

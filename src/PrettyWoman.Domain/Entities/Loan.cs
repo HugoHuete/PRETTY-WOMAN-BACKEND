@@ -10,13 +10,12 @@ public class Loan
     public decimal Balance { get; set; }
     public DateTime? ClosedAt { get; set; }
     public string? Comments { get; set; }
-    public int DollarExchangeRateId { get; set; }
+    public decimal ExchangeRate { get; set; }
 
 
 
     public bool IsActive => Balance > 0 && ClosedAt is null;
 
     public LoanOwner? LoanOwner { get; set; }
-    public DollarExchangeRate? DollarExchangeRate { get; set; }
     public List<FinancialMovement> FinancialMovements { get; set; } = [];
 }

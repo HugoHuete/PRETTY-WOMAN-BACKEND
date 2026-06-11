@@ -1,10 +1,9 @@
 namespace PrettyWoman.Domain.Entities;
 
-public class Supplier
+using PrettyWoman.Domain.Enums;
+
+public class ProductHoldStatus
 {
     public int Id { get; set; }
     public required string Name { get; set; }
-    public string? Url { get; set; }
-
-    public ICollection<Order> Orders { get; set; } = [];
 }

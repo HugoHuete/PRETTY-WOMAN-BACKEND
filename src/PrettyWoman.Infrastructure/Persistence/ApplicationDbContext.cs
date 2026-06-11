@@ -14,6 +14,9 @@ public class ApplicationDbContext : IdentityDbContext<User>
     {
         base.OnModelCreating(builder);
 
+        builder.ApplyConfigurationsFromAssembly(
+        typeof(ApplicationDbContext).Assembly);
+
     }
 
 
@@ -21,8 +24,8 @@ public class ApplicationDbContext : IdentityDbContext<User>
     public DbSet<Supplier> Suppliers { get; set; }
     public DbSet<ShippingCompany> ShippingCompanies { get; set; }
     public DbSet<OrderStatus> OrderStatuses { get; set; }
-    public DbSet<Order> Orders { get; set; }
     public DbSet<OrderTrackingNumber> OrderTrackingNumbers { get; set; }
+    public DbSet<Order> Orders { get; set; }
     public DbSet<ProductReceipt> ProductReceipts { get; set; }
     public DbSet<ProductReceiptDetail> ProductReceiptDetails { get; set; }
 
@@ -34,6 +37,7 @@ public class ApplicationDbContext : IdentityDbContext<User>
     public DbSet<ProductImage> ProductImages { get; set; }
     public DbSet<Product> Products { get; set; }
     public DbSet<ProductHold> ProductHolds { get; set; }
+    public DbSet<ProductHoldStatus> ProductHoldStatuses { get; set; }
 
 
     // Discounts
@@ -45,10 +49,10 @@ public class ApplicationDbContext : IdentityDbContext<User>
 
     // Sales
     public DbSet<Client> Clients { get; set; }
-    public DbSet<Sale> Sales { get; set; }
     public DbSet<SaleChannel> SaleChannels { get; set; }
     public DbSet<SaleStatus> SaleStatuses { get; set; }
     public DbSet<SaleProductStatus> SaleProductStatuses { get; set; }
+    public DbSet<Sale> Sales { get; set; }
     public DbSet<SaleProduct> SaleProducts { get; set; }
 
     // Payments

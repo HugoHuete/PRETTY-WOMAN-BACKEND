@@ -11,13 +11,12 @@ public class FinancialMovement
     public int? SalePaymentId { get; set; }
     public int? LoanId { get; set; }
     public decimal Amount { get; set; }
-    public int DollarExchangeRateId { get; set; }
+    public decimal ExchangeRate { get; set; }
     public string? Comments { get; set; }
 
 
 
     public MovementDirection? MovementDirection { get; set; }
-    public DollarExchangeRate? DollarExchangeRate { get; set; }
     public FinancialMovementType? FinancialMovementType { get; set; }
     public ExpenseCategory? ExpenseCategory { get; set; }
     public Order? Order { get; set; }

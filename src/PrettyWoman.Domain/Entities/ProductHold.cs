@@ -12,8 +12,9 @@ public class ProductHold
     public DateTime? ResolvedAt { get; set; }
     public required string HoldReason { get; set; }
     public string? Comments { get; set; }
-    public ProductHoldStatus Status { get; set; } = ProductHoldStatus.Active;
+    public int ProductHoldStatusId { get; set; } = (int) ProductHoldStatusOption.Active;
 
     public Product? Product { get; set; }
+    public ProductHoldStatus? ProductHoldStatus { get; set; }
     public Sale? Sale { get; set; }
 }
