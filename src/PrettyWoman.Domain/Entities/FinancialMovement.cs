@@ -3,6 +3,7 @@ namespace PrettyWoman.Domain.Entities;
 public class FinancialMovement
 {
     public int Id { get; set; }
+    public required string Description { get; set; }
     public DateTime CreatedAt { get; set; }
     public int MovementDirectionId { get; set; }
     public int FinancialMovementTypeId { get; set; }
