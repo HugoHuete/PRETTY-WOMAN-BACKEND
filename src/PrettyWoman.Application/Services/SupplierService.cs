@@ -1,6 +1,7 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.DTOs.Suppliers;
+using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Interfaces;
 using PrettyWoman.Domain.Entities;
 
@@ -25,7 +26,7 @@ public class SupplierService(IApplicationDbContext context, IMapper mapper) : IS
 
         if (exists)
         {
-            throw new InvalidOperationException("A supplier with that name already exists.");
+            throw new AppBadRequestException("A supplier with that name already exists.");
         }
 
         createSupplierDTO.Name = normalizedName;

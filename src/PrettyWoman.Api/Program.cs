@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.OpenApi;
+using PrettyWoman.Api.Middlewares;
 using PrettyWoman.Application;
 using PrettyWoman.Infrastructure;
 using PrettyWoman.Infrastructure.Persistence;
@@ -48,12 +49,17 @@ builder.Services.AddApplication();
 
 var app = builder.Build();
 
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+app.UseAuthentication();
+app.UseAuthorization();
 
 app.UseHttpsRedirection();
 app.MapControllers();

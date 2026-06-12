@@ -13,18 +13,14 @@ public class SuppliersController(ISupplierService supplierService) : ControllerB
     [HttpPost]
     public async Task<ActionResult<int>> Create([FromBody] CreateSupplierDTO createSupplierDTO)
     {
-        try
-        {
-            var supplierId = await _supplierService.CreateAsync(createSupplierDTO);
-            return Created($"/api/v1/suppliers/{supplierId}", supplierId);
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
+        var id = await _supplierService.CreateAsync(createSupplierDTO);
+
+        return CreatedAtAction(nameof(GetById), new { id }, id); ;
+    }
+
+    [HttpGet]
+    public async Task<ActionResult<int>> GetById()
+    {
+        throw new NotImplementedException();
     }
 }
