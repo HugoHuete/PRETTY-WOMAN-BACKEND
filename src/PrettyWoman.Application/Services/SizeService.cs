@@ -15,14 +15,14 @@ public class SizeService(IApplicationDbContext context, IMapper mapper) : ISizeS
 
     public async Task<int> CreateAsync(CreateSizeDTO createSizeDTO)
     {
-        createSizeDTO.Name = createSizeDTO.Name.NormalizeRequired("Size name");
+        createSizeDTO.Name = createSizeDTO.Name.NormalizeRequired("Nombre de la talla");
 
         var exists = await _context.Sizes
             .AnyAsync(size => size.Name.ToLower() == createSizeDTO.Name.ToLower());
 
         if (exists)
         {
-            throw new AppBadRequestException("A size with that name already exists.");
+            throw new AppBadRequestException("Ya existe una talla con ese nombre.");
         }
 
         var size = _mapper.Map<Size>(createSizeDTO);
@@ -36,16 +36,16 @@ public class SizeService(IApplicationDbContext context, IMapper mapper) : ISizeS
     public async Task UpdateAsync(int id, UpdateSizeDTO updateSizeDTO)
     {
         var size = await _context.Sizes.FirstOrDefaultAsync(size => size.Id == id)
-            ?? throw new AppNotFoundException($"Size with id '{id}' does not exist.");
+            ?? throw new AppNotFoundException($"La talla con id '{id}' no existe.");
 
-        updateSizeDTO.Name = updateSizeDTO.Name.NormalizeRequired("Size name");
+        updateSizeDTO.Name = updateSizeDTO.Name.NormalizeRequired("Nombre de la talla");
 
         var exists = await _context.Sizes
             .AnyAsync(size => size.Id != id && size.Name.ToLower() == updateSizeDTO.Name.ToLower());
 
         if (exists)
         {
-            throw new AppBadRequestException("A size with that name already exists.");
+            throw new AppBadRequestException("Ya existe una talla con ese nombre.");
         }
 
         _mapper.Map(updateSizeDTO, size);
@@ -66,7 +66,7 @@ public class SizeService(IApplicationDbContext context, IMapper mapper) : ISizeS
     public async Task<SizeDTO> GetByIdAsync(int id)
     {
         var size = await _context.Sizes.FirstOrDefaultAsync(size => size.Id == id)
-            ?? throw new AppNotFoundException($"Size with id '{id}' does not exist.");
+            ?? throw new AppNotFoundException($"La talla con id '{id}' no existe.");
 
         return _mapper.Map<SizeDTO>(size);
     }

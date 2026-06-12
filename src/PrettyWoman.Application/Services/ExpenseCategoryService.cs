@@ -15,14 +15,14 @@ public class ExpenseCategoryService(IApplicationDbContext context, IMapper mappe
 
     public async Task<int> CreateAsync(CreateExpenseCategoryDTO createExpenseCategoryDTO)
     {
-        createExpenseCategoryDTO.Name = createExpenseCategoryDTO.Name.NormalizeRequired("Expense category name");
+        createExpenseCategoryDTO.Name = createExpenseCategoryDTO.Name.NormalizeRequired("Nombre de la categoría de gasto");
 
         var exists = await _context.ExpenseCategories
             .AnyAsync(expenseCategory => expenseCategory.Name.ToLower() == createExpenseCategoryDTO.Name.ToLower());
 
         if (exists)
         {
-            throw new AppBadRequestException("An expense category with that name already exists.");
+            throw new AppBadRequestException("Ya existe una categoría de gasto con ese nombre.");
         }
 
         var expenseCategory = _mapper.Map<ExpenseCategory>(createExpenseCategoryDTO);
@@ -36,16 +36,16 @@ public class ExpenseCategoryService(IApplicationDbContext context, IMapper mappe
     public async Task UpdateAsync(int id, UpdateExpenseCategoryDTO updateExpenseCategoryDTO)
     {
         var expenseCategory = await _context.ExpenseCategories.FirstOrDefaultAsync(expenseCategory => expenseCategory.Id == id)
-            ?? throw new AppNotFoundException($"Expense category with id '{id}' does not exist.");
+            ?? throw new AppNotFoundException($"La categoría de gasto con id '{id}' no existe.");
 
-        updateExpenseCategoryDTO.Name = updateExpenseCategoryDTO.Name.NormalizeRequired("Expense category name");
+        updateExpenseCategoryDTO.Name = updateExpenseCategoryDTO.Name.NormalizeRequired("Nombre de la categoría de gasto");
 
         var exists = await _context.ExpenseCategories
             .AnyAsync(expenseCategory => expenseCategory.Id != id && expenseCategory.Name.ToLower() == updateExpenseCategoryDTO.Name.ToLower());
 
         if (exists)
         {
-            throw new AppBadRequestException("An expense category with that name already exists.");
+            throw new AppBadRequestException("Ya existe una categoría de gasto con ese nombre.");
         }
 
         _mapper.Map(updateExpenseCategoryDTO, expenseCategory);
@@ -65,7 +65,7 @@ public class ExpenseCategoryService(IApplicationDbContext context, IMapper mappe
     public async Task<ExpenseCategoryDTO> GetByIdAsync(int id)
     {
         var expenseCategory = await _context.ExpenseCategories.FirstOrDefaultAsync(expenseCategory => expenseCategory.Id == id)
-            ?? throw new AppNotFoundException($"Expense category with id '{id}' does not exist.");
+            ?? throw new AppNotFoundException($"La categoría de gasto con id '{id}' no existe.");
 
         return _mapper.Map<ExpenseCategoryDTO>(expenseCategory);
     }

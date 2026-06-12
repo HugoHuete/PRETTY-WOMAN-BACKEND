@@ -6,7 +6,7 @@ public class PaymentTerminalDTO
 {
     public int Id { get; set; }
 
-    [Required]
+    [Required(ErrorMessage = "Nombre de la terminal de pago es obligatorio.")]
     public required string Name { get; set; }
 
     public decimal ComissionPercentage { get; set; }

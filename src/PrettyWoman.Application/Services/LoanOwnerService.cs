@@ -15,14 +15,14 @@ public class LoanOwnerService(IApplicationDbContext context, IMapper mapper) : I
 
     public async Task<int> CreateAsync(CreateLoanOwnerDTO createLoanOwnerDTO)
     {
-        createLoanOwnerDTO.Name = createLoanOwnerDTO.Name.NormalizeRequired("Loan owner name");
+        createLoanOwnerDTO.Name = createLoanOwnerDTO.Name.NormalizeRequired("Nombre del responsable del préstamo");
 
         var exists = await _context.LoanOwners
             .AnyAsync(loanOwner => loanOwner.Name.ToLower() == createLoanOwnerDTO.Name.ToLower());
 
         if (exists)
         {
-            throw new AppBadRequestException("A loan owner with that name already exists.");
+            throw new AppBadRequestException("Ya existe un responsable de préstamo con ese nombre.");
         }
 
         var loanOwner = _mapper.Map<LoanOwner>(createLoanOwnerDTO);
@@ -36,16 +36,16 @@ public class LoanOwnerService(IApplicationDbContext context, IMapper mapper) : I
     public async Task UpdateAsync(int id, UpdateLoanOwnerDTO updateLoanOwnerDTO)
     {
         var loanOwner = await _context.LoanOwners.FirstOrDefaultAsync(loanOwner => loanOwner.Id == id)
-            ?? throw new AppNotFoundException($"Loan owner with id '{id}' does not exist.");
+            ?? throw new AppNotFoundException($"El responsable de préstamo con id '{id}' no existe.");
 
-        updateLoanOwnerDTO.Name = updateLoanOwnerDTO.Name.NormalizeRequired("Loan owner name");
+        updateLoanOwnerDTO.Name = updateLoanOwnerDTO.Name.NormalizeRequired("Nombre del responsable del préstamo");
 
         var exists = await _context.LoanOwners
             .AnyAsync(loanOwner => loanOwner.Id != id && loanOwner.Name.ToLower() == updateLoanOwnerDTO.Name.ToLower());
 
         if (exists)
         {
-            throw new AppBadRequestException("A loan owner with that name already exists.");
+            throw new AppBadRequestException("Ya existe un responsable de préstamo con ese nombre.");
         }
 
         _mapper.Map(updateLoanOwnerDTO, loanOwner);
@@ -65,7 +65,7 @@ public class LoanOwnerService(IApplicationDbContext context, IMapper mapper) : I
     public async Task<LoanOwnerDTO> GetByIdAsync(int id)
     {
         var loanOwner = await _context.LoanOwners.FirstOrDefaultAsync(loanOwner => loanOwner.Id == id)
-            ?? throw new AppNotFoundException($"Loan owner with id '{id}' does not exist.");
+            ?? throw new AppNotFoundException($"El responsable de préstamo con id '{id}' no existe.");
 
         return _mapper.Map<LoanOwnerDTO>(loanOwner);
     }

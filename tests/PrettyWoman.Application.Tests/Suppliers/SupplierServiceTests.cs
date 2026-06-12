@@ -14,7 +14,7 @@ public class SupplierServiceTests
 {
     private static readonly IMapper Mapper = new MapperConfiguration(config =>
     {
-        config.AddProfile<SupplierProfile>();
+        config.AddProfile<CatalogProfile>();
     }, NullLoggerFactory.Instance).CreateMapper();
 
     [Fact]
@@ -51,7 +51,7 @@ public class SupplierServiceTests
             Url = "https://example.com/other"
         }));
 
-        Assert.Equal("A supplier with that name already exists.", exception.Message);
+        Assert.Equal("Ya existe un proveedor con ese nombre.", exception.Message);
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public class SupplierServiceTests
 
         var exception = await Assert.ThrowsAsync<AppNotFoundException>(() => service.GetByIdAsync(999));
 
-        Assert.Equal("Supplier with id '999' does not exist.", exception.Message);
+        Assert.Equal("El proveedor con id '999' no existe.", exception.Message);
     }
 
     [Fact]
@@ -139,7 +139,7 @@ public class SupplierServiceTests
             Url = "https://example.com/mango-updated"
         }));
 
-        Assert.Equal("A supplier with that name already exists.", exception.Message);
+        Assert.Equal("Ya existe un proveedor con ese nombre.", exception.Message);
     }
 
     private static SupplierService CreateService(ApplicationDbContext context)

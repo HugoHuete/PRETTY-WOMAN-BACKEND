@@ -15,14 +15,14 @@ public class CategoryService(IApplicationDbContext context, IMapper mapper) : IC
 
     public async Task<int> CreateAsync(CreateCategoryDTO createCategoryDTO)
     {
-        createCategoryDTO.Name = createCategoryDTO.Name.NormalizeRequired("Category name");
+        createCategoryDTO.Name = createCategoryDTO.Name.NormalizeRequired("Nombre de la categoría");
 
         var exists = await _context.Categories
             .AnyAsync(category => category.Name.ToLower() == createCategoryDTO.Name.ToLower());
 
         if (exists)
         {
-            throw new AppBadRequestException("A category with that name already exists.");
+            throw new AppBadRequestException("Ya existe una categoría con ese nombre.");
         }
 
         var category = _mapper.Map<Category>(createCategoryDTO);
@@ -35,10 +35,10 @@ public class CategoryService(IApplicationDbContext context, IMapper mapper) : IC
 
     public async Task UpdateAsync(int id, UpdateCategoryDTO updateCategoryDTO)
     {
-        updateCategoryDTO.Name = updateCategoryDTO.Name.NormalizeRequired("Category name");
+        updateCategoryDTO.Name = updateCategoryDTO.Name.NormalizeRequired("Nombre de la categoría");
         
         var category = await _context.Categories.FirstOrDefaultAsync(category => category.Id == id)
-            ?? throw new AppNotFoundException($"Category with id '{id}' does not exist.");
+            ?? throw new AppNotFoundException($"La categoría con id '{id}' no existe.");
 
 
         var exists = await _context.Categories
@@ -46,7 +46,7 @@ public class CategoryService(IApplicationDbContext context, IMapper mapper) : IC
 
         if (exists)
         {
-            throw new AppBadRequestException("A category with that name already exists.");
+            throw new AppBadRequestException("Ya existe una categoría con ese nombre.");
         }
 
         _mapper.Map(updateCategoryDTO, category);
@@ -64,7 +64,7 @@ public class CategoryService(IApplicationDbContext context, IMapper mapper) : IC
     public async Task<CategoryDTO> GetByIdAsync(int id)
     {
         var category = await _context.Categories.FirstOrDefaultAsync(category => category.Id == id)
-            ?? throw new AppNotFoundException($"Category with id '{id}' does not exist.");
+            ?? throw new AppNotFoundException($"La categoría con id '{id}' no existe.");
 
         return _mapper.Map<CategoryDTO>(category);
     }

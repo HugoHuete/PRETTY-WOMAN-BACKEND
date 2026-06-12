@@ -6,7 +6,7 @@ public class LoanOwnerDTO
 {
     public int Id { get; set; }
 
-    [Required]
+    [Required(ErrorMessage = "Nombre del responsable del préstamo es obligatorio.")]
     public required string Name { get; set; }
 
     public bool Enabled { get; set; }

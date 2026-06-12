@@ -4,10 +4,10 @@ namespace PrettyWoman.Application.DTOs.PaymentTerminals;
 
 public class CreatePaymentTerminalDTO
 {
-    [Required]
+    [Required(ErrorMessage = "Nombre de la terminal de pago es obligatorio.")]
     public required string Name { get; set; }
 
-    [Range(0, 1, ErrorMessage = "Payment terminal comission percentage must be between 0 and 100.")]
+    [Range(0, 100, ErrorMessage = "El porcentaje de comisión de la terminal de pago debe estar entre 0 y 100.")]
     public decimal ComissionPercentage { get; set; }
 
     public bool Enabled { get; set; } = true;

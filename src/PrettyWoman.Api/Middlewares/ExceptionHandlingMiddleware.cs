@@ -45,7 +45,7 @@ public class ExceptionHandlingMiddleware
             var response = new
             {
                 status = 500,
-                message = "An unexpected error occurred."
+                message = "Ocurrió un error inesperado."
             };
 
             await context.Response.WriteAsync(JsonSerializer.Serialize(response));

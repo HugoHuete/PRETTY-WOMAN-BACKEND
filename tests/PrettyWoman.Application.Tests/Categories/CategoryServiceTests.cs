@@ -14,7 +14,7 @@ public class CategoryServiceTests
 {
     private static readonly IMapper Mapper = new MapperConfiguration(config =>
     {
-        config.AddProfile<CategoryProfile>();
+        config.AddProfile<CatalogProfile>();
     }, NullLoggerFactory.Instance).CreateMapper();
 
     [Fact]
@@ -48,7 +48,7 @@ public class CategoryServiceTests
             Name = " blusas "
         }));
 
-        Assert.Equal("A category with that name already exists.", exception.Message);
+        Assert.Equal("Ya existe una categoría con ese nombre.", exception.Message);
     }
 
     [Fact]
@@ -75,7 +75,7 @@ public class CategoryServiceTests
 
         var exception = await Assert.ThrowsAsync<AppNotFoundException>(() => service.GetByIdAsync(999));
 
-        Assert.Equal("Category with id '999' does not exist.", exception.Message);
+        Assert.Equal("La categoría con id '999' no existe.", exception.Message);
     }
 
     [Fact]
@@ -133,7 +133,7 @@ public class CategoryServiceTests
             Name = " blusas "
         }));
 
-        Assert.Equal("A category with that name already exists.", exception.Message);
+        Assert.Equal("Ya existe una categoría con ese nombre.", exception.Message);
     }
 
     private static CategoryService CreateService(ApplicationDbContext context)

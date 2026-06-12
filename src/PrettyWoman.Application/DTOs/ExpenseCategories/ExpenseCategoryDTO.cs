@@ -6,7 +6,7 @@ public class ExpenseCategoryDTO
 {
     public int Id { get; set; }
 
-    [Required]
+    [Required(ErrorMessage = "Nombre de la categoría de gasto es obligatorio.")]
     public required string Name { get; set; }
 
     public bool Enabled { get; set; }

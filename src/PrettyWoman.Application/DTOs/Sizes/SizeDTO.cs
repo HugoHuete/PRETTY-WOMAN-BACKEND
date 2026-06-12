@@ -6,7 +6,7 @@ public class SizeDTO
 {
     public int Id { get; set; }
 
-    [Required]
+    [Required(ErrorMessage = "Nombre de la talla es obligatorio.")]
     public required string Name { get; set; }
 
     public int DisplayOrder { get; set; }

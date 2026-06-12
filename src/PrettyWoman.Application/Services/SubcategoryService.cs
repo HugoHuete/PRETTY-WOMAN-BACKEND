@@ -15,7 +15,7 @@ public class SubcategoryService(IApplicationDbContext context, IMapper mapper) :
 
     public async Task<int> CreateAsync(CreateSubcategoryDTO createSubcategoryDTO)
     {
-        createSubcategoryDTO.Name = createSubcategoryDTO.Name.NormalizeRequired("Subcategory name");
+        createSubcategoryDTO.Name = createSubcategoryDTO.Name.NormalizeRequired("Nombre de la subcategoría");
 
         await EnsureCategoryExistsAsync(createSubcategoryDTO.CategoryId);
 
@@ -24,7 +24,7 @@ public class SubcategoryService(IApplicationDbContext context, IMapper mapper) :
 
         if (exists)
         {
-            throw new AppBadRequestException("A subcategory with that name already exists.");
+            throw new AppBadRequestException("Ya existe una subcategoría con ese nombre.");
         }
 
         var subcategory = _mapper.Map<Subcategory>(createSubcategoryDTO);
@@ -38,9 +38,9 @@ public class SubcategoryService(IApplicationDbContext context, IMapper mapper) :
     public async Task UpdateAsync(int id, UpdateSubcategoryDTO updateSubcategoryDTO)
     {
         var subcategory = await _context.Subcategories.FirstOrDefaultAsync(subcategory => subcategory.Id == id)
-            ?? throw new AppNotFoundException($"Subcategory with id '{id}' does not exist.");
+            ?? throw new AppNotFoundException($"La subcategoría con id '{id}' no existe.");
 
-        updateSubcategoryDTO.Name = updateSubcategoryDTO.Name.NormalizeRequired("Subcategory name");
+        updateSubcategoryDTO.Name = updateSubcategoryDTO.Name.NormalizeRequired("Nombre de la subcategoría");
 
         await EnsureCategoryExistsAsync(updateSubcategoryDTO.CategoryId);
 
@@ -49,7 +49,7 @@ public class SubcategoryService(IApplicationDbContext context, IMapper mapper) :
 
         if (exists)
         {
-            throw new AppBadRequestException("A subcategory with that name already exists.");
+            throw new AppBadRequestException("Ya existe una subcategoría con ese nombre.");
         }
 
         _mapper.Map(updateSubcategoryDTO, subcategory);
@@ -77,7 +77,7 @@ public class SubcategoryService(IApplicationDbContext context, IMapper mapper) :
         var subcategory = await _context.Subcategories
             .Include(subcategory => subcategory.Category)
             .FirstOrDefaultAsync(subcategory => subcategory.Id == id)
-            ?? throw new AppNotFoundException($"Subcategory with id '{id}' does not exist.");
+            ?? throw new AppNotFoundException($"La subcategoría con id '{id}' no existe.");
 
         return _mapper.Map<SubcategoryDTO>(subcategory);
     }
@@ -88,7 +88,7 @@ public class SubcategoryService(IApplicationDbContext context, IMapper mapper) :
 
         if (!exists)
         {
-            throw new AppNotFoundException($"Category with id '{categoryId}' does not exist.");
+            throw new AppNotFoundException($"La categoría con id '{categoryId}' no existe.");
         }
     }
 }

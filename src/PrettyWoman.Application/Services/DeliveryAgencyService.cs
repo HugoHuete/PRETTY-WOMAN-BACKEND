@@ -15,15 +15,15 @@ public class DeliveryAgencyService(IApplicationDbContext context, IMapper mapper
 
     public async Task<int> CreateAsync(CreateDeliveryAgencyDTO createDeliveryAgencyDTO)
     {
-        createDeliveryAgencyDTO.Name = createDeliveryAgencyDTO.Name.NormalizeRequired("Delivery agency name");
-        createDeliveryAgencyDTO.PhoneNumber = createDeliveryAgencyDTO.PhoneNumber.NormalizeRequired("Delivery agency phone number");
+        createDeliveryAgencyDTO.Name = createDeliveryAgencyDTO.Name.NormalizeRequired("Nombre de la agencia de envío");
+        createDeliveryAgencyDTO.PhoneNumber = createDeliveryAgencyDTO.PhoneNumber.NormalizeRequired("Teléfono de la agencia de envío");
 
         var exists = await _context.DeliveryAgencies
             .AnyAsync(deliveryAgency => deliveryAgency.Name.ToLower() == createDeliveryAgencyDTO.Name.ToLower());
 
         if (exists)
         {
-            throw new AppBadRequestException("A delivery agency with that name already exists.");
+            throw new AppBadRequestException("Ya existe una agencia de envío con ese nombre.");
         }
 
         var deliveryAgency = _mapper.Map<DeliveryAgency>(createDeliveryAgencyDTO);
@@ -37,17 +37,17 @@ public class DeliveryAgencyService(IApplicationDbContext context, IMapper mapper
     public async Task UpdateAsync(int id, UpdateDeliveryAgencyDTO updateDeliveryAgencyDTO)
     {
         var deliveryAgency = await _context.DeliveryAgencies.FirstOrDefaultAsync(deliveryAgency => deliveryAgency.Id == id)
-            ?? throw new AppNotFoundException($"Delivery agency with id '{id}' does not exist.");
+            ?? throw new AppNotFoundException($"La agencia de envío con id '{id}' no existe.");
 
-        updateDeliveryAgencyDTO.Name = updateDeliveryAgencyDTO.Name.NormalizeRequired("Delivery agency name");
-        updateDeliveryAgencyDTO.PhoneNumber = updateDeliveryAgencyDTO.PhoneNumber.NormalizeRequired("Delivery agency phone number");
+        updateDeliveryAgencyDTO.Name = updateDeliveryAgencyDTO.Name.NormalizeRequired("Nombre de la agencia de envío");
+        updateDeliveryAgencyDTO.PhoneNumber = updateDeliveryAgencyDTO.PhoneNumber.NormalizeRequired("Teléfono de la agencia de envío");
 
         var exists = await _context.DeliveryAgencies
             .AnyAsync(deliveryAgency => deliveryAgency.Id != id && deliveryAgency.Name.ToLower() == updateDeliveryAgencyDTO.Name.ToLower());
 
         if (exists)
         {
-            throw new AppBadRequestException("A delivery agency with that name already exists.");
+            throw new AppBadRequestException("Ya existe una agencia de envío con ese nombre.");
         }
 
         _mapper.Map(updateDeliveryAgencyDTO, deliveryAgency);
@@ -67,7 +67,7 @@ public class DeliveryAgencyService(IApplicationDbContext context, IMapper mapper
     public async Task<DeliveryAgencyDTO> GetByIdAsync(int id)
     {
         var deliveryAgency = await _context.DeliveryAgencies.FirstOrDefaultAsync(deliveryAgency => deliveryAgency.Id == id)
-            ?? throw new AppNotFoundException($"Delivery agency with id '{id}' does not exist.");
+            ?? throw new AppNotFoundException($"La agencia de envío con id '{id}' no existe.");
 
         return _mapper.Map<DeliveryAgencyDTO>(deliveryAgency);
     }

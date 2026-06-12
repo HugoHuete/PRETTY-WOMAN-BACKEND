@@ -14,7 +14,7 @@ public class SubcategoryServiceTests
 {
     private static readonly IMapper Mapper = new MapperConfiguration(config =>
     {
-        config.AddProfile<CategoryProfile>();
+        config.AddProfile<CatalogProfile>();
     }, NullLoggerFactory.Instance).CreateMapper();
 
     [Fact]
@@ -49,7 +49,7 @@ public class SubcategoryServiceTests
             Name = "Manga corta"
         }));
 
-        Assert.Equal("Category with id '999' does not exist.", exception.Message);
+        Assert.Equal("La categoría con id '999' no existe.", exception.Message);
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public class SubcategoryServiceTests
             Name = " manga corta "
         }));
 
-        Assert.Equal("A subcategory with that name already exists.", exception.Message);
+        Assert.Equal("Ya existe una subcategoría con ese nombre.", exception.Message);
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public class SubcategoryServiceTests
             Name = "Manga corta"
         }));
 
-        Assert.Equal("Subcategory with id '999' does not exist.", exception.Message);
+        Assert.Equal("La subcategoría con id '999' no existe.", exception.Message);
     }
 
     private static SubcategoryService CreateService(ApplicationDbContext context)

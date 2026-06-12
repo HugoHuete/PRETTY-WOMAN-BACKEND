@@ -4,10 +4,10 @@ namespace PrettyWoman.Application.DTOs.DeliveryAgencies;
 
 public class CreateDeliveryAgencyDTO
 {
-    [Required]
+    [Required(ErrorMessage = "Nombre de la agencia de envío es obligatorio.")]
     public required string Name { get; set; }
 
-    [Required]
+    [Required(ErrorMessage = "Teléfono de la agencia de envío es obligatorio.")]
     public required string PhoneNumber { get; set; }
 
     public bool Enabled { get; set; } = true;

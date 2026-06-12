@@ -15,14 +15,14 @@ public class SupplierService(IApplicationDbContext context, IMapper mapper) : IS
 
     public async Task<int> CreateAsync(CreateSupplierDTO createSupplierDTO)
     {
-        createSupplierDTO.Name = createSupplierDTO.Name.NormalizeRequired("Supplier name");
+        createSupplierDTO.Name = createSupplierDTO.Name.NormalizeRequired("Nombre del proveedor");
 
         var exists = await _context.Suppliers
             .AnyAsync(s => s.Name.ToLower() == createSupplierDTO.Name.ToLower());
 
         if (exists)
         {
-            throw new AppBadRequestException("A supplier with that name already exists.");
+            throw new AppBadRequestException("Ya existe un proveedor con ese nombre.");
         }
 
         var supplier = _mapper.Map<Supplier>(createSupplierDTO);
@@ -36,16 +36,16 @@ public class SupplierService(IApplicationDbContext context, IMapper mapper) : IS
     public async Task UpdateAsync(int id, UpdateSupplierDTO updateSupplierDTO)
     {
         var supplier = await _context.Suppliers.FirstOrDefaultAsync(s => s.Id == id)
-            ?? throw new AppNotFoundException($"Supplier with id '{id}' does not exist.");
+            ?? throw new AppNotFoundException($"El proveedor con id '{id}' no existe.");
 
-        updateSupplierDTO.Name = updateSupplierDTO.Name.NormalizeRequired("Supplier name");
+        updateSupplierDTO.Name = updateSupplierDTO.Name.NormalizeRequired("Nombre del proveedor");
 
         var exists = await _context.Suppliers
             .AnyAsync(s => s.Id != id && s.Name.ToLower() == updateSupplierDTO.Name.ToLower());
 
         if (exists)
         {
-            throw new AppBadRequestException("A supplier with that name already exists.");
+            throw new AppBadRequestException("Ya existe un proveedor con ese nombre.");
         }
 
         _mapper.Map(updateSupplierDTO, supplier);
@@ -63,7 +63,7 @@ public class SupplierService(IApplicationDbContext context, IMapper mapper) : IS
     public async Task<SupplierDTO> GetByIdAsync(int id)
     {
         var supplier = await _context.Suppliers.FirstOrDefaultAsync(supplier => supplier.Id == id)
-            ?? throw new AppNotFoundException($"Supplier with id '{id}' does not exist.");
+            ?? throw new AppNotFoundException($"El proveedor con id '{id}' no existe.");
 
         return _mapper.Map<SupplierDTO>(supplier);
     }

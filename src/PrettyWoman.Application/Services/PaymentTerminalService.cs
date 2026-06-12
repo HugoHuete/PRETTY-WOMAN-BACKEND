@@ -15,14 +15,14 @@ public class PaymentTerminalService(IApplicationDbContext context, IMapper mappe
 
     public async Task<int> CreateAsync(CreatePaymentTerminalDTO createPaymentTerminalDTO)
     {
-        createPaymentTerminalDTO.Name = createPaymentTerminalDTO.Name.NormalizeRequired("Payment terminal name");
+        createPaymentTerminalDTO.Name = createPaymentTerminalDTO.Name.NormalizeRequired("Nombre de la terminal de pago");
 
         var exists = await _context.PaymentTerminals
             .AnyAsync(paymentTerminal => paymentTerminal.Name.ToLower() == createPaymentTerminalDTO.Name.ToLower());
 
         if (exists)
         {
-            throw new AppBadRequestException("A payment terminal with that name already exists.");
+            throw new AppBadRequestException("Ya existe una terminal de pago con ese nombre.");
         }
 
         var paymentTerminal = _mapper.Map<PaymentTerminal>(createPaymentTerminalDTO);
@@ -36,16 +36,16 @@ public class PaymentTerminalService(IApplicationDbContext context, IMapper mappe
     public async Task UpdateAsync(int id, UpdatePaymentTerminalDTO updatePaymentTerminalDTO)
     {
         var paymentTerminal = await _context.PaymentTerminals.FirstOrDefaultAsync(paymentTerminal => paymentTerminal.Id == id)
-            ?? throw new AppNotFoundException($"Payment terminal with id '{id}' does not exist.");
+            ?? throw new AppNotFoundException($"La terminal de pago con id '{id}' no existe.");
 
-        updatePaymentTerminalDTO.Name = updatePaymentTerminalDTO.Name.NormalizeRequired("Payment terminal name");
+        updatePaymentTerminalDTO.Name = updatePaymentTerminalDTO.Name.NormalizeRequired("Nombre de la terminal de pago");
 
         var exists = await _context.PaymentTerminals
             .AnyAsync(paymentTerminal => paymentTerminal.Id != id && paymentTerminal.Name.ToLower() == updatePaymentTerminalDTO.Name.ToLower());
 
         if (exists)
         {
-            throw new AppBadRequestException("A payment terminal with that name already exists.");
+            throw new AppBadRequestException("Ya existe una terminal de pago con ese nombre.");
         }
 
         _mapper.Map(updatePaymentTerminalDTO, paymentTerminal);
@@ -65,7 +65,7 @@ public class PaymentTerminalService(IApplicationDbContext context, IMapper mappe
     public async Task<PaymentTerminalDTO> GetByIdAsync(int id)
     {
         var paymentTerminal = await _context.PaymentTerminals.FirstOrDefaultAsync(paymentTerminal => paymentTerminal.Id == id)
-            ?? throw new AppNotFoundException($"Payment terminal with id '{id}' does not exist.");
+            ?? throw new AppNotFoundException($"La terminal de pago con id '{id}' no existe.");
 
         return _mapper.Map<PaymentTerminalDTO>(paymentTerminal);
     }

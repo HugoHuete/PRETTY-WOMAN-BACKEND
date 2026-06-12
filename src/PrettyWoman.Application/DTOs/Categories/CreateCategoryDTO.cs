@@ -4,6 +4,6 @@ namespace PrettyWoman.Application.DTOs.Categories;
 
 public class CreateCategoryDTO
 {
-    [Required]
+    [Required(ErrorMessage = "Nombre de la categoría es obligatorio.")]
     public required string Name { get; set; }
 }

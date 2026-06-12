@@ -6,6 +6,6 @@ public class CategoryDTO
 {
     public int Id { get; set; }
 
-    [Required]
+    [Required(ErrorMessage = "Nombre de la categoría es obligatorio.")]
     public required string Name { get; set; }
 }

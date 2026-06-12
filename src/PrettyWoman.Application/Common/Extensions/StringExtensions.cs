@@ -8,7 +8,7 @@ public static class StringExtensions
 
         if (string.IsNullOrWhiteSpace(normalizedValue))
         {
-            throw new ArgumentException($"{fieldName} is required.");
+            throw new ArgumentException($"{fieldName} es obligatorio.");
         }
 
         return normalizedValue;
