@@ -10,6 +10,20 @@ public class SuppliersController(ISupplierService supplierService) : ControllerB
 {
     private readonly ISupplierService _supplierService = supplierService;
 
+    [HttpGet]
+    public async Task<ActionResult<SupplierDTO>> GetAll()
+    {
+        var suppliers = await _supplierService.GetAllAsync();
+        return Ok(suppliers);
+    }
+
+    [HttpGet("{id:int}")]
+    public async Task<ActionResult<SupplierDTO>> GetById(int id)
+    {
+        var supplier = await _supplierService.GetByIdAsync(id);
+        return Ok(supplier);
+    }
+
     [HttpPost]
     public async Task<ActionResult<int>> Create([FromBody] CreateSupplierDTO createSupplierDTO)
     {
@@ -18,9 +32,5 @@ public class SuppliersController(ISupplierService supplierService) : ControllerB
         return CreatedAtAction(nameof(GetById), new { id }, id); ;
     }
 
-    [HttpGet]
-    public async Task<ActionResult<int>> GetById()
-    {
-        throw new NotImplementedException();
-    }
+    
 }

@@ -38,4 +38,19 @@ public class SupplierService(IApplicationDbContext context, IMapper mapper) : IS
 
         return supplier.Id;
     }
+
+    public async Task<IEnumerable<SupplierDTO>> GetAllAsync()
+    {
+        var suppliers = await _context.Suppliers.ToListAsync();
+
+        return _mapper.Map<List<SupplierDTO>>(suppliers);
+    }
+
+    public async Task<SupplierDTO> GetByIdAsync(int id)
+    {
+        var supplier = await _context.Suppliers.FirstOrDefaultAsync(supplier => supplier.Id == id)
+            ?? throw new AppNotFoundException($"Supplier with id '{id}' does not exist.");
+
+        return _mapper.Map<SupplierDTO>(supplier);
+    }
 }

@@ -33,6 +33,8 @@ builder.Services.AddSwaggerGen(options =>
         });
 });
 
+builder.Services.AddRouting(options => { options.LowercaseUrls = true; });
+
 builder.Services.AddAutoMapper(cfg =>
 {
     cfg.LicenseKey = builder.Configuration.GetSection("AutoMapperLicense").Get<string>();

@@ -9,5 +9,6 @@ public class SupplierProfile : Profile
     public SupplierProfile()
     {
         CreateMap<CreateSupplierDTO, Supplier>();
+        CreateMap<Supplier, SupplierDTO>();
     }
 }
