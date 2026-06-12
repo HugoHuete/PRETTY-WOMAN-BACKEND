@@ -8,7 +8,7 @@ using PrettyWoman.Application.Services;
 using PrettyWoman.Domain.Entities;
 using PrettyWoman.Infrastructure.Persistence;
 
-namespace PrettyWoman.Application.Tests.Categories;
+namespace PrettyWoman.Application.Tests.Services.Categories;
 
 public class CategoryServiceTests
 {
