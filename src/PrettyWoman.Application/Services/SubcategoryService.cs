@@ -1,5 +1,6 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using PrettyWoman.Application.Common.Extensions;
 using PrettyWoman.Application.DTOs.Subcategories;
 using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Interfaces;
@@ -14,24 +15,17 @@ public class SubcategoryService(IApplicationDbContext context, IMapper mapper) :
 
     public async Task<int> CreateAsync(CreateSubcategoryDTO createSubcategoryDTO)
     {
-        var normalizedName = createSubcategoryDTO.Name.Trim();
-
-        if (string.IsNullOrWhiteSpace(normalizedName))
-        {
-            throw new ArgumentException("Subcategory name is required.");
-        }
+        createSubcategoryDTO.Name = createSubcategoryDTO.Name.NormalizeRequired("Subcategory name");
 
         await EnsureCategoryExistsAsync(createSubcategoryDTO.CategoryId);
 
         var exists = await _context.Subcategories
-            .AnyAsync(subcategory => subcategory.Name.ToLower() == normalizedName.ToLower());
+            .AnyAsync(subcategory => subcategory.Name.ToLower() == createSubcategoryDTO.Name.ToLower());
 
         if (exists)
         {
             throw new AppBadRequestException("A subcategory with that name already exists.");
         }
-
-        createSubcategoryDTO.Name = normalizedName;
 
         var subcategory = _mapper.Map<Subcategory>(createSubcategoryDTO);
 
@@ -46,24 +40,17 @@ public class SubcategoryService(IApplicationDbContext context, IMapper mapper) :
         var subcategory = await _context.Subcategories.FirstOrDefaultAsync(subcategory => subcategory.Id == id)
             ?? throw new AppNotFoundException($"Subcategory with id '{id}' does not exist.");
 
-        var normalizedName = updateSubcategoryDTO.Name.Trim();
-
-        if (string.IsNullOrWhiteSpace(normalizedName))
-        {
-            throw new ArgumentException("Subcategory name is required.");
-        }
+        updateSubcategoryDTO.Name = updateSubcategoryDTO.Name.NormalizeRequired("Subcategory name");
 
         await EnsureCategoryExistsAsync(updateSubcategoryDTO.CategoryId);
 
         var exists = await _context.Subcategories
-            .AnyAsync(subcategory => subcategory.Id != id && subcategory.Name.ToLower() == normalizedName.ToLower());
+            .AnyAsync(subcategory => subcategory.Id != id && subcategory.Name.ToLower() == updateSubcategoryDTO.Name.ToLower());
 
         if (exists)
         {
             throw new AppBadRequestException("A subcategory with that name already exists.");
         }
-
-        updateSubcategoryDTO.Name = normalizedName;
 
         _mapper.Map(updateSubcategoryDTO, subcategory);
 

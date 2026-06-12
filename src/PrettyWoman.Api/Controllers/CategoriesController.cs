@@ -1,14 +1,18 @@
 using Microsoft.AspNetCore.Mvc;
 using PrettyWoman.Application.DTOs.Categories;
+using PrettyWoman.Application.DTOs.Subcategories;
 using PrettyWoman.Application.Interfaces;
 
 namespace PrettyWoman.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-public class CategoriesController(ICategoryService categoryService) : ControllerBase
+public class CategoriesController(
+    ICategoryService categoryService,
+    ISubcategoryService subcategoryService) : ControllerBase
 {
     private readonly ICategoryService _categoryService = categoryService;
+    private readonly ISubcategoryService _subcategoryService = subcategoryService;
 
     [HttpGet]
     public async Task<ActionResult<IEnumerable<CategoryDTO>>> GetAll()
@@ -22,6 +26,13 @@ public class CategoriesController(ICategoryService categoryService) : Controller
     {
         var category = await _categoryService.GetByIdAsync(id);
         return Ok(category);
+    }
+
+    [HttpGet("{id:int}/subcategories")]
+    public async Task<ActionResult<IEnumerable<SubcategoryDTO>>> GetSubcategories(int id)
+    {
+        var subcategories = await _subcategoryService.GetAllAsync(id);
+        return Ok(subcategories);
     }
 
     [HttpPost]

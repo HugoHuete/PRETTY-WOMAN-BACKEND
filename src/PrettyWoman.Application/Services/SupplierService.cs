@@ -1,5 +1,6 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using PrettyWoman.Application.Common.Extensions;
 using PrettyWoman.Application.DTOs.Suppliers;
 using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Interfaces;
@@ -14,22 +15,15 @@ public class SupplierService(IApplicationDbContext context, IMapper mapper) : IS
 
     public async Task<int> CreateAsync(CreateSupplierDTO createSupplierDTO)
     {
-        var normalizedName = createSupplierDTO.Name.Trim();
-
-        if (string.IsNullOrWhiteSpace(normalizedName))
-        {
-            throw new ArgumentException("Supplier name is required.");
-        }
+        createSupplierDTO.Name = createSupplierDTO.Name.NormalizeRequired("Supplier name");
 
         var exists = await _context.Suppliers
-            .AnyAsync(s => s.Name.ToLower() == normalizedName.ToLower());
+            .AnyAsync(s => s.Name.ToLower() == createSupplierDTO.Name.ToLower());
 
         if (exists)
         {
             throw new AppBadRequestException("A supplier with that name already exists.");
         }
-
-        createSupplierDTO.Name = normalizedName;
 
         var supplier = _mapper.Map<Supplier>(createSupplierDTO);
 
@@ -44,22 +38,15 @@ public class SupplierService(IApplicationDbContext context, IMapper mapper) : IS
         var supplier = await _context.Suppliers.FirstOrDefaultAsync(s => s.Id == id)
             ?? throw new AppNotFoundException($"Supplier with id '{id}' does not exist.");
 
-        var normalizedName = updateSupplierDTO.Name.Trim();
-
-        if (string.IsNullOrWhiteSpace(normalizedName))
-        {
-            throw new ArgumentException("Supplier name is required.");
-        }
+        updateSupplierDTO.Name = updateSupplierDTO.Name.NormalizeRequired("Supplier name");
 
         var exists = await _context.Suppliers
-            .AnyAsync(s => s.Id != id && s.Name.ToLower() == normalizedName.ToLower());
+            .AnyAsync(s => s.Id != id && s.Name.ToLower() == updateSupplierDTO.Name.ToLower());
 
         if (exists)
         {
             throw new AppBadRequestException("A supplier with that name already exists.");
         }
-
-        updateSupplierDTO.Name = normalizedName;
 
         _mapper.Map(updateSupplierDTO, supplier);
 
