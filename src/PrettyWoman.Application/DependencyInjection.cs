@@ -12,6 +12,11 @@ public static class DependencyInjection
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<ISubcategoryService, SubcategoryService>();
+        services.AddScoped<ISizeService, SizeService>();
+        services.AddScoped<IDeliveryAgencyService, DeliveryAgencyService>();
+        services.AddScoped<IPaymentTerminalService, PaymentTerminalService>();
+        services.AddScoped<IExpenseCategoryService, ExpenseCategoryService>();
+        services.AddScoped<ILoanOwnerService, LoanOwnerService>();
 
         return services;
     }

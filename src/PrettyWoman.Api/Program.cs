@@ -38,7 +38,7 @@ builder.Services.AddRouting(options => { options.LowercaseUrls = true; });
 builder.Services.AddAutoMapper(cfg =>
 {
     cfg.LicenseKey = builder.Configuration.GetSection("AutoMapperLicense").Get<string>();
-}, typeof(Program).Assembly, typeof(PrettyWoman.Application.Mappings.SupplierProfile).Assembly);
+}, typeof(Program).Assembly);
 
 builder.Services.AddIdentityCore<User>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
@@ -59,11 +59,14 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+else
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.UseHttpsRedirection();
 app.MapControllers();
 
 app.Run();
