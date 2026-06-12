@@ -32,5 +32,10 @@ public class SuppliersController(ISupplierService supplierService) : ControllerB
         return CreatedAtAction(nameof(GetById), new { id }, id); ;
     }
 
-    
+    [HttpPut("{id:int}")]
+    public async Task<IActionResult> Update(int id, [FromBody] UpdateSupplierDTO updateSupplierDTO)
+    {
+        await _supplierService.UpdateAsync(id, updateSupplierDTO);
+        return NoContent();
+    }
 }

@@ -7,4 +7,5 @@ public interface ISupplierService
     Task<SupplierDTO> GetByIdAsync(int id);
     Task<IEnumerable<SupplierDTO>> GetAllAsync();
     Task<int> CreateAsync(CreateSupplierDTO createSupplierDTO);
+    Task UpdateAsync(int id, UpdateSupplierDTO updateSupplierDTO);
 }
