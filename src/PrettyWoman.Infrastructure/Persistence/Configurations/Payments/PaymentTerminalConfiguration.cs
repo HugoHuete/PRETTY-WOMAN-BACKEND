@@ -12,6 +12,7 @@ public class PaymentTerminalConfiguration : IEntityTypeConfiguration<PaymentTerm
             .IsRequired()
             .HasMaxLength(100);
         builder.Property(x => x.ComissionPercentage).HasPrecision(5, 2);
+        builder.Property(x => x.IncomeTaxPercentage).HasPrecision(5, 2);
 
 
         builder.HasIndex(x => x.Name).IsUnique();

@@ -7,8 +7,11 @@ public class SalePayment
     public int SaleId { get; set; }
     public int PaymentMethodId { get; set; }
     public int? PaymentTerminalId { get; set; }
-    public decimal Amount { get; set; }
-    public decimal ComissionAmount { get; set; }
+    public decimal GrossAmount { get; set; }
+    public decimal CommissionPercentage { get; set; }
+    public decimal CommissionAmount { get; set; }
+    public decimal IncomeTaxPercentage { get; set; }
+    public decimal IncomeTaxAmount { get; set; }
     public decimal NetReceivedAmount { get; set; }
     public required string UserId { get; set; }
 

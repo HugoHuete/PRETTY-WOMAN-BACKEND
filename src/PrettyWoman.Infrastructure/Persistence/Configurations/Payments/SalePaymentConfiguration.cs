@@ -9,8 +9,11 @@ public class SalePaymentConfiguration : IEntityTypeConfiguration<SalePayment>
     public void Configure(EntityTypeBuilder<SalePayment> builder)
     {
         builder.Property(x => x.UserId).IsRequired();
-        builder.Property(x => x.Amount).HasPrecision(12, 2);
-        builder.Property(x => x.ComissionAmount).HasPrecision(12, 2);
+        builder.Property(x => x.GrossAmount).HasPrecision(12, 2);
+        builder.Property(x => x.CommissionPercentage).HasPrecision(5, 2);
+        builder.Property(x => x.CommissionAmount).HasPrecision(12, 2);
+        builder.Property(x => x.IncomeTaxPercentage).HasPrecision(5, 2);
+        builder.Property(x => x.IncomeTaxAmount).HasPrecision(12, 2);
         builder.Property(x => x.NetReceivedAmount).HasPrecision(12, 2);
 
         builder.HasOne(x => x.Sale).WithMany(x => x.Payments).HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Restrict);
@@ -26,20 +29,29 @@ public class SalePaymentConfiguration : IEntityTypeConfiguration<SalePayment>
         builder.ToTable(t =>
         {
             t.HasCheckConstraint(
-                "ck_sale_payments_amount_positive",
-                "amount > 0");
+                "ck_sale_payments_gross_amount_positive",
+                "gross_amount > 0");
             t.HasCheckConstraint(
-                "ck_sale_payments_comission_amount_non_negative",
-                "comission_amount >= 0");
+                "ck_sale_payments_commission_percentage_non_negative",
+                "commission_percentage >= 0");
+            t.HasCheckConstraint(
+                "ck_sale_payments_commission_amount_non_negative",
+                "commission_amount >= 0");
+            t.HasCheckConstraint(
+                "ck_sale_payments_income_tax_percentage_non_negative",
+                "income_tax_percentage >= 0");
+            t.HasCheckConstraint(
+                "ck_sale_payments_income_tax_amount_non_negative",
+                "income_tax_amount >= 0");
             t.HasCheckConstraint(
                 "ck_sale_payments_net_received_amount_non_negative",
                 "net_received_amount >= 0");
             t.HasCheckConstraint(
                 "ck_sale_payments_comission_not_greater_than_amount",
-                "comission_amount <= amount");
+                "commission_amount + income_tax_amount <= gross_amount");
             t.HasCheckConstraint(
                 "ck_sale_payments_net_received_amount_matches_components",
-                "net_received_amount = amount - comission_amount");
+                "net_received_amount = gross_amount - commission_amount - income_tax_amount");
         });
     }
 }
