@@ -1,5 +1,6 @@
 using AutoMapper;
 using PrettyWoman.Application.DTOs.Categories;
+using PrettyWoman.Application.DTOs.Clients;
 using PrettyWoman.Application.DTOs.DeliveryAgencies;
 using PrettyWoman.Application.DTOs.ExpenseCategories;
 using PrettyWoman.Application.DTOs.LoanOwners;
@@ -19,6 +20,10 @@ public class CatalogProfile : Profile
         CreateMap<UpdateSizeDTO, Size>();
         CreateMap<SizeGroup, SizeGroupDTO>();
         CreateMap<Size, SizeDTO>();
+
+        CreateMap<CreateClientDTO, Client>();
+        CreateMap<UpdateClientDTO, Client>();
+        CreateMap<Client, ClientDTO>();
 
         CreateMap<CreateDeliveryAgencyDTO, DeliveryAgency>();
         CreateMap<UpdateDeliveryAgencyDTO, DeliveryAgency>();

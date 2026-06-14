@@ -20,7 +20,7 @@ public class ClientConfiguration : IEntityTypeConfiguration<Client>
 
 
         builder.HasIndex(x => x.IsBlocked);
-        builder.HasIndex(x => x.PhoneNumber);
-        builder.HasIndex(x => x.InstagramUser);
+        builder.HasIndex(x => x.PhoneNumber).IsUnique();
+        builder.HasIndex(x => x.InstagramUser).IsUnique();
     }
 }

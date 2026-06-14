@@ -13,4 +13,10 @@ public static class StringExtensions
 
         return normalizedValue;
     }
+
+    public static string? NormalizeOptional(this string? value)
+    {
+        var normalizedValue = value?.Trim();
+        return string.IsNullOrWhiteSpace(normalizedValue) ? null : normalizedValue;
+    }
 }
