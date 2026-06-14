@@ -18,6 +18,7 @@ public interface IApplicationDbContext
     DbSet<Category> Categories { get; }
     DbSet<Subcategory> Subcategories { get; }
     DbSet<Size> Sizes { get; }
+    DbSet<SizeGroup> SizeGroups { get; }
     DbSet<ProductDetail> ProductDetails { get; }
     DbSet<ProductImage> ProductImages { get; }
     DbSet<Product> Products { get; }

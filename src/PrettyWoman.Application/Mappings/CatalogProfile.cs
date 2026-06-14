@@ -17,6 +17,7 @@ public class CatalogProfile : Profile
     {
         CreateMap<CreateSizeDTO, Size>();
         CreateMap<UpdateSizeDTO, Size>();
+        CreateMap<SizeGroup, SizeGroupDTO>();
         CreateMap<Size, SizeDTO>();
 
         CreateMap<CreateDeliveryAgencyDTO, DeliveryAgency>();

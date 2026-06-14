@@ -34,6 +34,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public DbSet<Category> Categories { get; set; }
     public DbSet<Subcategory> Subcategories { get; set; }
     public DbSet<Size> Sizes { get; set; }
+    public DbSet<SizeGroup> SizeGroups { get; set; }
     public DbSet<ProductDetail> ProductDetails { get; set; }
     public DbSet<ProductImage> ProductImages { get; set; }
     public DbSet<Product> Products { get; set; }
