@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace PrettyWoman.Infrastructure.Migrations
 {
     /// <inheritdoc />
-    public partial class ClientCorrection : Migration
+    public partial class ClientAndOrderTrackingCorrection : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -18,6 +18,14 @@ namespace PrettyWoman.Infrastructure.Migrations
             migrationBuilder.DropIndex(
                 name: "ix_clients_phone_number",
                 table: "clients");
+
+            migrationBuilder.AlterColumn<int>(
+                name: "product_receipt_id",
+                table: "order_tracking_numbers",
+                type: "integer",
+                nullable: true,
+                oldClrType: typeof(int),
+                oldType: "integer");
 
             migrationBuilder.AlterColumn<DateTime>(
                 name: "last_purchase_date",
@@ -50,6 +58,16 @@ namespace PrettyWoman.Infrastructure.Migrations
             migrationBuilder.DropIndex(
                 name: "ix_clients_phone_number",
                 table: "clients");
+
+            migrationBuilder.AlterColumn<int>(
+                name: "product_receipt_id",
+                table: "order_tracking_numbers",
+                type: "integer",
+                nullable: false,
+                defaultValue: 0,
+                oldClrType: typeof(int),
+                oldType: "integer",
+                oldNullable: true);
 
             migrationBuilder.AlterColumn<DateTime>(
                 name: "last_purchase_date",

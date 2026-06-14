@@ -12,8 +12,8 @@ using PrettyWoman.Infrastructure.Persistence;
 namespace PrettyWoman.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260614190104_ClientCorrection")]
-    partial class ClientCorrection
+    [Migration("20260614200624_ClientAndOrderTrackingCorrection")]
+    partial class ClientAndOrderTrackingCorrection
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -1280,7 +1280,7 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("order_id");
 
-                    b.Property<int>("ProductReceiptId")
+                    b.Property<int?>("ProductReceiptId")
                         .HasColumnType("integer")
                         .HasColumnName("product_receipt_id");
 
@@ -2861,7 +2861,6 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .WithMany("OrderTrackingNumbers")
                         .HasForeignKey("ProductReceiptId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
                         .HasConstraintName("fk_order_tracking_numbers_product_receipts_product_receipt_id");
 
                     b.HasOne("PrettyWoman.Domain.Entities.ShippingCompany", "ShippingCompany")

@@ -8,9 +8,9 @@ public class OrderTrackingNumber
     public required string TrackingNumber { get; set; }
     public DateTime? SupplierShipmentDate { get; set; }
     public DateTime? WarehouseDeliveryDate { get; set; }
-    public int ProductReceiptId { get; set; }
-    public decimal Weight { get; set; }
-    public decimal ShippingCost { get; set; }
+    public int? ProductReceiptId { get; set; }
+    public decimal Weight { get; set; } = 0;
+    public decimal ShippingCost { get; set; } = 0;
 
     // Foreign Keys
     public ShippingCompany? ShippingCompany { get; set; }
