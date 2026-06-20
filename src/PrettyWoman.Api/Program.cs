@@ -1,8 +1,13 @@
+using System.Text;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using PrettyWoman.Api.Middlewares;
 using PrettyWoman.Application;
+using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Infrastructure;
+using PrettyWoman.Infrastructure.Authentication;
 using PrettyWoman.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -35,21 +40,65 @@ builder.Services.AddSwaggerGen(options =>
 
 builder.Services.AddRouting(options => { options.LowercaseUrls = true; });
 
+builder.Services.Configure<JwtOptions>(
+    builder.Configuration.GetSection(JwtOptions.SectionName));
+
 builder.Services.AddAutoMapper(cfg =>
 {
     cfg.LicenseKey = builder.Configuration.GetSection("AutoMapperLicense").Get<string>();
 }, typeof(Program).Assembly);
 
 builder.Services.AddIdentityCore<User>()
+    .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
 
+var jwtOptions = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
+    ?? throw new InvalidOperationException("La configuracion Jwt es requerida.");
+
+if (string.IsNullOrWhiteSpace(jwtOptions.Key))
+{
+    throw new InvalidOperationException("La configuracion Jwt:Key es requerida.");
+}
+
+if (jwtOptions.Key.Length < 32)
+{
+    throw new InvalidOperationException("La configuracion Jwt:Key debe tener al menos 32 caracteres.");
+}
+
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateIssuerSigningKey = true,
+            ValidateLifetime = true,
+            ValidIssuer = jwtOptions.Issuer,
+            ValidAudience = jwtOptions.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key))
+        };
+    });
+
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy(AppPolicies.RequireAdminRole, policy =>
+        policy.RequireRole(AppRoles.Admin));
+
+    options.AddPolicy(AppPolicies.RequireEmployeeRole, policy =>
+        policy.RequireRole(AppRoles.Admin, AppRoles.Employee));
+
+    options.FallbackPolicy = options.GetPolicy(AppPolicies.RequireEmployeeRole);
+});
 
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddApplication();
 
-
 var app = builder.Build();
+
+await IdentitySeeder.SeedAsync(app.Services, app.Configuration);
 
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 

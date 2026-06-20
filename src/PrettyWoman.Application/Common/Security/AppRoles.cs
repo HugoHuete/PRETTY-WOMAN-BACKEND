@@ -1,0 +1,9 @@
+namespace PrettyWoman.Application.Common.Security;
+
+public static class AppRoles
+{
+    public const string Admin = "Admin";
+    public const string Employee = "Employee";
+
+    public static readonly string[] All = [Admin, Employee];
+}

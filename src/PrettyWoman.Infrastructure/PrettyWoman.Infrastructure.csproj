@@ -1,22 +1,23 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk='Microsoft.NET.Sdk'>
 
   <ItemGroup>
-    <ProjectReference Include="..\PrettyWoman.Application\PrettyWoman.Application.csproj" />
-    <ProjectReference Include="..\PrettyWoman.Domain\PrettyWoman.Domain.csproj" />
+    <ProjectReference Include='../PrettyWoman.Application/PrettyWoman.Application.csproj' />
+    <ProjectReference Include='../PrettyWoman.Domain/PrettyWoman.Domain.csproj' />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />
-    <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="10.0.8" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.8">
+    <PackageReference Include='EFCore.NamingConventions' Version='10.0.1' />
+    <PackageReference Include='Microsoft.AspNetCore.Identity.EntityFrameworkCore' Version='10.0.8' />
+    <PackageReference Include='Microsoft.EntityFrameworkCore.Design' Version='10.0.8'>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.8">
+    <PackageReference Include='Microsoft.EntityFrameworkCore.Tools' Version='10.0.8'>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
-    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.2" />
+    <PackageReference Include='System.IdentityModel.Tokens.Jwt' Version='8.14.0' />
+    <PackageReference Include='Npgsql.EntityFrameworkCore.PostgreSQL' Version='10.0.2' />
   </ItemGroup>
 
   <PropertyGroup>
