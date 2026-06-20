@@ -6,14 +6,16 @@ public class SaleProduct
     public int SaleId { get; set; }
     public int ProductId { get; set; }
     public int Quantity { get; set; }
-    public decimal CostAtSale { get; set; }
-    public decimal OriginalSalePrice { get; set; }
+    public decimal UnitCostAtSale { get; set; }
+    public decimal OriginalUnitPrice { get; set; }
     public int DiscountSourceId { get; set; }
     public int? DiscountCampaignId { get; set; }
-    public decimal DiscountAmount { get; set; } = 0;
-    public decimal FinalSalePrice { get; set; }
-    public decimal PaymentComission { get; set; } = 0;
-    public decimal GrossProfit { get; set; } // FinalSalePrice - PaymentComission - CostAtSale
+    public decimal DiscountAmount { get; set; } = 0; // Discount by unit
+    public decimal FinalUnitPrice { get; set; } // OriginalSalePrice - DiscountAmount
+    public decimal LineTotal { get; set; } // FinalSalePrice * Quantity
+    public decimal TotalCostAtSale { get; set; }
+    public decimal TotalPaymentComission { get; set; } = 0;
+    public decimal GrossProfit { get; set; } // LineTotal - TotalPaymentComission - TotalCostAtSale
     public int SaleProductStatusId { get; set; }
 
 

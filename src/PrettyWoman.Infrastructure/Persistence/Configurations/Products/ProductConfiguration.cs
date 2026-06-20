@@ -7,10 +7,13 @@ namespace PrettyWoman.Infrastructure.Persistence.Configurations.Products;
 
 public class ProductConfiguration : IEntityTypeConfiguration<Product>
 {
-    public void Configure (EntityTypeBuilder<Product> builder)
+    public void Configure(EntityTypeBuilder<Product> builder)
     {
-        builder.Property(p => p.UnitCost).HasPrecision(12, 2);
-        builder.Property(p => p.UnitCostWithShipping).HasPrecision(12, 2);
+        builder.Property(p => p.UnitCostUsd).HasPrecision(14, 2);
+        builder.Property(p => p.MerchandiseTotalCostNio).HasPrecision(14, 2);
+        builder.Property(p => p.AllocatedShippingCostNio).HasPrecision(14, 2);
+        builder.Property(p => p.TotalCostNio).HasPrecision(14, 2);
+        builder.Property(p => p.UnitCostNio).HasPrecision(18, 6);
         builder.Property(p => p.SalePrice).HasPrecision(12, 2);
         builder.Property(x => x.Color).HasMaxLength(50);
 
@@ -28,8 +31,12 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.ToTable(t =>
         {
             t.HasCheckConstraint(
-                "ck_products_quantity_non_negative",
-                "quantity >= 0");
+                "ck_products_quantity_positive",
+                "quantity > 0");
+
+            t.HasCheckConstraint(
+                "ck_products_sale_price_positive",
+                "sale_price >= 0");
 
             t.HasCheckConstraint(
                 "ck_products_received_quantity_non_negative",
@@ -44,16 +51,32 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
                 "reserved_quantity >= 0");
 
             t.HasCheckConstraint(
-                "ck_products_cost_non_negative",
-                "unit_cost >= 0");
-                
-            t.HasCheckConstraint(
-                "ck_products_unit_cost_with_shipping_non_negative",
-                "unit_cost_with_shipping >= 0");
+                "ck_products_received_quantity_not_greater_than_quantity",
+                "received_quantity <= quantity");
 
             t.HasCheckConstraint(
-                "ck_products_sale_price_non_negative",
-                "sale_price >= 0");
+                "ck_products_available_reserved_not_greater_than_received",
+                "available_quantity + reserved_quantity <= received_quantity");
+
+            t.HasCheckConstraint(
+                "ck_products_unit_cost_usd_non_negative",
+                "unit_cost_usd >= 0");
+
+            t.HasCheckConstraint(
+                "ck_products_merchandise_total_cost_nio_non_negative",
+                "merchandise_total_cost_nio >= 0");
+
+            t.HasCheckConstraint(
+                "ck_products_allocated_shipping_cost_nio_non_negative",
+                "allocated_shipping_cost_nio >= 0");
+
+            t.HasCheckConstraint(
+                "ck_products_total_cost_nio_non_negative",
+                "total_cost_nio >= 0");
+
+            t.HasCheckConstraint(
+                "ck_products_unit_cost_nio_non_negative",
+                "unit_cost_nio >= 0");
         });
     }
 }

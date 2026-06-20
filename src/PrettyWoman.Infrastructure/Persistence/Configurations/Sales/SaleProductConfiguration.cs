@@ -8,12 +8,14 @@ public class SaleProductConfiguration : IEntityTypeConfiguration<SaleProduct>
 {
     public void Configure(EntityTypeBuilder<SaleProduct> builder)
     {
-        builder.Property(x => x.CostAtSale).HasPrecision(12, 2);
-        builder.Property(x => x.OriginalSalePrice).HasPrecision(12, 2);
-        builder.Property(x => x.DiscountAmount).HasPrecision(12, 2);
-        builder.Property(x => x.FinalSalePrice).HasPrecision(12, 2);
-        builder.Property(x => x.PaymentComission).HasPrecision(12, 2);
-        builder.Property(x => x.GrossProfit).HasPrecision(12, 2);
+        builder.Property(x => x.UnitCostAtSale).HasPrecision(18, 6);
+        builder.Property(x => x.TotalCostAtSale).HasPrecision(18, 6);
+        builder.Property(x => x.OriginalUnitPrice).HasPrecision(14, 2);
+        builder.Property(x => x.DiscountAmount).HasPrecision(14, 2);
+        builder.Property(x => x.FinalUnitPrice).HasPrecision(14, 2);
+        builder.Property(x => x.LineTotal).HasPrecision(14, 2);
+        builder.Property(x => x.TotalPaymentComission).HasPrecision(14, 2);
+        builder.Property(x => x.GrossProfit).HasPrecision(18, 6);
 
         builder.HasOne(x => x.Sale).WithMany(x => x.Products).HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
@@ -32,29 +34,44 @@ public class SaleProductConfiguration : IEntityTypeConfiguration<SaleProduct>
         builder.ToTable(t =>
         {
             t.HasCheckConstraint(
-                "ck_sale_products_quantity_positive",
+                "ck_sale_details_quantity_positive",
                 "quantity > 0");
+
             t.HasCheckConstraint(
-                "ck_sale_products_cost_at_sale_non_negative",
-                "cost_at_sale >= 0");
+                "ck_sale_details_original_unit_price_non_negative",
+                "original_unit_price >= 0");
+
             t.HasCheckConstraint(
-                "ck_sale_products_original_sale_price_non_negative",
-                "original_sale_price >= 0");
-            t.HasCheckConstraint(
-                "ck_sale_products_discount_amount_non_negative",
+                "ck_sale_details_discount_amount_non_negative",
                 "discount_amount >= 0");
+
             t.HasCheckConstraint(
-                "ck_sale_products_final_sale_price_non_negative",
-                "final_sale_price >= 0");
+                "ck_sale_details_discount_amount_not_greater_than_original_unit_price",
+                "discount_amount <= original_unit_price");
+
             t.HasCheckConstraint(
-                "ck_sale_products_payment_comission_non_negative",
-                "payment_comission >= 0");
+                "ck_sale_details_final_unit_price_non_negative",
+                "final_unit_price >= 0");
+
             t.HasCheckConstraint(
-                "ck_sale_products_discount_amount_not_greater_than_original_sale_price",
-                "discount_amount <= original_sale_price");
+                "ck_sale_details_line_total_non_negative",
+                "line_total >= 0");
+
             t.HasCheckConstraint(
-                "ck_sale_products_gross_profit_matches_components",
-                "gross_profit = final_sale_price - payment_comission - cost_at_sale");
+                "ck_sale_details_total_payment_comission_non_negative",
+                "total_payment_comission >= 0");
+
+            t.HasCheckConstraint(
+                "ck_sale_details_unit_cost_at_sale_non_negative",
+                "unit_cost_at_sale >= 0");
+
+            t.HasCheckConstraint(
+                "ck_sale_details_total_cost_at_sale_non_negative",
+                "total_cost_at_sale >= 0");
+
+            t.HasCheckConstraint(
+                "ck_sale_details_gross_profit_matches_components",
+                "gross_profit = line_total - total_payment_comission - total_cost_at_sale");
         });
     }
 }

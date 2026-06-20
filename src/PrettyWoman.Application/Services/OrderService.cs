@@ -20,6 +20,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         await EnsureSupplierExistsAsync(createOrderDTO.SupplierId);
 
         var order = _mapper.Map<Order>(createOrderDTO);
+        order.TotalCostNio = createOrderDTO.MerchandiseTotalNio + createOrderDTO.ShippingCostNio;
         order.CreatedAt = DateTime.UtcNow;
         order.OrderStatusId = (int)OrderStatusCode.Pending;
 
@@ -38,6 +39,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         await EnsureSupplierExistsAsync(updateOrderDTO.SupplierId);
 
         _mapper.Map(updateOrderDTO, order);
+        order.TotalCostNio = updateOrderDTO.MerchandiseTotalNio + updateOrderDTO.ShippingCostNio;
 
         await _context.SaveChangesAsync();
     }

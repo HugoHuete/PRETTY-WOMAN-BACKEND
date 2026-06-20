@@ -8,12 +8,13 @@ public class Order
     public DateTime CreatedAt { get; set; }
     public int OrderStatusId { get; set; } = (int) OrderStatusCode.Pending;
     public int SupplierId { get; set; }
-    public decimal Amount { get; set; }
     public decimal AmountUsd { get; set; }
-    public decimal ReceivedAmount { get; set; }
-    public decimal TotalShippingCost { get; set; }
-    public string? Comments { get; set; }
     public decimal ExchangeRate { get; set; }
+    public decimal MerchandiseTotalNio { get; set; }
+    public decimal ReceivedAmountNio { get; set; }
+    public decimal ShippingCostNio  { get; set; }
+    public decimal TotalCostNio { get; set; }
+    public string? Comments { get; set; }
 
 
     public OrderStatus? OrderStatus { get; set; }

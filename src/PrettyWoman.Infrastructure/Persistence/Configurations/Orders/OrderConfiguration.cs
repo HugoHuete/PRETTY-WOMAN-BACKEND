@@ -8,14 +8,15 @@ namespace PrettyWoman.Infrastructure.Persistence.Configurations.Orders;
 
 public class OrderConfiguration : IEntityTypeConfiguration<Order>
 {
-    public void Configure (EntityTypeBuilder<Order> builder)
+    public void Configure(EntityTypeBuilder<Order> builder)
     {
         builder.Property(x => x.Comments).HasMaxLength(300);
-        builder.Property(x => x.Amount).HasPrecision(12,2);
-        builder.Property(x => x.AmountUsd).HasPrecision(12,2);
-        builder.Property(x => x.ReceivedAmount).HasPrecision(12,2);
-        builder.Property(x => x.TotalShippingCost).HasPrecision(12,2);
-        builder.Property(x => x.ExchangeRate).HasPrecision(10,4);
+        builder.Property(x => x.AmountUsd).HasPrecision(14, 2);
+        builder.Property(x => x.ExchangeRate).HasPrecision(10, 4);
+        builder.Property(x => x.MerchandiseTotalNio).HasPrecision(14, 2);
+        builder.Property(x => x.ReceivedAmountNio).HasPrecision(14, 2);
+        builder.Property(x => x.ShippingCostNio).HasPrecision(14, 2);
+        builder.Property(x => x.TotalCostNio).HasPrecision(14, 2);
 
 
         builder.HasOne(x => x.OrderStatus).WithMany().HasForeignKey(x => x.OrderStatusId).OnDelete(DeleteBehavior.Restrict);
@@ -24,22 +25,30 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.ToTable(t =>
         {
             t.HasCheckConstraint(
-                "ck_order_amount_non_negative",
-                "amount >= 0");
-            t.HasCheckConstraint(
-                "ck_order_amount_usd_non_negative",
+                "ck_orders_amount_usd_non_negative",
                 "amount_usd >= 0");
+
             t.HasCheckConstraint(
-                "ck_order_received_amount_non_negative",
-                "received_amount >= 0");
+                "ck_orders_received_amount_nio_non_negative",
+                "received_amount_nio >= 0");
+
             t.HasCheckConstraint(
-                "ck_order_total_shipping_cost_non_negative",
-                "total_shipping_cost >= 0");
+                "ck_orders_exchange_rate_positive",
+                "exchange_rate > 0");
+
             t.HasCheckConstraint(
-                "ck_order_exchange_rate_non_negative",
-                "exchange_rate >= 0");
+                "ck_orders_merchandise_total_nio_non_negative",
+                "merchandise_total_nio >= 0");
+
+            t.HasCheckConstraint(
+                "ck_orders_shipping_cost_nio_non_negative",
+                "shipping_cost_nio >= 0");
+
+            t.HasCheckConstraint(
+                "ck_orders_total_cost_nio_non_negative",
+                "total_cost_nio >= 0");
         });
 
-        
+
     }
 }
