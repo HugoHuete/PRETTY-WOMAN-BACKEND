@@ -480,6 +480,11 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
 
     private static List<decimal> AllocateAmount(decimal total, List<decimal> weights)
     {
+        if(total == 0)
+        {
+            return weights.Select(x => x * 0m).ToList();
+        }
+
         var totalWeight = weights.Sum();
         var allocations = new List<decimal>();
         var assigned = 0m;
