@@ -46,7 +46,7 @@ builder.Services.Configure<JwtOptions>(
 builder.Services.AddAutoMapper(cfg =>
 {
     cfg.LicenseKey = builder.Configuration.GetSection("AutoMapperLicense").Get<string>();
-}, typeof(Program).Assembly);
+}, typeof(Program).Assembly, typeof(PrettyWoman.Application.DependencyInjection).Assembly);
 
 builder.Services.AddIdentityCore<User>()
     .AddRoles<IdentityRole>()

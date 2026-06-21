@@ -187,3 +187,75 @@ La orden debe pasar a `PartiallyReceived` cuando al menos una unidad haya sido r
 La orden debe pasar a `Received` solamente cuando todos sus productos hayan sido recibidos completamente.
 
 Una orden cancelada no debe permitir nuevas recepciones.
+
+## Regla: creación de producto detalle junto con la orden
+
+En este negocio, la ropa cambia constantemente y rara vez se compra exactamente el mismo modelo muchas veces.
+
+Por tanto, al crear una orden se deben registrar también los `product_details` comprados y sus variantes `products`.
+
+`product_details` representa el modelo o artículo comprado:
+
+* código del proveedor
+* código interno del negocio
+* nombre
+* subcategoría
+
+`products` representa las variantes vendibles de ese modelo:
+
+* talla
+* color
+* cantidad comprada
+* costo unitario en USD
+* precio de venta
+
+El campo `product_details.code` es un entero y representa el código interno del negocio. Debe generarse en backend como un consecutivo que aumenta de 1 en 1.
+
+Ejemplo:
+
+```txt
+product_details:
+- code: 125
+- supplier_product_code: SOHO25120
+- name: Pantalón cargo
+
+products:
+- talla S / azul / cantidad 2
+- talla M / azul / cantidad 3
+- talla L / negro / cantidad 1
+```
+
+La API no debe pedir montos totales de la orden ni costos finales por variante. Esos valores se calculan a partir de las variantes enviadas en el request.
+
+## Regla: actualización de una orden de compra
+
+Una orden puede actualizar sus datos generales y sus productos mientras no tenga inventario recibido, disponible, reservado ni recepciones registradas.
+
+Si la orden ya tiene recepción física de productos, no se deben reemplazar sus líneas de compra desde la actualización de orden, porque eso puede alterar inventario y costos históricos.
+
+Cuando una orden todavía no tiene inventario recibido, actualizar sus productos se trata como reemplazo completo de las líneas de compra (`products`), pero no debe quemar códigos internos de `product_details` si la operación es una corrección.
+
+Para conservar `product_details.code`, el request de actualización debe enviar `productDetails[].id` para cada producto detalle existente. El backend debe reutilizar ese `product_detail`, actualizar sus datos editables y recrear sus variantes `products` con los nuevos costos, cantidades y precios.
+
+Si el request incluye un `productDetails[].id` que no pertenece a la orden, la actualización debe rechazarse.
+
+Si se agrega un producto detalle nuevo, se envía sin `id` y el backend asigna el siguiente `product_details.code` disponible.
+
+Si un producto detalle existente no se incluye en la actualización, se considera eliminado de esa orden siempre que no tenga inventario recibido, disponible, reservado ni recepciones asociadas.
+
+## Regla: movimiento financiero de compra
+
+En el flujo actual, crear una orden de compra representa una salida real de dinero hacia el proveedor.
+
+Por tanto, al crear una orden se debe crear también un `financial_movement` relacionado a `orders.id` con:
+
+* `financial_movement_type_id = SupplierPayment`
+* `movement_direction_id = Out`
+* `amount = orders.total_cost_nio`
+* `exchange_rate = orders.exchange_rate`
+* `order_id = orders.id`
+
+Si una orden se actualiza antes de tener inventario recibido o recepciones registradas, el movimiento financiero relacionado debe actualizarse para reflejar el nuevo total de la compra.
+
+Una compra no puede tener total financiero menor o igual a cero, porque `financial_movements` representa movimientos reales de dinero.
+

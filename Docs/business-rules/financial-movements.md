@@ -40,17 +40,17 @@ Razón:
 
 `financial_movement_directions` debe indicar si el movimiento es:
 
-- `Income`
-- `Expense`
+- `In`
+- `Out`
 
 Ejemplos:
 
-- Venta pagada: `Income`
-- Gasto de empaque: `Expense`
-- Préstamo recibido: `Income`
-- Pago de préstamo: `Expense`
-- Inversión del dueño: `Income`
-- Retiro del dueño: `Expense`
+- Venta pagada: `In`
+- Gasto de empaque: `Out`
+- Préstamo recibido: `In`
+- Pago de préstamo: `Out`
+- Inversión del dueño: `In`
+- Retiro del dueño: `Out`
 
 ## Regla: tipos financieros
 
@@ -93,9 +93,11 @@ Si se crea movimiento financiero por comisión, debe evitarse restarla doble en 
 
 ## Regla: pagos a proveedor
 
-El hecho de crear una orden no necesariamente implica que ya salió dinero.
+En el flujo actual de compras, crear una orden representa el pago al proveedor y debe registrar un egreso en `financial_movements`.
 
-Si el proveedor se paga en otro momento, el egreso debe registrarse como `financial_movement` relacionado a `order_id`.
+El movimiento debe relacionarse con `order_id`, tener tipo `SupplierPayment`, dirección `Out` y monto igual a `orders.total_cost_nio`.
+
+Si en el futuro se permiten órdenes no pagadas o pagos parciales, esta regla debe cambiar para registrar el movimiento financiero en el momento real del pago, no al crear la orden.
 
 ## Regla: préstamos
 

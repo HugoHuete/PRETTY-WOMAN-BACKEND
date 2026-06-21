@@ -1545,10 +1545,8 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("Code")
-                        .IsRequired()
-                        .HasMaxLength(10)
-                        .HasColumnType("character varying(10)")
+                    b.Property<int>("Code")
+                        .HasColumnType("integer")
                         .HasColumnName("code");
 
                     b.Property<string>("Name")
@@ -1569,6 +1567,10 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_product_details");
+
+                    b.HasIndex("Code")
+                        .IsUnique()
+                        .HasDatabaseName("ix_product_details_code");
 
                     b.HasIndex("SubcategoryId")
                         .HasDatabaseName("ix_product_details_subcategory_id");
