@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using PrettyWoman.Domain.Entities;
 using PrettyWoman.Domain.Enums;
 
@@ -11,11 +10,13 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
     public void Configure(EntityTypeBuilder<Order> builder)
     {
         builder.Property(x => x.Comments).HasMaxLength(300);
+        builder.Property(x => x.PurchaseCurrencyId).HasDefaultValue((int)PurchaseCurrencyOption.Usd);
         builder.Property(x => x.AmountUsd).HasPrecision(14, 2);
         builder.Property(x => x.ExchangeRate).HasPrecision(10, 4);
         builder.Property(x => x.MerchandiseTotalNio).HasPrecision(14, 2);
         builder.Property(x => x.ReceivedAmountNio).HasPrecision(14, 2);
-        builder.Property(x => x.ShippingCostNio).HasPrecision(14, 2);
+        builder.Property(x => x.SupplierShippingCostUsd).HasPrecision(14, 2);
+        builder.Property(x => x.WarehouseShippingCostUsd).HasPrecision(14, 2);
         builder.Property(x => x.TotalCostNio).HasPrecision(14, 2);
 
 
@@ -24,6 +25,10 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
 
         builder.ToTable(t =>
         {
+            t.HasCheckConstraint(
+                "ck_orders_purchase_currency_valid",
+                "purchase_currency_id IN (1, 2)");
+
             t.HasCheckConstraint(
                 "ck_orders_amount_usd_non_negative",
                 "amount_usd >= 0");
@@ -41,8 +46,12 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
                 "merchandise_total_nio >= 0");
 
             t.HasCheckConstraint(
-                "ck_orders_shipping_cost_nio_non_negative",
-                "shipping_cost_nio >= 0");
+                "ck_orders_supplier_shipping_cost_usd_non_negative",
+                "supplier_shipping_cost_usd >= 0");
+
+            t.HasCheckConstraint(
+                "ck_orders_warehouse_shipping_cost_usd_non_negative",
+                "warehouse_shipping_cost_usd >= 0");
 
             t.HasCheckConstraint(
                 "ck_orders_total_cost_nio_non_negative",

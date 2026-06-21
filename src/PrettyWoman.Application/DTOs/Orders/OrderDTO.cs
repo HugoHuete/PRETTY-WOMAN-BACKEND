@@ -8,6 +8,8 @@ public class OrderDTO
     public DateTime CreatedAt { get; set; }
     public int OrderStatusId { get; set; }
     public int SupplierId { get; set; }
+    public int PurchaseCurrencyId { get; set; }
+    public string? PurchaseCurrencyName { get; set; }
 
     [Range(0, double.MaxValue, ErrorMessage = "El monto USD debe ser mayor o igual a cero.")]
     public decimal AmountUsd { get; set; }
@@ -18,8 +20,11 @@ public class OrderDTO
     [Range(0, double.MaxValue, ErrorMessage = "El monto recibido en cordobas debe ser mayor o igual a cero.")]
     public decimal ReceivedAmountNio { get; set; }
 
-    [Range(0, double.MaxValue, ErrorMessage = "El costo de envio en cordobas debe ser mayor o igual a cero.")]
-    public decimal ShippingCostNio { get; set; }
+    [Range(0, double.MaxValue, ErrorMessage = "El costo de envio del proveedor a bodega en dolares debe ser mayor o igual a cero.")]
+    public decimal SupplierShippingCostUsd { get; set; }
+
+    [Range(0, double.MaxValue, ErrorMessage = "El costo de envio de bodega a Nicaragua en dolares debe ser mayor o igual a cero.")]
+    public decimal WarehouseShippingCostUsd { get; set; }
 
     [Range(0, double.MaxValue, ErrorMessage = "El costo total en cordobas debe ser mayor o igual a cero.")]
     public decimal TotalCostNio { get; set; }
@@ -31,4 +36,5 @@ public class OrderDTO
 
     public string? OrderStatusName { get; set; }
     public string? SupplierName { get; set; }
+    public ICollection<OrderProductDetailDTO> ProductDetails { get; set; } = [];
 }

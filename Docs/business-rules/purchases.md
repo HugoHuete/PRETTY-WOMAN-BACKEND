@@ -23,20 +23,37 @@ Una orden agrupa productos comprados a un proveedor.
 * proveedor
 * fecha de orden
 * estado
-* monto total de mercadería en USD
+* moneda de compra
+* monto total de mercadería en USD cuando aplique
 * tasa de cambio utilizada
 * monto total de mercadería en NIO
-* costo total de envío de importación en NIO
+* costo de envío proveedor -> bodega en USD
+* costo de envío bodega -> Nicaragua en USD cuando se conozca desde recepción
 * costo total de la orden en NIO
 * comentarios
 
+La moneda de compra se guarda en `orders.purchase_currency_id`:
+
+* `1 = USD`
+* `2 = NIO`
+
+El backend debe tomar la tasa desde la tabla de tasas de cambio (`DollarExchangeRates` en el código actual), filtrando por `Enabled = true` y usando `BankRate` del registro habilitado más reciente.
+
+Si la compra es en USD, `orders.amount_usd` guarda el total comprado en dólares y `orders.merchandise_total_nio` se calcula multiplicando por la tasa.
+
+Si la compra es local en NIO, `orders.merchandise_total_nio` guarda el total comprado en córdobas y `orders.amount_usd` guarda la equivalencia histórica dividiendo entre la tasa.
+
+El frontend no debe enviar manualmente `orders.exchange_rate`.
+
 El costo total de la orden se calcula así:
 
-`TotalCostNio = MerchandiseTotalNio + ShippingCostNio`
+`TotalCostNio = MerchandiseTotalNio + SupplierShippingCostUsd × ExchangeRate + WarehouseShippingCostUsd × ExchangeRate`
+
+Al crear o actualizar la orden, `WarehouseShippingCostUsd` queda en `0` porque el envío bodega -> Nicaragua se conoce posteriormente en recepción.
 
 Los montos totales representan valores monetarios cerrados y deben almacenarse con dos decimales.
 
-La tasa de cambio debe quedar guardada en la orden para conservar el valor histórico utilizado en la conversión.
+La tasa de cambio debe quedar guardada en la orden para conservar el valor histórico utilizado en la conversión, incluso en compras locales.
 
 ## Regla: un tracking representa logística, no detalle de productos
 
@@ -63,27 +80,31 @@ Cada tracking puede tener:
 * costo de envío
 * estado de entregado
 
-Los costos registrados por tracking tienen fines logísticos. El costo total de envío de importación utilizado para calcular el costo de los productos se guarda en la orden y se distribuye entre sus líneas.
+Los costos registrados por tracking tienen fines logísticos. El costo de envío proveedor -> bodega se guarda en la orden en USD, se convierte a NIO con la tasa histórica de la orden y se distribuye entre sus líneas. El costo bodega -> Nicaragua se registra posteriormente desde recepción cuando se conozca.
 
 ## Regla: cálculo del costo de una línea de compra
 
 Cada línea de producto debe conservar los siguientes valores:
 
-* `unit_cost_usd`
+* `unit_cost`
 * `merchandise_total_cost_nio`
 * `allocated_shipping_cost_nio`
 * `total_cost_nio`
 * `unit_cost_nio`
 
-`merchandise_total_cost_nio` representa el costo de mercadería asignado a la línea después de convertirla a córdobas.
+`unit_cost_usd` representa el costo unitario equivalente en dólares. En compras USD es el valor comprado; en compras NIO se calcula dividiendo el costo unitario local entre la tasa bancaria histórica.
+
+`unit_cost_nio` representa el costo unitario final en córdobas, incluyendo la parte correspondiente del envío proveedor -> bodega registrado en la orden.
+
+`merchandise_total_cost_nio` representa el costo de mercadería asignado a la línea después de convertirla a córdobas cuando la compra es en USD, o el costo directo en córdobas cuando la compra es local.
 
 Las diferencias de centavos producidas por el redondeo deben distribuirse entre las líneas para garantizar que:
 
 `SUM(products.merchandise_total_cost_nio) = orders.merchandise_total_nio`
 
-El costo de envío de importación también debe distribuirse entre las líneas. Las diferencias de centavos deben ajustarse para garantizar que:
+El costo de envío proveedor -> bodega, convertido a NIO, también debe distribuirse entre las líneas. Las diferencias de centavos deben ajustarse para garantizar que:
 
-`SUM(products.allocated_shipping_cost_nio) = orders.shipping_cost_nio`
+`SUM(products.allocated_shipping_cost_nio) = orders.supplier_shipping_cost_usd × orders.exchange_rate`
 
 El costo total de la línea se calcula así:
 
@@ -93,7 +114,7 @@ El costo unitario final se calcula así:
 
 `UnitCostNio = TotalCostNio / Quantity`
 
-`UnitCostNio` ya incluye la parte correspondiente del costo de envío de importación y es el valor utilizado posteriormente para calcular la ganancia de una venta.
+`UnitCostNio` ya incluye la parte correspondiente del costo de envío proveedor -> bodega y es el valor utilizado posteriormente para calcular la ganancia de una venta.
 
 Los totales de línea deben almacenarse con dos decimales. `UnitCostNio` debe almacenarse con mayor precisión, por ejemplo seis decimales, porque la división puede producir fracciones de centavo.
 
@@ -135,9 +156,9 @@ Al recibir parcialmente una línea:
 * no se modifica `total_cost_nio`
 * no se modifica `unit_cost_nio`
 
-El costo de envío de importación se distribuye usando la cantidad total comprada de la línea, aunque las unidades sean recibidas en momentos distintos.
+El costo de envío proveedor -> bodega se distribuye usando la cantidad total comprada de la línea, aunque las unidades sean recibidas en momentos distintos.
 
-Esta simplificación se adopta porque las recepciones parciales son poco frecuentes y, normalmente, todas las unidades de un mismo producto se reciben juntas.
+Esta simplificación se adopta porque las recepciones parciales son poco frecuentes y, normalmente, todas las unidades de un mismo producto se reciben juntas. El envío bodega -> Nicaragua se tratará en el flujo de recepción cuando ese costo esté disponible.
 
 Si el proveedor confirma que una parte de la línea nunca será entregada, la cantidad final de la línea y sus costos deben ajustarse antes de cerrar definitivamente la orden.
 
@@ -206,7 +227,7 @@ Por tanto, al crear una orden se deben registrar también los `product_details` 
 * talla
 * color
 * cantidad comprada
-* costo unitario en USD
+* costo unitario en la moneda de compra
 * precio de venta
 
 El campo `product_details.code` es un entero y representa el código interno del negocio. Debe generarse en backend como un consecutivo que aumenta de 1 en 1.
@@ -225,7 +246,7 @@ products:
 - talla L / negro / cantidad 1
 ```
 
-La API no debe pedir montos totales de la orden ni costos finales por variante. Esos valores se calculan a partir de las variantes enviadas en el request.
+La API no debe pedir montos totales de la orden, tasa de cambio ni costos finales por variante. Esos valores se calculan a partir de la moneda de compra, la tasa bancaria habilitada cuando aplique y las variantes enviadas en el request.
 
 ## Regla: actualización de una orden de compra
 

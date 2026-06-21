@@ -19,26 +19,28 @@ Registrar una compra al proveedor junto con los artículos comprados y sus varia
 - `suppliers`
 - `subcategories`
 - `sizes`
+- `dollar_exchange_rates`
 
 ## Flujo esperado
 
-1. Recibir proveedor, tasa de cambio, costo total de envío de importación y productos comprados.
+1. Recibir proveedor, moneda de compra, costo de envío del proveedor a la bodega y productos comprados.
 2. Crear la orden en estado `Pending`.
 3. Crear un `product_detail` por cada modelo/artículo comprado.
 4. Generar `product_details.code` en backend usando el siguiente consecutivo interno.
 5. Crear un `product` por cada variante de talla/color.
 6. Inicializar `received_quantity`, `available_quantity` y `reserved_quantity` en `0`.
-7. Calcular totales de orden a partir de las variantes.
-8. Distribuir costo de mercadería y envío entre las variantes.
-9. Guardar la orden y sus productos en la misma operación.
+7. Obtener la tasa de cambio bancaria habilitada para conservar equivalencias históricas entre USD y NIO.
+8. Calcular totales de orden a partir de las variantes.
+9. Convertir el envío proveedor -> bodega desde USD a NIO y distribuirlo entre las variantes.
+10. Guardar la orden y sus productos en la misma operación.
 
 ## Request esperado
 
 ```json
 {
   "supplierId": 1,
-  "exchangeRate": 36.75,
-  "shippingCostNio": 500,
+  "purchaseCurrencyId": 1,
+  "supplierShippingCostUsd": 15,
   "comments": "Compra SOHO junio",
   "productDetails": [
     {
@@ -50,14 +52,14 @@ Registrar una compra al proveedor junto con los artículos comprados y sus varia
           "sizeId": 1,
           "color": "Azul",
           "quantity": 2,
-          "unitCostUsd": 8.5,
+          "unitCost": 8.5,
           "salePrice": 650
         },
         {
           "sizeId": 2,
           "color": "Azul",
           "quantity": 3,
-          "unitCostUsd": 8.5,
+          "unitCost": 8.5,
           "salePrice": 650
         }
       ]
@@ -71,8 +73,10 @@ Registrar una compra al proveedor junto con los artículos comprados y sus varia
 La API no debe recibir manualmente:
 
 - `orders.amount_usd`
+- `orders.exchange_rate`
 - `orders.merchandise_total_nio`
 - `orders.received_amount_nio`
+- `orders.warehouse_shipping_cost_usd`
 - `orders.total_cost_nio`
 - `products.merchandise_total_cost_nio`
 - `products.allocated_shipping_cost_nio`
@@ -87,6 +91,15 @@ Estos valores se calculan en backend.
 - Cada orden debe traer al menos un `product_detail`.
 - Cada `product_detail` debe traer al menos una variante `product`.
 - No se permiten variantes duplicadas dentro del mismo `product_detail` para la misma talla y color.
+- `purchaseCurrencyId = 1` representa compra en USD.
+- `purchaseCurrencyId = 2` representa compra local en NIO.
+- El frontend no envía `exchangeRate`; el backend la calcula.
+- Para compras en USD, el backend usa `DollarExchangeRates.BankRate` del registro habilitado más reciente.
+- Para compras en NIO, el backend usa `BankRate` para calcular la equivalencia histórica en USD.
+- `unitCost` se interpreta en la moneda de compra de la orden; el producto conserva `unit_cost_usd` y `unit_cost_nio` calculados para reportes y costos históricos.
+- `supplierShippingCostUsd` representa el envío proveedor -> bodega y siempre se envía en dólares.
+- El backend convierte `supplierShippingCostUsd` a córdobas usando `orders.exchange_rate` y distribuye ese monto en `products.allocated_shipping_cost_nio`.
+- `orders.warehouse_shipping_cost_usd` representa el envío bodega -> Nicaragua; se mantiene en `0` al crear/actualizar la orden y se debe completar desde el flujo de recepción cuando se conozca ese costo.
 - `product_details.code` es un entero, representa el código interno del negocio y lo genera el backend.
 - `product_details.supplier_product_code` es el código del proveedor.
 - Al crear una orden no se envía `productDetails[].id`.
@@ -103,7 +116,8 @@ Estos valores se calculan en backend.
 - Producto sin variantes.
 - Variante duplicada para el mismo producto.
 - Cantidad menor o igual a cero.
-- Tasa de cambio menor o igual a cero.
+- Moneda de compra inválida.
+- Compra en USD sin tasa bancaria habilitada.
 
 ## Movimiento financiero
 
