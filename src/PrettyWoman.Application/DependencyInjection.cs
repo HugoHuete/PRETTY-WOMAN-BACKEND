@@ -20,6 +20,7 @@ public static class DependencyInjection
         services.AddScoped<IPaymentTerminalService, PaymentTerminalService>();
         services.AddScoped<IExpenseCategoryService, ExpenseCategoryService>();
         services.AddScoped<ILoanOwnerService, LoanOwnerService>();
+        services.AddScoped<IFinancialService, FinancialService>();
 
         return services;
     }
