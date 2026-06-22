@@ -453,6 +453,9 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             product.AllocatedShippingCostNio = shippingAllocations[index];
             product.TotalCostNio = product.MerchandiseTotalCostNio + product.AllocatedShippingCostNio;
             product.UnitCostNio = Math.Round(product.TotalCostNio / product.Quantity, 6);
+            product.UnitCostUsd = exchangeRate == 0
+                ? 0
+                : Math.Round(product.UnitCostNio / exchangeRate, 2);
         }
 
         return new OrderTotals(
@@ -470,14 +473,11 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
 
         if (isUsdPurchase)
         {
-            product.UnitCostUsd = productCost.UnitCostInPurchaseCurrency;
             return product.Quantity * productCost.UnitCostInPurchaseCurrency * exchangeRate;
         }
 
-        product.UnitCostUsd = Math.Round(productCost.UnitCostInPurchaseCurrency / exchangeRate, 2);
         return product.Quantity * productCost.UnitCostInPurchaseCurrency;
     }
-
     private static List<decimal> AllocateAmount(decimal total, List<decimal> weights)
     {
         if(total == 0)

@@ -109,7 +109,7 @@ Cuando la orden no tiene tracking numbers, el costo de envío bodega -> Nicaragu
 - El costo de envío bodega -> Nicaragua se convierte a córdobas con `orders.exchange_rate`.
 - `products[].weight` representa el peso físico estimado por unidad para distribuir el envío; si no se envía, el backend usa `1`.
 - El costo convertido se distribuye proporcionalmente a `products[].weight * products[].quantity`.
-- El costo convertido se suma a `products.allocated_shipping_cost_nio`, `products.total_cost_nio` y recalcula `products.unit_cost_nio`.
+- El costo convertido se suma a `products.allocated_shipping_cost_nio`, `products.total_cost_nio` y recalcula `products.unit_cost_nio` y `products.unit_cost_usd`.
 - `orders.received_amount_nio` refleja solamente mercadería recibida, sin envíos; en recepción completa debe quedar igual a `orders.merchandise_total_nio`.
 - Cada recepción crea un `ProductReceipt`.
 - Cada producto recibido crea un `ProductReceiptDetail`.

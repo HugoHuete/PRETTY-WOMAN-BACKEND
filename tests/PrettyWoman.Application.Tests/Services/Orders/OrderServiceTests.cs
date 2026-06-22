@@ -61,7 +61,7 @@ public class OrderServiceTests
         Assert.Equal(13.70m, order.AmountUsd);
         Assert.Equal(500m, order.MerchandiseTotalNio);
         Assert.Equal(865m, order.TotalCostNio);
-        Assert.Equal(6.85m, product.UnitCostUsd);
+        Assert.Equal(11.85m, product.UnitCostUsd);
         Assert.Equal(432.5m, product.UnitCostNio);
     }
 

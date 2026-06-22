@@ -57,6 +57,7 @@ public class OrderReceiptServiceTests
         Assert.Equal(2, product.ReceivedQuantity);
         Assert.Equal(2, product.AvailableQuantity);
         Assert.Equal(730m, product.AllocatedShippingCostNio);
+        Assert.Equal(13m, product.UnitCostUsd);
         Assert.Equal(product.Id, receiptDetail.ProductId);
         Assert.Equal(2m, receiptDetail.Quantity);
         Assert.Equal((int)MovementDirectionOptions.In, inventoryMovement.MovementDirectionId);
@@ -114,7 +115,10 @@ public class OrderReceiptServiceTests
         Assert.Equal(order.MerchandiseTotalNio, order.ReceivedAmountNio);
         Assert.Equal(12m, order.WarehouseShippingCostUsd);
         Assert.Equal(8.5m, tracking.Weight);
+        product = await context.Products.SingleAsync(storedProduct => storedProduct.Id == product.Id);
+
         Assert.Equal(12m, tracking.ShippingCost);
+        Assert.Equal(19m, product.UnitCostUsd);
         Assert.Equal(receipt.Id, tracking.ProductReceiptId);
     }
 
@@ -161,6 +165,8 @@ public class OrderReceiptServiceTests
         Assert.Equal(273.75m, heavyAllocation.AllocatedWarehouseShippingCostNio);
         Assert.Equal(456.25m, lightProduct.AllocatedShippingCostNio);
         Assert.Equal(638.75m, heavyProduct.AllocatedShippingCostNio);
+        Assert.Equal(22.50m, lightProduct.UnitCostUsd);
+        Assert.Equal(27.50m, heavyProduct.UnitCostUsd);
     }
 
     private static CreateOrderDTO CreateOrderRequest(int quantity)

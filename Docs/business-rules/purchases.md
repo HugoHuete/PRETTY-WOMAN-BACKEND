@@ -90,11 +90,12 @@ Cada línea de producto debe conservar los siguientes valores:
 * `merchandise_total_cost_nio`
 * `allocated_shipping_cost_nio`
 * `total_cost_nio`
+* `unit_cost_usd`
 * `unit_cost_nio`
 
-`unit_cost_usd` representa el costo unitario equivalente en dólares. En compras USD es el valor comprado; en compras NIO se calcula dividiendo el costo unitario local entre la tasa bancaria histórica.
+`unit_cost_nio` representa el costo unitario final en córdobas, incluyendo la parte correspondiente de los envíos registrados hasta el momento.
 
-`unit_cost_nio` representa el costo unitario final en córdobas, incluyendo la parte correspondiente del envío proveedor -> bodega registrado en la orden.
+`unit_cost_usd` representa el equivalente histórico en dólares de `unit_cost_nio`, calculado con `orders.exchange_rate`. Por tanto, también incluye los envíos registrados hasta el momento.
 
 `merchandise_total_cost_nio` representa el costo de mercadería asignado a la línea después de convertirla a córdobas cuando la compra es en USD, o el costo directo en córdobas cuando la compra es local.
 
@@ -110,13 +111,15 @@ El costo total de la línea se calcula así:
 
 `TotalCostNio = MerchandiseTotalCostNio + AllocatedShippingCostNio`
 
-El costo unitario final se calcula así:
+Los costos unitarios finales se calculan así:
 
 `UnitCostNio = TotalCostNio / Quantity`
 
-`UnitCostNio` ya incluye la parte correspondiente del costo de envío proveedor -> bodega y es el valor utilizado posteriormente para calcular la ganancia de una venta.
+`UnitCostUsd = UnitCostNio / ExchangeRate`
 
-Los totales de línea deben almacenarse con dos decimales. `UnitCostNio` debe almacenarse con mayor precisión, por ejemplo seis decimales, porque la división puede producir fracciones de centavo.
+`UnitCostNio` y `UnitCostUsd` ya incluyen la parte correspondiente de los envíos registrados y se actualizan cuando una recepción agrega costo bodega -> Nicaragua.
+
+Los totales de línea deben almacenarse con dos decimales. `UnitCostUsd` se almacena con dos decimales. `UnitCostNio` debe almacenarse con mayor precisión, por ejemplo seis decimales, porque la división puede producir fracciones de centavo.
 
 
 ## Regla: recepción con costos bodega -> Nicaragua
@@ -143,7 +146,7 @@ Al recibir productos, el backend debe:
 * sumar el costo convertido a `orders.total_cost_nio`
 * actualizar `orders.received_amount_nio` con el valor de mercadería recibida en córdobas
 * distribuir el costo convertido entre los productos recibidos usando el peso físico estimado enviado en el request
-* actualizar `products.allocated_shipping_cost_nio`, `products.total_cost_nio` y `products.unit_cost_nio`
+* actualizar `products.allocated_shipping_cost_nio`, `products.total_cost_nio`, `products.unit_cost_nio` y `products.unit_cost_usd`
 * crear `inventory_movements` tipo `PurchaseReceived` con dirección `In`
 * crear `financial_movements` tipo `Expense` con dirección `Out` cuando el costo sea mayor que cero
 * actualizar la orden a `PartiallyReceived` o `Received`
@@ -187,20 +190,18 @@ Ejemplo:
 * Recibido el primer día: 6 unidades.
 * Recibido el segundo día: 4 unidades.
 
-## Regla: las recepciones parciales no modifican el costo
+## Regla: las recepciones parciales pueden agregar costo de envío
 
-Las recepciones parciales afectan las cantidades recibidas y disponibles, pero no generan lotes de costo diferentes.
+Las recepciones parciales afectan las cantidades recibidas y disponibles. Si en esa recepción se registra costo bodega -> Nicaragua, ese costo se distribuye entre los productos recibidos y actualiza sus costos finales.
 
 Al recibir parcialmente una línea:
 
 * no se modifica `merchandise_total_cost_nio`
-* no se modifica `allocated_shipping_cost_nio`
-* no se modifica `total_cost_nio`
-* no se modifica `unit_cost_nio`
+* sí puede aumentar `allocated_shipping_cost_nio` por el envío bodega -> Nicaragua
+* sí puede aumentar `total_cost_nio`
+* se recalculan `unit_cost_nio` y `unit_cost_usd`
 
-El costo de envío proveedor -> bodega se distribuye usando la cantidad total comprada de la línea, aunque las unidades sean recibidas en momentos distintos.
-
-Esta simplificación se adopta porque las recepciones parciales son poco frecuentes y, normalmente, todas las unidades de un mismo producto se reciben juntas. El envío bodega -> Nicaragua se tratará en el flujo de recepción cuando ese costo esté disponible.
+El costo de envío proveedor -> bodega se distribuye al crear o actualizar la orden usando la cantidad total comprada de la línea. El costo bodega -> Nicaragua se distribuye en cada recepción usando el peso físico estimado enviado para los productos recibidos.
 
 Si el proveedor confirma que una parte de la línea nunca será entregada, la cantidad final de la línea y sus costos deben ajustarse antes de cerrar definitivamente la orden.
 

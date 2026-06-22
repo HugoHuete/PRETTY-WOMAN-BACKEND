@@ -44,6 +44,7 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
             item.Product.AllocatedShippingCostNio += warehouseShippingAllocations[item.Product.Id];
             item.Product.TotalCostNio = item.Product.MerchandiseTotalCostNio + item.Product.AllocatedShippingCostNio;
             item.Product.UnitCostNio = Math.Round(item.Product.TotalCostNio / item.Product.Quantity, 6);
+            item.Product.UnitCostUsd = CalculateUnitCostUsd(item.Product.UnitCostNio, order.ExchangeRate);
 
             receipt.ProductReceiptDetails.Add(new ProductReceiptDetail
             {
@@ -254,7 +255,6 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
 
         return allocations;
     }
-
     private static int ResolveOrderStatus(Order order)
     {
         return order.Products.All(product => product.ReceivedQuantity == product.Quantity)
