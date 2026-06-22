@@ -44,7 +44,9 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
             item.Product.AllocatedShippingCostNio += warehouseShippingAllocations[item.Product.Id];
             item.Product.TotalCostNio = item.Product.MerchandiseTotalCostNio + item.Product.AllocatedShippingCostNio;
             item.Product.UnitCostNio = Math.Round(item.Product.TotalCostNio / item.Product.Quantity, 6);
-            item.Product.UnitCostUsd = CalculateUnitCostUsd(item.Product.UnitCostNio, order.ExchangeRate);
+            item.Product.UnitCostUsd = order.ExchangeRate == 0
+                ? 0
+                : Math.Round(item.Product.UnitCostNio / order.ExchangeRate, 2);
 
             receipt.ProductReceiptDetails.Add(new ProductReceiptDetail
             {
