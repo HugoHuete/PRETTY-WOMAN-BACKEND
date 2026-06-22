@@ -118,6 +118,48 @@ El costo unitario final se calcula así:
 
 Los totales de línea deben almacenarse con dos decimales. `UnitCostNio` debe almacenarse con mayor precisión, por ejemplo seis decimales, porque la división puede producir fracciones de centavo.
 
+
+## Regla: recepción con costos bodega -> Nicaragua
+
+La recepción de mercadería se realiza con:
+
+`POST /api/v1/orders/{orderId}/receipts`
+
+El mismo endpoint sirve para recepciones parciales y completas. El request indica qué productos y cantidades llegaron.
+
+Si la orden tiene `order_tracking_numbers`, el peso y el costo USD de envío bodega -> Nicaragua se registran por tracking al momento de recibir. El backend suma esos costos para calcular el costo de recepción.
+
+Si la orden no tiene tracking numbers, el request puede enviar `warehouseShippingCostUsd` directamente.
+
+Al recibir productos, el backend debe:
+
+* crear `product_receipts`
+* crear `product_receipt_details`
+* actualizar `order_tracking_numbers` cuando aplique
+* aumentar `products.received_quantity`
+* aumentar `products.available_quantity`
+* convertir el costo bodega -> Nicaragua a NIO usando `orders.exchange_rate`
+* acumular el costo en `orders.warehouse_shipping_cost_usd`
+* sumar el costo convertido a `orders.total_cost_nio`
+* actualizar `orders.received_amount_nio` con el valor de mercadería recibida en córdobas
+* distribuir el costo convertido entre los productos recibidos usando el peso físico estimado enviado en el request
+* actualizar `products.allocated_shipping_cost_nio`, `products.total_cost_nio` y `products.unit_cost_nio`
+* crear `inventory_movements` tipo `PurchaseReceived` con dirección `In`
+* crear `financial_movements` tipo `Expense` con dirección `Out` cuando el costo sea mayor que cero
+* actualizar la orden a `PartiallyReceived` o `Received`
+
+`orders.received_amount_nio` refleja solamente mercadería recibida, sin incluir envíos. En una recepción completa debe ser igual a `orders.merchandise_total_nio`.
+
+El costo bodega -> Nicaragua se paga y se conoce en la recepción, no al crear la orden.
+
+El request de recepción puede enviar `products[].weight` para cada producto recibido. Este valor es un peso estimado por unidad definido por el negocio para distribuir el envío bodega -> Nicaragua. Por ejemplo: una blusa ligera puede usar `0.5`, una camisa normal `1`, un vestido ligero `2` o `3`, y un vestido largo o pesado `5` o `6`.
+
+Si `products[].weight` no se envía, el backend usa `1`.
+
+La base de distribución del envío es:
+
+`products[].weight × products[].quantity`
+
 ## Regla: recepción parcial de compra
 
 Si una orden llega en varias fechas, el sistema debe permitir recibir cantidades parciales por producto.
