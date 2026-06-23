@@ -1,6 +1,6 @@
 # Status catalogs
 
-Este documento lista estados sugeridos para catálogos del sistema.
+Este documento lista estados sugeridos para catalogos del sistema.
 
 ## order_statuses
 
@@ -23,9 +23,9 @@ Delivered
 Cancelled
 ```
 
-La venta puede estar pagada pero no entregada, o entregada con varios envíos históricos.
+La venta puede estar pagada pero no entregada, o entregada con varios envios historicos.
 
-## sale_detail_statuses
+## sale_product_statuses
 
 ```txt
 Active
@@ -34,7 +34,7 @@ Refunded
 Exchanged
 ```
 
-Una venta completa puede seguir activa aunque una línea se haya cambiado o reembolsado.
+Una venta completa puede seguir activa aunque una linea se haya cambiado o reembolsado.
 
 ## delivery_statuses
 
@@ -48,18 +48,36 @@ Rescheduled
 Cancelled
 ```
 
-Cada envío conserva su propio estado.
+Cada envio conserva su propio estado.
 
 ## product_hold_statuses
 
-Si decides usar tabla catálogo en vez de varchar:
-
 ```txt
 Active
-Released
 ConvertedToSale
+NotSelected
+```
+
+Estos estados son solo para reservas comerciales de clientas.
+
+## product_inventory_issue_types
+
+```txt
+Damaged
+Dirty
+Missing
+UnderReview
+Repairing
+```
+
+## product_inventory_issue_statuses
+
+```txt
+Open
+ResolvedToAvailable
+Discarded
+ConfirmedLost
 Cancelled
-Expired
 ```
 
 ## inventory_movement_types
@@ -68,12 +86,16 @@ Expired
 PurchaseReceived
 Sale
 SaleCancelled
-Return
+CustomerReturn
 ExchangeReturn
-ExchangeSale
 Damaged
+Repaired
 Lost
-Adjustment
+Found
+Discarded
+Donation
+AdjustmentIncrease
+AdjustmentDecrease
 ReservationCreated
 ReservationReleased
 ReservationConvertedToSale

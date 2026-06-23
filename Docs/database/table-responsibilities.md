@@ -92,6 +92,7 @@ Campos importantes:
 - `received_quantity`: cantidad físicamente recibida.
 - `available_quantity`: cantidad disponible para vender.
 - `reserved_quantity`: cantidad apartada o fuera de tienda sin estar vendida.
+* `unavailable_quantity`: cantidad existente, pero temporalmente no vendible por dano, suciedad, extravio pendiente o revision.
 
 ## product_images
 
@@ -249,7 +250,37 @@ Debe registrar todo cambio relevante en cantidades.
 
 Representa reservas activas o históricas de productos.
 
-Sirve para saber qué productos están apartados, enviados para selección o temporalmente fuera de tienda sin estar vendidos.
+Sirve para saber que productos estan apartados o enviados para seleccion sin estar vendidos. No debe usarse para productos danados, sucios o perdidos.
+
+## product_inventory_issue_types
+
+Catalogo de motivos operativos por los que un producto no esta vendible temporalmente.
+
+Ejemplos:
+
+- Damaged
+- Dirty
+- Missing
+- UnderReview
+- Repairing
+
+## product_inventory_issue_statuses
+
+Catalogo de estados para incidencias operativas de inventario.
+
+Ejemplos:
+
+- Open
+- ResolvedToAvailable
+- Discarded
+- ConfirmedLost
+- Cancelled
+
+## product_inventory_issues
+
+Representa productos temporalmente no disponibles por daño, suciedad, extravio pendiente, revision o reparacion.
+
+Afecta `products.unavailable_quantity` y debe quedar respaldado por `inventory_movements`.
 
 ## financial_movement_types
 

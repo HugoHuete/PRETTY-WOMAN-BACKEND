@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PrettyWoman.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using PrettyWoman.Infrastructure.Persistence;
 namespace PrettyWoman.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260623183720_ProductInventoryIssues")]
+    partial class ProductInventoryIssues
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1870,6 +1873,9 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     b.HasIndex("ProductInventoryIssueTypeId")
                         .HasDatabaseName("ix_product_inventory_issues_product_inventory_issue_type_id");
+
+                    b.HasIndex("ResolvedAt")
+                        .HasDatabaseName("ix_product_inventory_issues_resolved_at");
 
                     b.ToTable("product_inventory_issues", null, t =>
                         {

@@ -28,7 +28,7 @@ Registrar una compra al proveedor junto con los artículos comprados y sus varia
 3. Crear un `product_detail` por cada modelo/artículo comprado.
 4. Generar `product_details.code` en backend usando el siguiente consecutivo interno.
 5. Crear un `product` por cada variante de talla/color.
-6. Inicializar `received_quantity`, `available_quantity` y `reserved_quantity` en `0`.
+6. Inicializar `received_quantity`, `available_quantity`, `reserved_quantity` y `unavailable_quantity` en `0`.
 7. Obtener la tasa de cambio bancaria habilitada para conservar equivalencias históricas entre USD y NIO.
 8. Calcular totales de orden a partir de las variantes.
 9. Convertir el envío proveedor -> bodega desde USD a NIO y distribuirlo entre las variantes.
@@ -82,7 +82,7 @@ La API no debe recibir manualmente:
 - `products.allocated_shipping_cost_nio`
 - `products.total_cost_nio`
 - `products.unit_cost_nio`
-- cantidades recibidas, disponibles o reservadas
+- cantidades recibidas, disponibles, reservadas o no disponibles
 
 Estos valores se calculan en backend.
 

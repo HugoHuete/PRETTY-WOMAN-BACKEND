@@ -33,21 +33,6 @@ public class ProductHoldStatusConfiguration : IEntityTypeConfiguration<ProductHo
             {
                 Id = (int)ProductHoldStatusOption.NotSelected,
                 Name = nameof(ProductHoldStatusOption.NotSelected)
-            },
-            new ProductHoldStatus
-            {
-                Id = (int)ProductHoldStatusOption.Found,
-                Name = nameof(ProductHoldStatusOption.Found)
-            },
-            new ProductHoldStatus
-            {
-                Id = (int)ProductHoldStatusOption.Repaired,
-                Name = nameof(ProductHoldStatusOption.Repaired)
-            },
-            new ProductHoldStatus
-            {
-                Id = (int)ProductHoldStatusOption.Discarded,
-                Name = nameof(ProductHoldStatusOption.Discarded)
             }
         );
     }

@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.Interfaces;
 using PrettyWoman.Domain.Entities;
@@ -40,6 +40,9 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public DbSet<Product> Products { get; set; }
     public DbSet<ProductHold> ProductHolds { get; set; }
     public DbSet<ProductHoldStatus> ProductHoldStatuses { get; set; }
+    public DbSet<ProductInventoryIssue> ProductInventoryIssues { get; set; }
+    public DbSet<ProductInventoryIssueType> ProductInventoryIssueTypes { get; set; }
+    public DbSet<ProductInventoryIssueStatus> ProductInventoryIssueStatuses { get; set; }
 
 
     // Discounts
@@ -89,5 +92,6 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
 
 
 }
+
 
 

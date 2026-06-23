@@ -11,6 +11,7 @@ public class InventoryMovement
     public int? OrderId { get; set; }
     public int? SaleProductId { get; set; }
     public int? ProductHoldId { get; set; }
+    public int? ProductInventoryIssueId { get; set; }
     public string? Comments { get; set; }
 
 
@@ -22,6 +23,7 @@ public class InventoryMovement
     public Order? Order { get; set; }
     public SaleProduct? SaleProduct { get; set; }
     public ProductHold? ProductHold { get; set; }
+    public ProductInventoryIssue? ProductInventoryIssue { get; set; }
 
 
 }

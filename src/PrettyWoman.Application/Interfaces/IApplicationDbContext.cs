@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Domain.Entities;
 
 namespace PrettyWoman.Application.Interfaces;
@@ -24,6 +24,9 @@ public interface IApplicationDbContext
     DbSet<Product> Products { get; }
     DbSet<ProductHold> ProductHolds { get; }
     DbSet<ProductHoldStatus> ProductHoldStatuses { get; }
+    DbSet<ProductInventoryIssue> ProductInventoryIssues { get; }
+    DbSet<ProductInventoryIssueType> ProductInventoryIssueTypes { get; }
+    DbSet<ProductInventoryIssueStatus> ProductInventoryIssueStatuses { get; }
 
     // Discounts
     DbSet<DiscountType> DiscountTypes { get; }
@@ -67,4 +70,3 @@ public interface IApplicationDbContext
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
-

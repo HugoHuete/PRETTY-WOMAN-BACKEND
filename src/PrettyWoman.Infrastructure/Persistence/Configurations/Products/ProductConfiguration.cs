@@ -1,6 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
-using Microsoft.EntityFrameworkCore.Metadata.Internal;
 using PrettyWoman.Domain.Entities;
 
 namespace PrettyWoman.Infrastructure.Persistence.Configurations.Products;
@@ -51,12 +50,16 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
                 "reserved_quantity >= 0");
 
             t.HasCheckConstraint(
+                "ck_products_unavailable_quantity_non_negative",
+                "unavailable_quantity >= 0");
+
+            t.HasCheckConstraint(
                 "ck_products_received_quantity_not_greater_than_quantity",
                 "received_quantity <= quantity");
 
             t.HasCheckConstraint(
-                "ck_products_available_reserved_not_greater_than_received",
-                "available_quantity + reserved_quantity <= received_quantity");
+                "ck_products_stock_not_greater_than_received",
+                "available_quantity + reserved_quantity + unavailable_quantity <= received_quantity");
 
             t.HasCheckConstraint(
                 "ck_products_unit_cost_usd_non_negative",
@@ -80,3 +83,4 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         });
     }
 }
+
