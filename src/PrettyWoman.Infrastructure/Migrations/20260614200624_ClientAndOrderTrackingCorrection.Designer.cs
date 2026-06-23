@@ -797,6 +797,11 @@ namespace PrettyWoman.Infrastructure.Migrations
                         new
                         {
                             Id = 10,
+                            Name = "LoanInterest"
+                        },
+                        new
+                        {
+                            Id = 11,
                             Name = "Adjustment"
                         });
                 });

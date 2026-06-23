@@ -11,5 +11,6 @@ public enum FinancialMovementTypeOption
     CustomerRefund = 7,
     LoanReceived = 8,
     LoanPayment = 9,
-    Adjustment = 10
+    LoanInterest = 10,
+    Adjustment = 11
 }

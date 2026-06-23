@@ -1240,7 +1240,8 @@ namespace PrettyWoman.Infrastructure.Migrations
                     { 7, "CustomerRefund" },
                     { 8, "LoanReceived" },
                     { 9, "LoanPayment" },
-                    { 10, "Adjustment" }
+                    { 10, "LoanInterest" },
+                    { 11, "Adjustment" }
                 });
 
             migrationBuilder.InsertData(

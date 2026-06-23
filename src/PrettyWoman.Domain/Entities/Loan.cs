@@ -12,8 +12,6 @@ public class Loan
     public string? Comments { get; set; }
     public decimal ExchangeRate { get; set; }
 
-
-
     public bool IsActive => Balance > 0 && ClosedAt is null;
 
     public LoanOwner? LoanOwner { get; set; }
