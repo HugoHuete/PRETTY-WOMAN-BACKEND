@@ -1,4 +1,4 @@
-namespace PrettyWoman.Application.DTOs.Loans;
+﻿namespace PrettyWoman.Application.DTOs.Loans;
 
 public class LoanDTO
 {
@@ -9,6 +9,7 @@ public class LoanDTO
     public decimal InitialAmount { get; set; }
     public decimal InitialAmountUsd { get; set; }
     public decimal Balance { get; set; }
+    public decimal InterestPaidAmount { get; set; }
     public DateTime? ClosedAt { get; set; }
     public string? Comments { get; set; }
     public decimal ExchangeRate { get; set; }

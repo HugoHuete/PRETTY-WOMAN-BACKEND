@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.DTOs.Loans;
 using PrettyWoman.Application.Interfaces;
@@ -50,6 +50,13 @@ public class LoansController(ILoanService loanService) : ControllerBase
     public async Task<ActionResult<LoanDTO>> Pay(int id, [FromBody] PayLoanDTO payLoanDTO)
     {
         var loan = await _loanService.PayAsync(id, payLoanDTO);
+        return Ok(loan);
+    }
+
+    [HttpPut("{id:int}/payments/{paymentId:int}")]
+    public async Task<ActionResult<LoanDTO>> UpdatePayment(int id, int paymentId, [FromBody] UpdateLoanPaymentDTO updatePaymentDTO)
+    {
+        var loan = await _loanService.UpdatePaymentAsync(id, paymentId, updatePaymentDTO);
         return Ok(loan);
     }
 }

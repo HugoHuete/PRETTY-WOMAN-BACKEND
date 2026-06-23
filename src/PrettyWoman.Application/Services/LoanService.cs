@@ -1,3 +1,4 @@
+﻿using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.Common.Extensions;
 using PrettyWoman.Application.Common.Models;
@@ -6,7 +7,6 @@ using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Interfaces;
 using PrettyWoman.Domain.Entities;
 using PrettyWoman.Domain.Enums;
-using System.Linq.Expressions;
 
 namespace PrettyWoman.Application.Services;
 
@@ -30,8 +30,8 @@ public class LoanService(IApplicationDbContext context) : ILoanService
         if (query.IsActive.HasValue)
         {
             loansQuery = query.IsActive.Value
-                ? loansQuery.Where(loan => loan.Balance > 0 && loan.ClosedAt == null)
-                : loansQuery.Where(loan => loan.Balance <= 0 || loan.ClosedAt != null);
+                ? loansQuery.Where(loan => loan.InitialAmount - loan.LoanPayments.Sum(payment => payment.PrincipalAmount) > 0 && loan.ClosedAt == null)
+                : loansQuery.Where(loan => loan.InitialAmount - loan.LoanPayments.Sum(payment => payment.PrincipalAmount) <= 0 || loan.ClosedAt != null);
         }
 
         var totalCount = await loansQuery.CountAsync();
@@ -71,7 +71,6 @@ public class LoanService(IApplicationDbContext context) : ILoanService
             LoanOwnerId = createLoanDTO.LoanOwnerId,
             InitialAmount = createLoanDTO.InitialAmount,
             InitialAmountUsd = decimal.Round(createLoanDTO.InitialAmount / exchangeRate, 2),
-            Balance = createLoanDTO.InitialAmount,
             Comments = comments,
             ExchangeRate = exchangeRate
         };
@@ -79,6 +78,7 @@ public class LoanService(IApplicationDbContext context) : ILoanService
         await _context.Loans.AddAsync(loan);
         await _context.FinancialMovements.AddAsync(CreateLoanMovement(
             loan,
+            null,
             FinancialMovementTypeOption.LoanReceived,
             MovementDirectionOptions.In,
             createLoanDTO.InitialAmount,
@@ -94,6 +94,7 @@ public class LoanService(IApplicationDbContext context) : ILoanService
     public async Task<LoanDTO> UpdateAsync(int id, UpdateLoanDTO updateLoanDTO)
     {
         var loan = await _context.Loans
+            .Include(loan => loan.LoanPayments)
             .Include(loan => loan.FinancialMovements)
             .FirstOrDefaultAsync(loan => loan.Id == id)
             ?? throw new AppNotFoundException($"El prestamo con id '{id}' no existe.");
@@ -107,7 +108,6 @@ public class LoanService(IApplicationDbContext context) : ILoanService
         loan.LoanOwnerId = updateLoanDTO.LoanOwnerId;
         loan.InitialAmount = updateLoanDTO.InitialAmount;
         loan.InitialAmountUsd = decimal.Round(updateLoanDTO.InitialAmount / loan.ExchangeRate, 2);
-        loan.Balance = updateLoanDTO.InitialAmount;
         loan.ClosedAt = null;
         loan.Comments = comments;
 
@@ -124,6 +124,7 @@ public class LoanService(IApplicationDbContext context) : ILoanService
     public async Task DeleteAsync(int id)
     {
         var loan = await _context.Loans
+            .Include(loan => loan.LoanPayments)
             .Include(loan => loan.FinancialMovements)
             .FirstOrDefaultAsync(loan => loan.Id == id)
             ?? throw new AppNotFoundException($"El prestamo con id '{id}' no existe.");
@@ -138,23 +139,35 @@ public class LoanService(IApplicationDbContext context) : ILoanService
     public async Task<LoanDTO> PayAsync(int id, PayLoanDTO payLoanDTO)
     {
         var loan = await _context.Loans
+            .Include(loan => loan.LoanPayments)
             .FirstOrDefaultAsync(loan => loan.Id == id)
             ?? throw new AppNotFoundException($"El prestamo con id '{id}' no existe.");
 
-        if (loan.ClosedAt.HasValue || loan.Balance <= 0)
+        var balance = CalculateBalance(loan);
+        if (loan.ClosedAt.HasValue || balance <= 0)
         {
             throw new AppBadRequestException("El prestamo ya esta pagado.");
         }
 
-        ValidatePaymentAmount(payLoanDTO.Amount, loan.Balance);
+        ValidatePaymentAmount(payLoanDTO.Amount, balance);
+        ValidateInterestAmount(payLoanDTO.InterestAmount);
 
         var paymentDate = payLoanDTO.CreatedAt ?? DateTime.UtcNow;
         var comments = payLoanDTO.Comments.NormalizeOptional();
-        loan.Balance -= payLoanDTO.Amount;
-        loan.ClosedAt = loan.Balance == 0 ? paymentDate : null;
+        var payment = new LoanPayment
+        {
+            Loan = loan,
+            CreatedAt = paymentDate,
+            PrincipalAmount = payLoanDTO.Amount,
+            InterestAmount = payLoanDTO.InterestAmount,
+            ExchangeRate = loan.ExchangeRate,
+            Comments = comments
+        };
 
+        await _context.LoanPayments.AddAsync(payment);
         await _context.FinancialMovements.AddAsync(CreateLoanMovement(
             loan,
+            payment,
             FinancialMovementTypeOption.LoanPayment,
             MovementDirectionOptions.Out,
             payLoanDTO.Amount,
@@ -162,6 +175,96 @@ public class LoanService(IApplicationDbContext context) : ILoanService
             paymentDate,
             "Pago de prestamo",
             comments));
+
+        if (payLoanDTO.InterestAmount > 0)
+        {
+            await _context.FinancialMovements.AddAsync(CreateLoanMovement(
+                loan,
+                payment,
+                FinancialMovementTypeOption.LoanInterest,
+                MovementDirectionOptions.Out,
+                payLoanDTO.InterestAmount,
+                loan.ExchangeRate,
+                paymentDate,
+                "Interes de prestamo",
+                comments));
+        }
+
+        UpdateClosedAt(loan, balance - payLoanDTO.Amount);
+        await _context.SaveChangesAsync();
+
+        return await GetLoanDTOByIdAsync(loan.Id);
+    }
+
+    public async Task<LoanDTO> UpdatePaymentAsync(int id, int paymentId, UpdateLoanPaymentDTO updatePaymentDTO)
+    {
+        var payment = await _context.LoanPayments
+            .Include(payment => payment.Loan)
+                .ThenInclude(loan => loan!.LoanPayments)
+            .Include(payment => payment.FinancialMovements)
+            .FirstOrDefaultAsync(payment => payment.Id == paymentId && payment.LoanId == id)
+            ?? throw new AppNotFoundException($"El pago de prestamo con id '{paymentId}' no existe.");
+
+        var loan = payment.Loan
+            ?? throw new AppNotFoundException($"El prestamo con id '{id}' no existe.");
+
+        var balance = CalculateBalance(loan);
+        var availableBalance = balance + payment.PrincipalAmount;
+        ValidatePaymentAmount(updatePaymentDTO.Amount, availableBalance);
+        ValidateInterestAmount(updatePaymentDTO.InterestAmount);
+
+        var paymentDate = updatePaymentDTO.CreatedAt ?? payment.CreatedAt;
+        var comments = updatePaymentDTO.Comments.NormalizeOptional();
+
+        payment.CreatedAt = paymentDate;
+        payment.PrincipalAmount = updatePaymentDTO.Amount;
+        payment.InterestAmount = updatePaymentDTO.InterestAmount;
+        payment.Comments = comments;
+
+        var principalMovement = GetPaymentMovement(payment, FinancialMovementTypeOption.LoanPayment);
+        principalMovement.CreatedAt = paymentDate;
+        principalMovement.Amount = updatePaymentDTO.Amount;
+        principalMovement.Comments = comments;
+
+        var interestMovement = payment.FinancialMovements
+            .FirstOrDefault(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanInterest);
+
+        if (updatePaymentDTO.InterestAmount > 0)
+        {
+            if (interestMovement is null)
+            {
+                await _context.FinancialMovements.AddAsync(CreateLoanMovement(
+                    loan,
+                    payment,
+                    FinancialMovementTypeOption.LoanInterest,
+                    MovementDirectionOptions.Out,
+                    updatePaymentDTO.InterestAmount,
+                    loan.ExchangeRate,
+                    paymentDate,
+                    "Interes de prestamo",
+                    comments));
+            }
+            else
+            {
+                interestMovement.CreatedAt = paymentDate;
+                interestMovement.Amount = updatePaymentDTO.InterestAmount;
+                interestMovement.Comments = comments;
+            }
+        }
+        else if (interestMovement is not null)
+        {
+            _context.FinancialMovements.Remove(interestMovement);
+        }
+
+        var duplicatedInterestMovements = payment.FinancialMovements
+            .Where(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanInterest && movement != interestMovement)
+            .ToList();
+        if (duplicatedInterestMovements.Count > 0)
+        {
+            _context.FinancialMovements.RemoveRange(duplicatedInterestMovements);
+        }
+
+        UpdateClosedAt(loan, availableBalance - updatePaymentDTO.Amount);
         await _context.SaveChangesAsync();
 
         return await GetLoanDTOByIdAsync(loan.Id);
@@ -178,35 +281,38 @@ public class LoanService(IApplicationDbContext context) : ILoanService
     }
 
     private static readonly Expression<Func<Loan, LoanDTO>> LoanDTOProjection = loan => new LoanDTO
-        {
-            Id = loan.Id,
-            CreatedAt = loan.CreatedAt,
-            LoanOwnerId = loan.LoanOwnerId,
-            LoanOwnerName = loan.LoanOwner != null ? loan.LoanOwner.Name : null,
-            InitialAmount = loan.InitialAmount,
-            InitialAmountUsd = loan.InitialAmountUsd,
-            Balance = loan.Balance,
-            ClosedAt = loan.ClosedAt,
-            Comments = loan.Comments,
-            ExchangeRate = loan.ExchangeRate,
-            IsActive = loan.Balance > 0 && loan.ClosedAt == null,
-            Payments = loan.FinancialMovements
-                .Where(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanPayment)
-                .OrderByDescending(movement => movement.CreatedAt)
-                .ThenByDescending(movement => movement.Id)
-                .Select(movement => new LoanPaymentDTO
-                {
-                    Id = movement.Id,
-                    CreatedAt = movement.CreatedAt,
-                    Amount = movement.Amount,
-                    ExchangeRate = movement.ExchangeRate,
-                    Comments = movement.Comments
-                })
-                .ToList()
-        };
+    {
+        Id = loan.Id,
+        CreatedAt = loan.CreatedAt,
+        LoanOwnerId = loan.LoanOwnerId,
+        LoanOwnerName = loan.LoanOwner != null ? loan.LoanOwner.Name : null,
+        InitialAmount = loan.InitialAmount,
+        InitialAmountUsd = loan.InitialAmountUsd,
+        Balance = loan.InitialAmount - loan.LoanPayments.Sum(payment => payment.PrincipalAmount),
+        InterestPaidAmount = loan.LoanPayments.Sum(payment => payment.InterestAmount),
+        ClosedAt = loan.ClosedAt,
+        Comments = loan.Comments,
+        ExchangeRate = loan.ExchangeRate,
+        IsActive = loan.InitialAmount - loan.LoanPayments.Sum(payment => payment.PrincipalAmount) > 0 && loan.ClosedAt == null,
+        Payments = loan.LoanPayments
+            .OrderByDescending(payment => payment.CreatedAt)
+            .ThenByDescending(payment => payment.Id)
+            .Select(payment => new LoanPaymentDTO
+            {
+                Id = payment.Id,
+                CreatedAt = payment.CreatedAt,
+                Amount = payment.PrincipalAmount,
+                InterestAmount = payment.InterestAmount,
+                TotalAmount = payment.PrincipalAmount + payment.InterestAmount,
+                ExchangeRate = payment.ExchangeRate,
+                Comments = payment.Comments
+            })
+            .ToList()
+    };
 
     private static FinancialMovement CreateLoanMovement(
         Loan loan,
+        LoanPayment? loanPayment,
         FinancialMovementTypeOption movementType,
         MovementDirectionOptions direction,
         decimal amount,
@@ -222,6 +328,7 @@ public class LoanService(IApplicationDbContext context) : ILoanService
             MovementDirectionId = (int)direction,
             FinancialMovementTypeId = (int)movementType,
             Loan = loan,
+            LoanPayment = loanPayment,
             Amount = amount,
             ExchangeRate = exchangeRate,
             Comments = comments
@@ -241,7 +348,7 @@ public class LoanService(IApplicationDbContext context) : ILoanService
 
     private static void EnsureLoanHasNoPayments(Loan loan)
     {
-        if (loan.FinancialMovements.Any(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanPayment))
+        if (loan.LoanPayments.Count > 0)
         {
             throw new AppBadRequestException("No se puede modificar o eliminar un prestamo que ya tiene pagos.");
         }
@@ -252,6 +359,31 @@ public class LoanService(IApplicationDbContext context) : ILoanService
         return loan.FinancialMovements
             .FirstOrDefault(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanReceived)
             ?? throw new AppBadRequestException("El prestamo no tiene movimiento financiero de ingreso asociado.");
+    }
+
+    private static FinancialMovement GetPaymentMovement(LoanPayment payment, FinancialMovementTypeOption movementType)
+    {
+        return payment.FinancialMovements
+            .FirstOrDefault(movement => movement.FinancialMovementTypeId == (int)movementType)
+            ?? throw new AppBadRequestException("El pago de prestamo no tiene movimiento financiero asociado.");
+    }
+
+    private static decimal CalculateBalance(Loan loan)
+    {
+        return loan.InitialAmount - loan.LoanPayments.Sum(payment => payment.PrincipalAmount);
+    }
+
+    private static void UpdateClosedAt(Loan loan, decimal balance)
+    {
+        if (balance > 0)
+        {
+            loan.ClosedAt = null;
+            return;
+        }
+
+        loan.ClosedAt = loan.LoanPayments
+                     .OrderByDescending(payment => payment.CreatedAt)
+                     .FirstOrDefault()?.CreatedAt;
     }
 
     private static void ValidateLoanAmount(decimal amount)
@@ -272,6 +404,14 @@ public class LoanService(IApplicationDbContext context) : ILoanService
         if (amount > balance)
         {
             throw new AppBadRequestException("El pago no puede ser mayor que el saldo pendiente del prestamo.");
+        }
+    }
+
+    private static void ValidateInterestAmount(decimal amount)
+    {
+        if (amount < 0)
+        {
+            throw new AppBadRequestException("El monto de interes no puede ser negativo.");
         }
     }
 

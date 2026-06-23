@@ -1,4 +1,4 @@
-using PrettyWoman.Application.Common.Models;
+﻿using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.DTOs.Loans;
 
 namespace PrettyWoman.Application.Interfaces;
@@ -11,4 +11,5 @@ public interface ILoanService
     Task<LoanDTO> UpdateAsync(int id, UpdateLoanDTO updateLoanDTO);
     Task DeleteAsync(int id);
     Task<LoanDTO> PayAsync(int id, PayLoanDTO payLoanDTO);
+    Task<LoanDTO> UpdatePaymentAsync(int id, int paymentId, UpdateLoanPaymentDTO updatePaymentDTO);
 }

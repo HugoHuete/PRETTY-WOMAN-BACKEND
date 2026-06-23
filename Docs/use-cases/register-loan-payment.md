@@ -13,6 +13,7 @@ Registrar un pago realizado sobre un préstamo.
 ## Tablas involucradas
 
 - `loans`
+- `loan_payments`
 - `financial_movements`
 - `financial_movement_types`
 - `financial_movement_directions`
@@ -20,43 +21,97 @@ Registrar un pago realizado sobre un préstamo.
 ## Flujo esperado
 
 1. Buscar préstamo.
-2. Validar monto.
-3. Validar que el préstamo esté activo y tenga saldo pendiente.
-4. Registrar movimiento financiero de egreso.
-5. Asociar movimiento a `loan_id`.
-6. Actualizar saldo pendiente del préstamo.
-7. Si el saldo llega a cero, cerrar el préstamo con `closed_at`.
+2. Calcular saldo pendiente desde `loan_payments`.
+3. Validar monto de capital.
+4. Validar monto de interés, si se envía.
+5. Validar que el préstamo esté activo y tenga saldo pendiente.
+6. Crear registro en `loan_payments`.
+7. Registrar movimiento financiero de egreso por capital.
+8. Si hay interés, registrar movimiento financiero de egreso por interés.
+9. Asociar ambos movimientos a `loan_id` y `loan_payment_id`.
+10. Si el saldo calculado llega a cero, cerrar el préstamo con `closed_at`.
 
-## Endpoint
+## Endpoints
 
 - `POST /api/v1/loans/{id}/payments`: registra un pago sobre el préstamo.
+- `PUT /api/v1/loans/{id}/payments/{paymentId}`: edita un pago de préstamo existente.
 
-## Movimiento financiero
+## Request
+
+`amount` representa el pago a capital. `interestAmount` representa el interés pagado.
+
+```json
+{
+  "createdAt": "2026-06-22T10:00:00Z",
+  "amount": 1000,
+  "interestAmount": 50,
+  "comments": "Abono con interés"
+}
+```
+
+## LoanPayment
+
+Cada pago crea un registro en `loan_payments`:
+
+- `loan_id`: préstamo pagado
+- `created_at`: fecha del pago
+- `principal_amount`: monto pagado a capital
+- `interest_amount`: monto pagado de interés
+- `exchange_rate`: tasa guardada en el préstamo
+- `comments`: comentario del pago
+
+## Movimiento financiero de capital
 
 Al registrar el pago se debe crear un movimiento:
 
 - `financial_movement_type`: `LoanPayment`
 - `movement_direction`: `Out`
 - `loan_id`: préstamo pagado
-- `amount`: monto pagado en córdobas
+- `loan_payment_id`: pago creado
+- `amount`: monto pagado a capital en córdobas
 - `exchange_rate`: tasa guardada en el préstamo
 
-## Actualización del préstamo
+## Movimiento financiero de interés
 
-- `balance` disminuye por el monto pagado.
-- Si `balance` queda en `0`, el préstamo se marca como cerrado con la fecha del pago.
-- No se permite pagar más que el saldo pendiente.
+Si `interestAmount` es mayor que cero, se debe crear otro movimiento:
+
+- `financial_movement_type`: `LoanInterest`
+- `movement_direction`: `Out`
+- `loan_id`: préstamo pagado
+- `loan_payment_id`: pago creado
+- `amount`: monto pagado de interés en córdobas
+- `exchange_rate`: tasa guardada en el préstamo
+
+## Saldo pendiente
+
+`loans` no guarda `balance`. El saldo se calcula siempre desde los pagos:
+
+```txt
+Balance = loans.initial_amount - SUM(loan_payments.principal_amount)
+```
+
+El interés no disminuye el saldo; solo queda registrado en `loan_payments.interest_amount` y en `financial_movements` como `LoanInterest`.
+
+## Edición de pagos
+
+- El `paymentId` corresponde al id de `loan_payments`.
+- Al editar un pago se actualiza `loan_payments` y sus movimientos financieros asociados.
+- Si `interestAmount` cambia, se actualiza el movimiento `LoanInterest` relacionado.
+- Si `interestAmount` queda en `0`, se elimina el movimiento `LoanInterest` relacionado.
+- Después de editar, `closed_at` se recalcula con base en el saldo resultante.
 
 ## Reglas de negocio
 
 - El pago de préstamo no debe contarse como gasto operativo común si quieres reportes separados.
 - El interés sí puede analizarse como costo financiero.
-- No se puede pagar más que el saldo pendiente.
-- En esta versión el pago se registra contra capital. El interés puede manejarse como una regla futura.
+- No se puede pagar más capital que el saldo pendiente.
+- El interés pagado se reporta sumando `loan_payments.interest_amount`.
 
 ## Errores esperados
 
 - Préstamo inexistente.
-- Monto inválido.
+- Pago inexistente.
+- Monto de capital inválido.
+- Monto de interés negativo.
 - Préstamo ya pagado.
-- Pago mayor que el saldo pendiente.
+- Pago de capital mayor que el saldo pendiente.

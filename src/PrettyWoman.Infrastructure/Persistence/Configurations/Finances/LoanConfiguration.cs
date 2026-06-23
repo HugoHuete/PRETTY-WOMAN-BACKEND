@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using PrettyWoman.Domain.Entities;
 
@@ -10,7 +10,6 @@ public class LoanConfiguration : IEntityTypeConfiguration<Loan>
     {
         builder.Property(x => x.InitialAmount).HasPrecision(12, 2);
         builder.Property(x => x.InitialAmountUsd).HasPrecision(12, 2);
-        builder.Property(x => x.Balance).HasPrecision(12, 2);
         builder.Property(x => x.ExchangeRate).HasPrecision(10, 4);
         builder.Property(x => x.Comments).HasMaxLength(500);
 
@@ -28,9 +27,6 @@ public class LoanConfiguration : IEntityTypeConfiguration<Loan>
             t.HasCheckConstraint(
                 "ck_loans_initial_amount_usd_non_negative",
                 "initial_amount_usd >= 0");
-            t.HasCheckConstraint(
-                "ck_loans_balance_non_negative",
-                "balance >= 0");
             t.HasCheckConstraint(
                 "ck_loans_exchange_rate_positive",
                 "exchange_rate > 0");

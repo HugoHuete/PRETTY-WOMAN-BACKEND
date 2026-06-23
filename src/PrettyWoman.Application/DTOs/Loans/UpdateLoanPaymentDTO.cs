@@ -2,7 +2,7 @@
 
 namespace PrettyWoman.Application.DTOs.Loans;
 
-public class PayLoanDTO
+public class UpdateLoanPaymentDTO
 {
     public DateTime? CreatedAt { get; set; }
 

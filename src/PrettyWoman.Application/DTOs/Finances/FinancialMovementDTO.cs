@@ -1,4 +1,4 @@
-namespace PrettyWoman.Application.DTOs.Finances;
+﻿namespace PrettyWoman.Application.DTOs.Finances;
 
 public class FinancialMovementDTO
 {
@@ -13,7 +13,9 @@ public class FinancialMovementDTO
     public int? OrderId { get; set; }
     public int? SalePaymentId { get; set; }
     public int? LoanId { get; set; }
+    public int? LoanPaymentId { get; set; }
     public decimal Amount { get; set; }
     public decimal ExchangeRate { get; set; }
     public string? Comments { get; set; }
 }
+

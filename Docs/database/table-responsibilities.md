@@ -301,6 +301,14 @@ Préstamos recibidos por el negocio.
 
 No deben mezclarse con ganancia operativa.
 
+## loan_payments
+
+Representa pagos aplicados a préstamos.
+
+Guarda capital, interés, fecha, tasa de cambio y comentarios del pago.
+
+El saldo del préstamo se calcula desde estos pagos.
+
 ## discount_campaigns
 
 Promociones temporales.

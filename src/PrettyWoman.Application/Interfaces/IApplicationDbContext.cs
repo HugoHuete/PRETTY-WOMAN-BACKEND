@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Domain.Entities;
 
 namespace PrettyWoman.Application.Interfaces;
@@ -58,6 +58,7 @@ public interface IApplicationDbContext
     DbSet<FinancialMovement> FinancialMovements { get; }
     DbSet<LoanOwner> LoanOwners { get; }
     DbSet<Loan> Loans { get; }
+    DbSet<LoanPayment> LoanPayments { get; }
     DbSet<DollarExchangeRate> DollarExchangeRates { get; }
 
     // Inventory
@@ -66,3 +67,4 @@ public interface IApplicationDbContext
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
+

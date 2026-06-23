@@ -1,4 +1,4 @@
-namespace PrettyWoman.Domain.Entities;
+﻿namespace PrettyWoman.Domain.Entities;
 
 public class FinancialMovement
 {
@@ -11,11 +11,10 @@ public class FinancialMovement
     public int? OrderId { get; set; }
     public int? SalePaymentId { get; set; }
     public int? LoanId { get; set; }
+    public int? LoanPaymentId { get; set; }
     public decimal Amount { get; set; }
     public decimal ExchangeRate { get; set; }
     public string? Comments { get; set; }
-
-
 
     public MovementDirection? MovementDirection { get; set; }
     public FinancialMovementType? FinancialMovementType { get; set; }
@@ -23,5 +22,5 @@ public class FinancialMovement
     public Order? Order { get; set; }
     public SalePayment? SalePayment { get; set; }
     public Loan? Loan { get; set; }
-
+    public LoanPayment? LoanPayment { get; set; }
 }

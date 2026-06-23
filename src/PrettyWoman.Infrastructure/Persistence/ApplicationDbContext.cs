@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.Interfaces;
 using PrettyWoman.Domain.Entities;
@@ -78,6 +78,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public DbSet<FinancialMovement> FinancialMovements { get; set; }
     public DbSet<LoanOwner> LoanOwners { get; set; }
     public DbSet<Loan> Loans { get; set; }
+    public DbSet<LoanPayment> LoanPayments { get; set; }
     public DbSet<DollarExchangeRate> DollarExchangeRates { get; set; }
 
 
@@ -88,3 +89,5 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
 
 
 }
+
+
