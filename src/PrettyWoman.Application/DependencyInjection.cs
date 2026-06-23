@@ -1,4 +1,4 @@
-
+﻿
 using Microsoft.Extensions.DependencyInjection;
 using PrettyWoman.Application.Interfaces;
 using PrettyWoman.Application.Services;
@@ -20,8 +20,10 @@ public static class DependencyInjection
         services.AddScoped<IPaymentTerminalService, PaymentTerminalService>();
         services.AddScoped<IExpenseCategoryService, ExpenseCategoryService>();
         services.AddScoped<ILoanOwnerService, LoanOwnerService>();
+        services.AddScoped<ILoanService, LoanService>();
         services.AddScoped<IFinancialService, FinancialService>();
 
         return services;
     }
 }
+
