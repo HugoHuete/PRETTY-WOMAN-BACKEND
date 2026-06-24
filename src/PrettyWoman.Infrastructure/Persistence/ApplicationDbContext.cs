@@ -21,7 +21,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     }
 
 
-    // Orders 
+    // Orders
     public DbSet<Supplier> Suppliers { get; set; }
     public DbSet<ShippingCompany> ShippingCompanies { get; set; }
     public DbSet<OrderStatus> OrderStatuses { get; set; }
@@ -63,6 +63,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     // Payments
     public DbSet<PaymentMethod> PaymentMethods { get; set; }
     public DbSet<PaymentTerminal> PaymentTerminals { get; set; }
+    public DbSet<SalePaymentStatus> SalePaymentStatuses { get; set; }
     public DbSet<SalePayment> SalePayments { get; set; }
 
 
@@ -88,7 +89,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     // Inventory
     public DbSet<InventoryMovementType> InventoryMovementTypes { get; set; }
     public DbSet<InventoryMovement> InventoryMovements { get; set; }
-    
+
 
 
 }

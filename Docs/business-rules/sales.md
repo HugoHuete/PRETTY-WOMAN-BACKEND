@@ -108,18 +108,20 @@ No se debe redondear la ganancia de cada línea a dos decimales antes de calcula
 
 ## Regla: estados de venta
 
-Estados sugeridos para `sale_statuses`:
+Estados de `sale_statuses`:
 
 * `Pending`
-* `Confirmed`
-* `PartiallyPaid`
-* `Paid`
-* `Delivered`
+* `Reserved`
+* `ReadyForDelivery`
+* `SentForDelivery`
+* `Completed`
 * `Cancelled`
 
 La venta no debe eliminarse si se cancela. Debe cambiar de estado.
 
-El estado de pago y el estado operativo de la venta podrían separarse en el futuro si se vuelve necesario, pero inicialmente pueden manejarse dentro del mismo catálogo.
+El estado de venta es operativo y no debe indicar si la venta está pagada. El estado de pago se guarda en `sales.sale_payment_status_id` y debe mantenerse sincronizado con los registros en `sale_payments`.
+
+Una venta reservada debe usar `Reserved` cuando la clienta ya confirmó la compra y el producto queda apartado para retiro o envío futuro. La reserva puede estar sin pago, parcialmente pagada o pagada completa según la suma de sus pagos.
 
 ## Regla: estados por línea de venta
 
@@ -266,3 +268,11 @@ La suma de los pagos puede ser:
 * mayor temporalmente solo si existe una regla explícita para saldo a favor o devolución
 
 Cada pago debe generar el movimiento financiero correspondiente cuando represente una entrada real de dinero.
+
+`sales.sale_payment_status_id` debe recalcularse con la suma de `sale_payments.gross_amount` asociada a la venta:
+
+* `Unpaid`: no hay pagos registrados.
+* `PartiallyPaid`: la suma de pagos es mayor que cero y menor que `sales.total`.
+* `Paid`: la suma de pagos es igual a `sales.total`.
+
+Este estado de pago no reemplaza a `sales.sale_status_id`; ambos campos deben vivir separados.

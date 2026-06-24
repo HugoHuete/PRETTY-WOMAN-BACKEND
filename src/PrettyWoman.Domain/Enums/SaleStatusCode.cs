@@ -3,6 +3,9 @@ namespace PrettyWoman.Domain.Enums;
 public enum SaleStatusOption
 {
     Pending = 1,
-    Completed = 2,
-    Cancelled = 3
+    Reserved = 2,
+    ReadyForDelivery = 3,
+    SentForDelivery = 4,
+    Completed = 5,
+    Cancelled = 6
 }

@@ -9,7 +9,8 @@ Debe contener:
 - fecha
 - cliente
 - canal
-- estado
+- estado operativo
+- estado de pago
 - totales
 - descuentos totales
 - ganancia bruta
@@ -22,6 +23,19 @@ No debe contener:
 - agencia de envío única
 
 Porque una venta puede tener varios pagos y varios envíos.
+
+Estados operativos de `sale_statuses`:
+
+```txt
+Pending
+Reserved
+ReadyForDelivery
+SentForDelivery
+Completed
+Cancelled
+```
+
+El estado operativo no indica si la venta está pagada. El pago se obtiene desde `sale_payments`.
 
 ## Sale details
 
@@ -51,6 +65,16 @@ Venta C$1000
 ```
 
 Por eso los pagos viven en `sale_payments`.
+
+Estados de `sale_payment_statuses`:
+
+```txt
+Unpaid
+PartiallyPaid
+Paid
+```
+
+`SalePaymentStatusId` debe recalcularse cada vez que se crea, edita o elimina un pago de la venta.
 
 ## Sale deliveries
 

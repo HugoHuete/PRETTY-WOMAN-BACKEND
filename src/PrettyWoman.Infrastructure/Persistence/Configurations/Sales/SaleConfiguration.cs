@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using PrettyWoman.Domain.Entities;
+using PrettyWoman.Domain.Enums;
 
 namespace PrettyWoman.Infrastructure.Persistence.Configurations.Sales;
 
@@ -15,14 +16,18 @@ public class SaleConfiguration : IEntityTypeConfiguration<Sale>
         builder.Property(x => x.Comission).HasPrecision(12, 2);
         builder.Property(x => x.Total).HasPrecision(12, 2);
         builder.Property(x => x.Comments).HasMaxLength(500);
+        builder.Property(x => x.SaleStatusId).HasDefaultValue((int) SaleStatusOption.Pending);
+        builder.Property(x => x.SalePaymentStatusId).HasDefaultValue((int) SalePaymentStatusOption.Unpaid);
 
         builder.HasOne(x => x.SaleChannel).WithMany().HasForeignKey(x => x.SaleChannelId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.SaleStatus).WithMany().HasForeignKey(x => x.SaleStatusId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.SalePaymentStatus).WithMany().HasForeignKey(x => x.SalePaymentStatusId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Client).WithMany(x => x.Sales).HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Municipality).WithMany().HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => x.CreatedAt);
         builder.HasIndex(x => new { x.SaleStatusId, x.CreatedAt });
+        builder.HasIndex(x => new { x.SalePaymentStatusId, x.CreatedAt });
         builder.HasIndex(x => new { x.SaleChannelId, x.CreatedAt });
         builder.HasIndex(x => new { x.UserId, x.CreatedAt });
         builder.HasIndex(x => x.ClientId);

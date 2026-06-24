@@ -16,14 +16,25 @@ Cancelled
 
 ```txt
 Pending
-Confirmed
-PartiallyPaid
-Paid
-Delivered
+Reserved
+ReadyForDelivery
+SentForDelivery
+Completed
 Cancelled
 ```
 
-La venta puede estar pagada pero no entregada, o entregada con varios envios historicos.
+Estos estados describen la etapa operativa de la venta. El pago se calcula aparte desde `sale_payments`.
+
+
+## sale_payment_statuses
+
+```txt
+Unpaid
+PartiallyPaid
+Paid
+```
+
+Estos estados describen cuanto se ha pagado de una venta y se guardan en `sales.sale_payment_status_id`.
 
 ## sale_product_statuses
 

@@ -22,6 +22,21 @@ public class SaleStatusConfiguration : IEntityTypeConfiguration<SaleStatus>
             },
             new SaleStatus
             {
+                Id = (int) SaleStatusOption.Reserved,
+                Name = nameof(SaleStatusOption.Reserved)
+            },
+            new SaleStatus
+            {
+                Id = (int) SaleStatusOption.ReadyForDelivery,
+                Name = nameof(SaleStatusOption.ReadyForDelivery)
+            },
+            new SaleStatus
+            {
+                Id = (int) SaleStatusOption.SentForDelivery,
+                Name = nameof(SaleStatusOption.SentForDelivery)
+            },
+            new SaleStatus
+            {
                 Id = (int) SaleStatusOption.Completed,
                 Name = nameof(SaleStatusOption.Completed)
             },

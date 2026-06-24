@@ -47,15 +47,19 @@ Registrar una venta con sus productos, descuentos aplicados, subtotal, total y e
    - `shipping_cost`, si aplica
    - `total`
    - `gross_profit`
-8. Crear la venta con estado inicial definido, por ejemplo `Pending` o `Confirmed`.
+8. Crear la venta con estado operativo inicial definido:
+   - `Pending`, si todavía no queda apartada para la clienta.
+   - `Reserved`, si la clienta ya confirmó y el producto queda apartado para retiro o envío futuro.
+   - `ReadyForDelivery`, si ya puede retirarse o enviarse.
 9. Crear las líneas en `sale_details`.
-10. Descontar inventario si la venta queda confirmada.
-11. Crear movimientos de inventario tipo `Sale` por cada producto vendido.
+11. Descontar inventario si la venta queda confirmada.
+12. Crear movimientos de inventario tipo `Sale` por cada producto vendido.
 
 ## Reglas de negocio
 
 - Una venta no representa necesariamente dinero recibido. El dinero se registra en `sale_payments`.
 - Una venta puede existir sin pago completo.
+- El estado de pago no debe mezclarse con `sale_statuses`; se guarda en `sale_payment_status_id` e inicia como `Unpaid` si no se registra pago inicial.
 - Una venta puede tener múltiples pagos.
 - Una venta puede tener múltiples envíos.
 - El costo histórico del producto debe quedar congelado en `sale_details.cost_at_sale`.

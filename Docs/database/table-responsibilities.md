@@ -125,8 +125,10 @@ Estados generales de una venta.
 Ejemplos:
 
 - Pending
-- Confirmed
-- Delivered
+- Reserved
+- ReadyForDelivery
+- SentForDelivery
+- Completed
 - Cancelled
 
 ## sales
@@ -156,6 +158,19 @@ Aquí deben quedar congelados:
 - costo histórico
 - ganancia por línea
 - estado de la línea
+
+
+## sale_payment_statuses
+
+Estados de pago de una venta.
+
+Ejemplos:
+
+- Unpaid
+- PartiallyPaid
+- Paid
+
+Debe mantenerse separado de `sale_statuses`, que representa la etapa operativa.
 
 ## sale_detail_statuses
 

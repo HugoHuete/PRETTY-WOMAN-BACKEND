@@ -1,3 +1,5 @@
+using PrettyWoman.Domain.Enums;
+
 namespace PrettyWoman.Domain.Entities;
 
 public class Sale
@@ -5,7 +7,8 @@ public class Sale
     public int Id { get; set; }
     public DateTime CreatedAt { get; set; }
     public int SaleChannelId { get; set; }
-    public int SaleStatusId { get; set; }
+    public int SaleStatusId { get; set; } = (int) SaleStatusOption.Pending;
+    public int SalePaymentStatusId { get; set; } = (int) SalePaymentStatusOption.Unpaid;
     public required string UserId { get; set; }
     public decimal SubtotalBeforeDiscount { get; set; }
     public decimal TotalDiscount { get; set; }
@@ -18,6 +21,7 @@ public class Sale
 
 
     public SaleStatus? SaleStatus { get; set; }
+    public SalePaymentStatus? SalePaymentStatus { get; set; }
     public SaleChannel? SaleChannel { get; set; }
     public Client? Client { get; set; }
     public Municipality? Municipality { get; set; }

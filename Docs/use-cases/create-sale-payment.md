@@ -36,7 +36,7 @@ Registrar un pago total o parcial asociado a una venta.
    - `net_received_amount`
 6. Crear registro en `sale_payments`.
 7. Crear movimiento financiero de ingreso asociado al `sale_payment`.
-8. Recalcular estado de pago de la venta, si manejas estados como:
+8. Recalcular y actualizar `sales.sale_payment_status_id`:
    - `Unpaid`
    - `PartiallyPaid`
    - `Paid`
@@ -45,6 +45,7 @@ Registrar un pago total o parcial asociado a una venta.
 
 - El pago representa entrada real de dinero.
 - La venta no debe usarse como movimiento financiero directo.
+- El pago no cambia automáticamente `sales.sale_status_id`; ese campo representa la etapa operativa de la venta.
 - `financial_movements` debe referenciar `sale_payment_id`, no solo `sale_id`.
 - El neto recibido puede ser menor que el monto cobrado si hay comisión POS.
 - Las comisiones deben quedar congeladas al momento del pago.

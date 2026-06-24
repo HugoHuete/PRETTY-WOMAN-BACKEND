@@ -45,6 +45,7 @@ public interface IApplicationDbContext
     // Payments
     DbSet<PaymentMethod> PaymentMethods { get; }
     DbSet<PaymentTerminal> PaymentTerminals { get; }
+    DbSet<SalePaymentStatus> SalePaymentStatuses { get; }
     DbSet<SalePayment> SalePayments { get; }
 
     // Deliveries
