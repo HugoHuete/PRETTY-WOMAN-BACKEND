@@ -95,7 +95,7 @@ Cuando se recibe una cantidad de producto de una orden:
 2. Validar que la nueva cantidad recibida no supere `quantity`.
 3. Aumentar `received_quantity`.
 4. Aumentar `available_quantity`.
-5. Crear un `inventory_movement` de tipo `PurchaseReceived`.
+5. Crear un `inventory_movement` de tipo `PurchaseReceived` con `External -> Available`.
 6. Relacionar el movimiento con el producto y la orden.
 7. Actualizar el estado de la orden cuando corresponda.
 
@@ -119,7 +119,7 @@ Cuando se confirma una linea de venta que no proviene de una reserva:
 
 1. Validar que `available_quantity` sea suficiente.
 2. Disminuir `available_quantity`.
-3. Crear un `inventory_movement` de tipo `Sale`.
+3. Crear un `inventory_movement` de tipo `Sale` con `Available -> OutOfInventory`.
 4. Relacionar el movimiento con `sale_product_id`.
 5. Copiar `products.unit_cost_nio` a `sale_products.unit_cost_at_sale`.
 
@@ -178,7 +178,7 @@ Si hay pago previo, no se debe usar `product_holds`; se debe crear una venta con
 3. Disminuir `available_quantity`.
 4. Aumentar `unavailable_quantity`.
 5. Crear un `product_hold` con estado `Active` y razon `SentForSelection`.
-6. Crear un `inventory_movement` relacionado con `product_hold_id`.
+6. Crear un `inventory_movement` relacionado con `product_hold_id` usando `Available -> Unavailable`.
 
 Cambios:
 
@@ -193,7 +193,7 @@ Cuando la clienta no selecciona el producto y este regresa disponible:
 1. Cambiar el estado del `product_hold` a `NotSelected`.
 2. Disminuir `unavailable_quantity`.
 3. Aumentar `available_quantity`.
-4. Crear un `inventory_movement` relacionado con `product_hold_id`.
+4. Crear un `inventory_movement` relacionado con `product_hold_id` usando `Unavailable -> Available`.
 
 Cambios:
 
@@ -208,7 +208,7 @@ Cuando la clienta selecciona el producto:
 1. Cambiar el estado del `product_hold` a `ConvertedToSale`.
 2. Disminuir `unavailable_quantity`.
 3. Crear o confirmar el `sale_product`.
-4. Crear un `inventory_movement` relacionado con `product_hold_id` y/o `sale_product_id`.
+4. Crear un `inventory_movement` relacionado con `product_hold_id` y/o `sale_product_id` usando `Unavailable -> OutOfInventory`.
 5. Copiar el costo actual del producto a `sale_products.unit_cost_at_sale`.
 
 Cambio:
@@ -225,7 +225,7 @@ Cuando un producto disponible no puede venderse temporalmente por dano, suciedad
 2. Crear `product_inventory_issue` con estado `Open`.
 3. Disminuir `available_quantity`.
 4. Aumentar `unavailable_quantity`.
-5. Crear `inventory_movement` con el tipo especifico, por ejemplo `Damaged` o `Lost`.
+5. Crear `inventory_movement` con el tipo especifico, por ejemplo `Damaged` o `Lost`, usando `Available -> Unavailable`.
 6. Relacionar el movimiento con `product_inventory_issue_id`.
 
 Cambios:
@@ -245,7 +245,7 @@ Cuando un producto no disponible vuelve a ser vendible:
 3. Colocar `resolved_at`.
 4. Disminuir `unavailable_quantity`.
 5. Aumentar `available_quantity`.
-6. Crear `inventory_movement` de tipo `Repaired` o `Found`.
+6. Crear `inventory_movement` de tipo `Repaired` o `Found` usando `Unavailable -> Available`.
 7. Relacionar el movimiento con `product_inventory_issue_id`.
 
 Cambios:
@@ -263,7 +263,7 @@ Cuando se determina que una unidad no podra recuperarse ni venderse:
 1. Validar si la unidad esta disponible o ya esta en un issue operativo.
 2. Si esta disponible, disminuir `available_quantity`.
 3. Si esta en `unavailable_quantity`, disminuir `unavailable_quantity`.
-4. Crear `inventory_movement` de tipo `Discarded` o `Lost`.
+4. Crear `inventory_movement` de tipo `Discarded` o `Lost` usando `Available -> OutOfInventory` o `Unavailable -> OutOfInventory`, segun el bucket actual.
 5. Si existe issue, cambiarlo a `Discarded` o `ConfirmedLost` y relacionar el movimiento con `product_inventory_issue_id`.
 
 No se debe descontar dos veces `available_quantity` si la unidad ya habia salido de disponible al abrir el issue.
@@ -331,6 +331,8 @@ Cada movimiento debe guardar al menos:
 
 * producto
 * tipo de movimiento
+* bucket origen
+* bucket destino
 * cantidad
 * fecha UTC
 * costo unitario historico cuando sea relevante
@@ -338,7 +340,7 @@ Cada movimiento debe guardar al menos:
 * comentario o motivo cuando corresponda
 * referencia a la orden, venta, linea de venta, hold de seleccion o issue cuando aplique
 
-La cantidad debe almacenarse como un valor positivo. El tipo del movimiento determina si aumenta, disminuye o transfiere cantidades entre disponible, reservado y no disponible.
+La cantidad debe almacenarse como un valor positivo. El tipo del movimiento explica por que ocurrio; los buckets origen/destino determinan que cantidades se afectan.
 
 ## Reglas de consistencia
 

@@ -11,8 +11,9 @@ public class InventoryMovementConfiguration : IEntityTypeConfiguration<Inventory
         builder.Property(x => x.Comments).HasMaxLength(500);
 
         builder.HasOne(x => x.Product).WithMany(x => x.InventoryMovements).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne(x => x.MovementDirection).WithMany().HasForeignKey(x => x.MovementDirectionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.InventoryMovementType).WithMany().HasForeignKey(x => x.InventoryMovementTypeId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.FromStockBucket).WithMany().HasForeignKey(x => x.FromStockBucketId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.ToStockBucket).WithMany().HasForeignKey(x => x.ToStockBucketId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Order).WithMany().HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.SaleProduct).WithMany().HasForeignKey(x => x.SaleProductId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.ProductHold).WithMany().HasForeignKey(x => x.ProductHoldId).OnDelete(DeleteBehavior.Restrict);
@@ -20,7 +21,6 @@ public class InventoryMovementConfiguration : IEntityTypeConfiguration<Inventory
 
         builder.HasIndex(x => x.CreatedAt);
         builder.HasIndex(x => x.ProductId);
-        builder.HasIndex(x => x.MovementDirectionId);
         builder.HasIndex(x => x.InventoryMovementTypeId);
         builder.HasIndex(x => x.OrderId);
         builder.HasIndex(x => x.SaleProductId);

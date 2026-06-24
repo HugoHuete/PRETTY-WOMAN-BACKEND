@@ -67,6 +67,31 @@ Las unidades vendidas, descartadas o perdidas definitivamente ya no forman parte
 
 Toda alteracion relevante debe crear un registro en `inventory_movements`.
 
+## Buckets de movimiento
+
+`inventory_movements` debe guardar:
+
+- `inventory_movement_type_id`: razon del movimiento.
+- `from_stock_bucket_id`: bucket origen.
+- `to_stock_bucket_id`: bucket destino.
+- `quantity`: cantidad movida.
+
+Buckets:
+
+```txt
+External
+Available
+Reserved
+Unavailable
+OutOfInventory
+```
+
+Ejemplo de recepcion de compra:
+
+```txt
+PurchaseReceived: External -> Available
+```
+
 Ejemplos:
 
 - recepcion de compra

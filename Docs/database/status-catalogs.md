@@ -91,6 +91,18 @@ ConfirmedLost
 Cancelled
 ```
 
+## inventory_stock_buckets
+
+```txt
+External
+Available
+Reserved
+Unavailable
+OutOfInventory
+```
+
+`External` y `OutOfInventory` no son columnas en `products`; sirven para auditar entradas y salidas del inventario activo.
+
 ## inventory_movement_types
 
 ```txt

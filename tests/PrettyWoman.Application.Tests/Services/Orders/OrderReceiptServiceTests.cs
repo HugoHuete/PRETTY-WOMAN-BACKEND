@@ -60,8 +60,9 @@ public class OrderReceiptServiceTests
         Assert.Equal(13m, product.UnitCostUsd);
         Assert.Equal(product.Id, receiptDetail.ProductId);
         Assert.Equal(2m, receiptDetail.Quantity);
-        Assert.Equal((int)MovementDirectionOptions.In, inventoryMovement.MovementDirectionId);
         Assert.Equal((int)InventoryMovementTypeOption.PurchaseReceived, inventoryMovement.InventoryMovementTypeId);
+        Assert.Equal((int)InventoryStockBucketOption.External, inventoryMovement.FromStockBucketId);
+        Assert.Equal((int)InventoryStockBucketOption.Available, inventoryMovement.ToStockBucketId);
         Assert.Equal(2, inventoryMovement.Quantity);
         Assert.Equal(365m, warehouseShippingMovement.Amount);
     }
@@ -263,6 +264,9 @@ public class OrderReceiptServiceTests
             new MovementDirection { Id = (int)MovementDirectionOptions.In, Name = "In" },
             new MovementDirection { Id = (int)MovementDirectionOptions.Out, Name = "Out" });
         context.InventoryMovementTypes.Add(new InventoryMovementType { Id = (int)InventoryMovementTypeOption.PurchaseReceived, Name = "PurchaseReceived" });
+        context.InventoryStockBuckets.AddRange(
+            new InventoryStockBucket { Id = (int)InventoryStockBucketOption.External, Name = "External" },
+            new InventoryStockBucket { Id = (int)InventoryStockBucketOption.Available, Name = "Available" });
         context.FinancialMovementTypes.AddRange(
             new FinancialMovementType { Id = (int)FinancialMovementTypeOption.SupplierPayment, Name = "SupplierPayment" },
             new FinancialMovementType { Id = (int)FinancialMovementTypeOption.Expense, Name = "Expense" });

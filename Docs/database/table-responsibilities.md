@@ -239,6 +239,18 @@ Usado principalmente para envíos.
 
 Agencias usadas para entregar ventas a clientes.
 
+## inventory_stock_buckets
+
+Catalogo de buckets de inventario usados por `inventory_movements` para indicar origen y destino.
+
+Ejemplos:
+
+- External
+- Available
+- Reserved
+- Unavailable
+- OutOfInventory
+
 ## inventory_movement_types
 
 Catálogo de tipos de movimiento de inventario.
@@ -259,7 +271,7 @@ Ejemplos:
 
 Auditoría de cambios de inventario.
 
-Debe registrar todo cambio relevante en cantidades.
+Debe registrar todo cambio relevante en cantidades, incluyendo bucket origen y bucket destino.
 
 ## product_holds
 

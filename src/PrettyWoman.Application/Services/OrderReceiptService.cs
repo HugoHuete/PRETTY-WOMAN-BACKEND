@@ -58,8 +58,9 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
             {
                 CreatedAt = receiptDate,
                 Product = item.Product,
-                MovementDirectionId = (int)MovementDirectionOptions.In,
                 InventoryMovementTypeId = (int)InventoryMovementTypeOption.PurchaseReceived,
+                FromStockBucketId = (int)InventoryStockBucketOption.External,
+                ToStockBucketId = (int)InventoryStockBucketOption.Available,
                 Quantity = item.Quantity,
                 OrderId = order.Id,
                 Comments = receiveOrderDTO.Comments

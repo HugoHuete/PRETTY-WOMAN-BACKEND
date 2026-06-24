@@ -88,6 +88,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
 
     // Inventory
     public DbSet<InventoryMovementType> InventoryMovementTypes { get; set; }
+    public DbSet<InventoryStockBucket> InventoryStockBuckets { get; set; }
     public DbSet<InventoryMovement> InventoryMovements { get; set; }
 
 

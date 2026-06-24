@@ -67,6 +67,7 @@ public interface IApplicationDbContext
 
     // Inventory
     DbSet<InventoryMovementType> InventoryMovementTypes { get; }
+    DbSet<InventoryStockBucket> InventoryStockBuckets { get; }
     DbSet<InventoryMovement> InventoryMovements { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
