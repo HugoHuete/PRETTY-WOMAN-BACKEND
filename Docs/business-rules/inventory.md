@@ -43,23 +43,24 @@ No incluye unidades reservadas, vendidas, no disponibles temporalmente, perdidas
 
 ### `reserved_quantity`
 
-Cantidad apartada temporalmente para una clienta que no esta disponible para otras ventas, pero que todavia no se considera vendida.
+Cantidad comprometida por ventas reservadas.
 
-Las reservas se manejan con `product_holds`.
+No se maneja con `product_holds`. Si hay pago previo, la reserva debe existir como una venta con estado `Reserved`.
 
 ### `unavailable_quantity`
 
-Cantidad fisicamente existente, pero no vendible temporalmente por una condicion operativa.
+Cantidad fisicamente existente, pero no vendible temporalmente por una condicion operativa o por seleccion de talla.
 
 Ejemplos:
 
+* producto enviado para seleccion o prueba de talla
 * producto dañado
 * producto sucio
 * producto no encontrado fisicamente, pero pendiente de busqueda
 * producto en revision
 * producto en reparacion
 
-Estas unidades se manejan con `product_inventory_issues`, no con `product_holds`.
+Los productos enviados para seleccion se manejan con `product_holds`. Los productos danados, sucios, perdidos o en revision se manejan con `product_inventory_issues`.
 
 ### `unit_cost_nio`
 
@@ -162,57 +163,59 @@ Cuando una clienta cambia un producto:
 
 No se necesita un tipo `ExchangeSale`, porque la salida del producto nuevo representa una venta.
 
-## Regla: reservas de productos
+## Regla: holds de seleccion
 
-Una reserva representa inventario separado temporalmente para una clienta que todavia no se considera vendido.
+Un hold de seleccion representa inventario separado temporalmente porque una clienta esta probando, tallando o escogiendo entre varias opciones.
 
-Las reservas usan `product_holds` y afectan `reserved_quantity`.
+Los holds de seleccion usan `product_holds` y afectan `unavailable_quantity`, no `reserved_quantity`.
 
-### Crear reserva
+Si hay pago previo, no se debe usar `product_holds`; se debe crear una venta con estado `Reserved`.
+
+### Crear hold de seleccion
 
 1. Validar que la cantidad solicitada sea mayor que cero.
 2. Validar que `available_quantity` sea suficiente.
 3. Disminuir `available_quantity`.
-4. Aumentar `reserved_quantity`.
-5. Crear un `product_hold` con estado `Active`.
-6. Crear un `inventory_movement` de tipo `ReservationCreated`.
+4. Aumentar `unavailable_quantity`.
+5. Crear un `product_hold` con estado `Active` y razon `SentForSelection`.
+6. Crear un `inventory_movement` relacionado con `product_hold_id`.
 
 Cambios:
 
 `AvailableQuantity -= HoldQuantity`
 
-`ReservedQuantity += HoldQuantity`
+`UnavailableQuantity += HoldQuantity`
 
 ### Liberar producto no seleccionado
 
-Cuando la clienta no selecciona el producto:
+Cuando la clienta no selecciona el producto y este regresa disponible:
 
 1. Cambiar el estado del `product_hold` a `NotSelected`.
-2. Disminuir `reserved_quantity`.
+2. Disminuir `unavailable_quantity`.
 3. Aumentar `available_quantity`.
-4. Crear un `inventory_movement` de tipo `ReservationReleased`.
+4. Crear un `inventory_movement` relacionado con `product_hold_id`.
 
 Cambios:
 
-`ReservedQuantity -= HoldQuantity`
+`UnavailableQuantity -= HoldQuantity`
 
 `AvailableQuantity += HoldQuantity`
 
-### Convertir reserva en venta
+### Convertir hold en venta
 
 Cuando la clienta selecciona el producto:
 
 1. Cambiar el estado del `product_hold` a `ConvertedToSale`.
-2. Disminuir `reserved_quantity`.
+2. Disminuir `unavailable_quantity`.
 3. Crear o confirmar el `sale_product`.
-4. Crear un `inventory_movement` de tipo `ReservationConvertedToSale`.
+4. Crear un `inventory_movement` relacionado con `product_hold_id` y/o `sale_product_id`.
 5. Copiar el costo actual del producto a `sale_products.unit_cost_at_sale`.
 
 Cambio:
 
-`ReservedQuantity -= HoldQuantity`
+`UnavailableQuantity -= HoldQuantity`
 
-No se debe volver a disminuir `available_quantity`, porque ya se disminuyo cuando se creo la reserva.
+No se debe volver a disminuir `available_quantity`, porque ya se disminuyo cuando se creo el hold.
 
 ## Regla: producto temporalmente no disponible
 
@@ -300,7 +303,8 @@ No debe utilizarse un ajuste generico para representar:
 * danos
 * perdidas
 * descartes
-* reservas
+* reservas con pago
+* holds de seleccion
 * issues de inventario
 
 ## Tipos recomendados para `inventory_movement_types`
@@ -317,9 +321,9 @@ No debe utilizarse un ajuste generico para representar:
 * `Discarded`
 * `AdjustmentIncrease`
 * `AdjustmentDecrease`
-* `ReservationCreated`
-* `ReservationReleased`
-* `ReservationConvertedToSale`
+* `ReservationCreated` (hold de seleccion creado; nombre pendiente de normalizar)
+* `ReservationReleased` (hold de seleccion liberado; nombre pendiente de normalizar)
+* `ReservationConvertedToSale` (hold de seleccion convertido; nombre pendiente de normalizar)
 
 ## Datos minimos de un movimiento de inventario
 
@@ -332,7 +336,7 @@ Cada movimiento debe guardar al menos:
 * costo unitario historico cuando sea relevante
 * usuario que realizo la operacion
 * comentario o motivo cuando corresponda
-* referencia a la orden, venta, linea de venta, reserva o issue cuando aplique
+* referencia a la orden, venta, linea de venta, hold de seleccion o issue cuando aplique
 
 La cantidad debe almacenarse como un valor positivo. El tipo del movimiento determina si aumenta, disminuye o transfiere cantidades entre disponible, reservado y no disponible.
 
@@ -352,7 +356,7 @@ Ademas:
 
 * No se debe modificar inventario sin crear un `inventory_movement`.
 * Los movimientos historicos no deben eliminarse.
-* Una reserva convertida en venta no debe descontar dos veces el inventario disponible.
+* Un hold de seleccion convertido en venta no debe descontar dos veces el inventario disponible.
 * Un issue descartado o perdido no debe descontar dos veces el inventario disponible.
 * Las modificaciones de cantidades y movimientos deben guardarse en la misma transaccion.
 * Las fechas deben almacenarse en UTC.

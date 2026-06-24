@@ -33,13 +33,13 @@ Cantidad fisicamente recibida.
 
 ### available_quantity
 
-Cantidad disponible para vender o reservar.
+Cantidad disponible para vender.
 
 ### reserved_quantity
 
-Cantidad apartada para una clienta, pero no vendida.
+Cantidad comprometida por ventas reservadas.
 
-Se maneja con `product_holds`.
+No se maneja con `product_holds`. Si hay pago previo, debe existir una venta en estado `Reserved`.
 
 ### unavailable_quantity
 
@@ -47,12 +47,13 @@ Cantidad existente fisicamente, pero no vendible temporalmente.
 
 Ejemplos:
 
+- producto enviado para seleccion o prueba de talla (`product_holds`)
 - producto danado
 - producto sucio
 - producto no encontrado fisicamente, pero pendiente de busqueda
 - producto en revision o reparacion
 
-Se maneja con `product_inventory_issues`.
+Los productos enviados para seleccion se manejan con `product_holds`. Los issues operativos se manejan con `product_inventory_issues`.
 
 ## Invariante de stock
 
@@ -76,33 +77,33 @@ Ejemplos:
 - reparacion
 - hallazgo
 - descarte
-- reserva
-- liberacion de reserva
-- conversion de reserva a venta
+- hold de seleccion
+- liberacion de hold de seleccion
+- conversion de hold de seleccion a venta
 
-## Reservas
+## Holds de seleccion
 
-Cuando se reserva un producto:
+Cuando se crea un hold de seleccion:
 
 ```txt
 available_quantity -= quantity
-reserved_quantity += quantity
+unavailable_quantity += quantity
 ```
 
 Cuando se libera:
 
 ```txt
-reserved_quantity -= quantity
+unavailable_quantity -= quantity
 available_quantity += quantity
 ```
 
 Cuando se convierte a venta:
 
 ```txt
-reserved_quantity -= quantity
+unavailable_quantity -= quantity
 ```
 
-No se vuelve a descontar `available_quantity`, porque ya fue descontado al crear la reserva.
+No se vuelve a descontar `available_quantity`, porque ya fue descontado al crear el hold.
 
 ## Issues de inventario
 

@@ -89,7 +89,7 @@ Si se envían varias tallas para que la clienta escoja una:
 
 - El envío registra el intento logístico.
 - La venta final solo debe incluir el producto escogido.
-- Las prendas adicionales deben manejarse con reservas (`product_holds`) o movimientos de inventario.
+- Las prendas adicionales enviadas para seleccion de talla deben manejarse con `product_holds` o movimientos de inventario.
 
 ## Regla: `delivery_agency_id` pertenece al envío
 

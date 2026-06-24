@@ -74,7 +74,9 @@ Si la venta queda confirmada:
 
 Si la venta queda pendiente y no debe apartar stock, no se descuenta inventario todavía.
 
-Si la venta debe apartar stock sin confirmarse, usar `product_holds`.
+Si hay pago previo para retiro o envio futuro, crear una venta en estado `Reserved`. No usar `product_holds` para reservas con pago.
+
+Si solo se envian productos para seleccion de talla, usar `product_holds` y afectar `unavailable_quantity`.
 
 ## Errores esperados
 

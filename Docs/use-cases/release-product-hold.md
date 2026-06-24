@@ -1,43 +1,27 @@
-# Liberar reserva de producto
+# Liberar product hold
 
 ## Objetivo
 
-Regresar al inventario disponible un producto previamente reservado.
-
-## Cuándo aplica
-
-- La clienta no escogió esa talla.
-- La clienta canceló.
-- El producto regresó a tienda.
-- La reserva expiró.
-- Se apartó por error.
+Cerrar un hold de seleccion cuando el producto no fue escogido y regresa a inventario disponible.
 
 ## Tablas involucradas
 
 - `product_holds`
 - `products`
 - `inventory_movements`
-- `inventory_movement_types`
 
 ## Flujo esperado
 
-1. Buscar `product_hold`.
-2. Validar que esté en estado `Active`.
-3. Cambiar estado a `Released`.
-4. Guardar `resolved_at`.
-5. Disminuir `products.reserved_quantity`.
+1. Buscar el `product_hold`.
+2. Validar que este `Active`.
+3. Cambiar estado a `NotSelected`.
+4. Colocar `resolved_at`.
+5. Disminuir `products.unavailable_quantity`.
 6. Aumentar `products.available_quantity`.
-7. Crear `inventory_movements` tipo `ReservationReleased`.
+7. Crear `inventory_movements` relacionado con `product_hold_id`.
 
-## Reglas de negocio
+## Reglas
 
-- No se puede liberar una reserva ya liberada.
-- No se puede liberar una reserva convertida a venta.
-- No se puede liberar más cantidad de la reservada.
-- La liberación debe dejar rastro en inventario.
-
-## Errores esperados
-
-- Reserva inexistente.
-- Reserva no activa.
-- Cantidades inconsistentes.
+- No eliminar el hold.
+- No usar este flujo para reservas con pago.
+- No usar este flujo para productos danados, sucios, perdidos o en revision.

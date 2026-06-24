@@ -1,62 +1,45 @@
-# Crear reserva de producto
+# Crear product hold
 
 ## Objetivo
 
-Apartar temporalmente un producto para que deje de aparecer como disponible, sin registrarlo todavía como vendido.
+Registrar productos enviados temporalmente para seleccion, prueba o talla sin marcarlos como vendidos.
 
-## Cuándo aplica
-
-- Se envían dos tallas para que la clienta escoja una.
-- Se aparta un producto mientras la clienta confirma pago.
-- Se retira un producto temporalmente de tienda.
-- Se reserva un producto para una venta pendiente.
+No aplica para reservas con pago previo; esas deben crearse como ventas en estado `Reserved`.
 
 ## Tablas involucradas
 
-- `products`
 - `product_holds`
+- `products`
 - `inventory_movements`
-- `inventory_movement_types`
-- `sales`, opcional
-- `sale_deliveries`, opcional
 
 ## Flujo esperado
 
-1. Buscar producto.
+1. Validar que el producto exista.
 2. Validar que `available_quantity >= quantity`.
-3. Crear `product_hold` con estado `Active`.
+3. Crear `product_hold` con estado `Active` y razon `SentForSelection`.
 4. Disminuir `products.available_quantity`.
-5. Aumentar `products.reserved_quantity`.
-6. Crear `inventory_movements` tipo `ReservationCreated`.
-7. Asociar la reserva a `sale_id` o `sale_delivery_id` si aplica.
+5. Aumentar `products.unavailable_quantity`.
+6. Crear `inventory_movements` relacionado con `product_hold_id`.
 
-## Reglas de negocio
+## Reglas
 
-- Una reserva no es venta.
-- Una reserva activa debe reducir la cantidad disponible.
-- Toda reserva debe tener una razón.
-- Toda reserva debe crear movimiento de inventario.
-- No se puede reservar más cantidad que la disponible.
+- El producto en hold de seleccion no esta vendido.
+- El producto en hold de seleccion no debe estar disponible para otras ventas.
+- El hold debe cerrarse como `ConvertedToSale` si la clienta escoge el producto.
+- El hold debe cerrarse como `NotSelected` si el producto regresa disponible.
 
 ## Ejemplo
 
 Antes:
 
 ```txt
-available_quantity = 5
-reserved_quantity = 0
+available_quantity = 2
+unavailable_quantity = 0
 ```
 
-Reserva de 1 unidad:
+Crear hold de seleccion por 1:
 
 ```txt
-available_quantity = 4
-reserved_quantity = 1
+available_quantity = 1
+unavailable_quantity = 1
 ```
-
-## Errores esperados
-
-- Producto inexistente.
-- Stock insuficiente.
-- Cantidad inválida.
-- Venta inexistente, si se envía `sale_id`.

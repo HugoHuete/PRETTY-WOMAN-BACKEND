@@ -1,56 +1,51 @@
-# Convertir reserva en venta
+# Convertir product hold a venta
 
 ## Objetivo
 
-Marcar un producto reservado como vendido.
-
-## Cuándo aplica
-
-- La clienta recibió varias tallas y escogió una.
-- Una reserva se confirma como compra.
-- Un producto apartado pasa a formar parte de una venta.
+Convertir en venta el producto que la clienta escogio despues de una seleccion, prueba o talla.
 
 ## Tablas involucradas
 
 - `product_holds`
-- `products`
 - `sales`
-- `sale_details`
+- `sale_products`
+- `products`
 - `inventory_movements`
 
 ## Flujo esperado
 
-1. Buscar reserva.
-2. Validar que la reserva esté `Active`.
-3. Buscar venta asociada o recibir `sale_id`.
-4. Crear o actualizar `sale_details` con el producto vendido.
-5. Cambiar `product_hold.status` a `ConvertedToSale`.
-6. Guardar `resolved_at`.
-7. Disminuir `products.reserved_quantity`.
-8. Crear `inventory_movements` tipo `ReservationConvertedToSale`.
+1. Buscar el `product_hold`.
+2. Validar que este `Active`.
+3. Crear o confirmar la venta y su `sale_product`.
+4. Copiar el costo actual del producto a `sale_products.unit_cost_at_sale`.
+5. Cambiar el hold a `ConvertedToSale`.
+6. Colocar `resolved_at`.
+7. Disminuir `products.unavailable_quantity`.
+8. Crear `inventory_movements` relacionado con `product_hold_id` y/o `sale_product_id`.
 
-## Regla importante
+## Reglas
 
-No disminuir `available_quantity` en este paso, porque ya fue disminuido cuando se creó la reserva.
+- No volver a disminuir `available_quantity`; ya disminuyo cuando se creo el hold.
+- Solo el producto escogido debe pasar a `sale_products`.
+- Los productos no escogidos deben liberarse con estado `NotSelected`.
 
 ## Ejemplo
 
-Al reservar:
+Antes del hold:
+
+```txt
+available_quantity += 1
+```
+
+Al crear hold de seleccion:
 
 ```txt
 available_quantity -= 1
-reserved_quantity += 1
+unavailable_quantity += 1
 ```
 
-Al convertir en venta:
+Al convertir a venta:
 
 ```txt
-reserved_quantity -= 1
+unavailable_quantity -= 1
 ```
-
-## Errores esperados
-
-- Reserva inexistente.
-- Reserva no activa.
-- Venta inexistente.
-- Producto ya convertido.

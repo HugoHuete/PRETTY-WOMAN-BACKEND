@@ -12,7 +12,7 @@ Ejemplos:
 - producto en revision
 - producto en reparacion
 
-Este modulo no representa reservas de clientas. Las reservas comerciales siguen viviendo en `product_holds`.
+Este modulo no representa productos enviados para seleccion de talla. Esos casos viven en `product_holds`.
 
 ## Tablas principales
 
@@ -40,9 +40,9 @@ Sirve para responder:
 
 `products.available_quantity` representa unidades vendibles.
 
-`products.reserved_quantity` representa unidades apartadas para clientas.
+`products.reserved_quantity` representa unidades comprometidas por ventas reservadas.
 
-`products.unavailable_quantity` representa unidades existentes que no se pueden vender temporalmente.
+`products.unavailable_quantity` representa unidades existentes que no se pueden vender temporalmente, incluyendo issues operativos y holds de seleccion.
 
 Debe cumplirse:
 

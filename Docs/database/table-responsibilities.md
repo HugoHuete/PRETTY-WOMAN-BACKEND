@@ -91,8 +91,8 @@ Campos importantes:
 - `quantity`: cantidad comprada.
 - `received_quantity`: cantidad físicamente recibida.
 - `available_quantity`: cantidad disponible para vender.
-- `reserved_quantity`: cantidad apartada o fuera de tienda sin estar vendida.
-* `unavailable_quantity`: cantidad existente, pero temporalmente no vendible por dano, suciedad, extravio pendiente o revision.
+- `reserved_quantity`: cantidad comprometida por ventas reservadas.
+* `unavailable_quantity`: cantidad existente, pero temporalmente no vendible por seleccion de talla, dano, suciedad, extravio pendiente o revision.
 
 ## product_images
 
