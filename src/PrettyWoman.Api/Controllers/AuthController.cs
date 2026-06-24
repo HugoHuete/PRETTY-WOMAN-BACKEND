@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Application.DTOs.Auth;
@@ -26,5 +26,13 @@ public class AuthController(IAuthService authService) : ControllerBase
     {
         var user = await _authService.CreateUserAsync(createUserRequest);
         return CreatedAtAction(nameof(CreateUser), new { id = user.Id }, user);
+    }
+
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
+    [HttpPost("users/{id}/unlock")]
+    public async Task<ActionResult<UserDTO>> UnlockUser(string id)
+    {
+        var user = await _authService.UnlockUserAsync(id);
+        return Ok(user);
     }
 }

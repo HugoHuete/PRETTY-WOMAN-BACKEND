@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Identity;
+﻿using Microsoft.AspNetCore.Identity;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PrettyWoman.Application.Common.Security;
@@ -59,9 +59,15 @@ public static class IdentitySeeder
             }
         }
 
+        if (!admin.LockoutEnabled)
+        {
+            await userManager.SetLockoutEnabledAsync(admin, true);
+        }
+
         if (!await userManager.IsInRoleAsync(admin, AppRoles.Admin))
         {
             await userManager.AddToRoleAsync(admin, AppRoles.Admin);
         }
     }
 }
+

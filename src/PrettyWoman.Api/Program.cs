@@ -1,4 +1,4 @@
-using System.Text;
+﻿using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
@@ -48,7 +48,12 @@ builder.Services.AddAutoMapper(cfg =>
     cfg.LicenseKey = builder.Configuration.GetSection("AutoMapperLicense").Get<string>();
 }, typeof(Program).Assembly, typeof(PrettyWoman.Application.DependencyInjection).Assembly);
 
-builder.Services.AddIdentityCore<User>()
+builder.Services.AddIdentityCore<User>(options =>
+    {
+        options.Lockout.AllowedForNewUsers = true;
+        options.Lockout.MaxFailedAccessAttempts = 5;
+        options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(15);
+    })
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddDefaultTokenProviders();
@@ -119,3 +124,4 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+

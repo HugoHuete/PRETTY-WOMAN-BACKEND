@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Identity;
@@ -21,11 +21,26 @@ public class AuthService(
 
     public async Task<AuthResponseDTO> LoginAsync(LoginRequestDTO loginRequest)
     {
-        var user = await _userManager.FindByEmailAsync(loginRequest.Email);
+        var user = await _userManager.FindByEmailAsync(loginRequest.Email) 
+            ?? throw new AppUnauthorizedException("Credenciales invalidas.");
 
-        if (user is null || !await _userManager.CheckPasswordAsync(user, loginRequest.Password))
+        await EnsureLockoutIsEnabledAsync(user);
+
+        if (await _userManager.IsLockedOutAsync(user))
         {
             throw new AppUnauthorizedException("Credenciales invalidas.");
+        }
+
+        if (!await _userManager.CheckPasswordAsync(user, loginRequest.Password))
+        {
+            await _userManager.AccessFailedAsync(user);
+            throw new AppUnauthorizedException("Credenciales invalidas.");
+        }
+
+        // If password is correct before getting locked out, it resets the number of attempts
+        if (await _userManager.GetAccessFailedCountAsync(user) > 0)
+        {
+            await _userManager.ResetAccessFailedCountAsync(user);
         }
 
         return await CreateAuthResponseAsync(user);
@@ -43,6 +58,7 @@ public class AuthService(
             UserName = createUserRequest.Email,
             Email = createUserRequest.Email,
             EmailConfirmed = true,
+            LockoutEnabled = true,
             Name = createUserRequest.Name,
             Lastname = createUserRequest.Lastname
         };
@@ -64,6 +80,28 @@ public class AuthService(
         }
 
         return await CreateUserDtoAsync(user);
+    }
+
+    public async Task<UserDTO> UnlockUserAsync(string id)
+    {
+        var user = await _userManager.FindByIdAsync(id)
+            ?? throw new AppNotFoundException($"El usuario con id '{id}' no existe.");
+
+        await EnsureLockoutIsEnabledAsync(user);
+        await _userManager.SetLockoutEndDateAsync(user, null);
+        await _userManager.ResetAccessFailedCountAsync(user);
+
+        return await CreateUserDtoAsync(user);
+    }
+
+    private async Task EnsureLockoutIsEnabledAsync(User user)
+    {
+        if (user.LockoutEnabled)
+        {
+            return;
+        }
+
+        await _userManager.SetLockoutEnabledAsync(user, true);
     }
 
     private async Task<AuthResponseDTO> CreateAuthResponseAsync(User user)
