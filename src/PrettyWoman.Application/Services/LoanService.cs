@@ -233,7 +233,7 @@ public class LoanService(IApplicationDbContext context) : ILoanService
         {
             if (interestMovement is null)
             {
-                await _context.FinancialMovements.AddAsync(CreateLoanMovement(
+                interestMovement = CreateLoanMovement(
                     loan,
                     payment,
                     FinancialMovementTypeOption.LoanInterest,
@@ -242,7 +242,8 @@ public class LoanService(IApplicationDbContext context) : ILoanService
                     loan.ExchangeRate,
                     paymentDate,
                     "Interes de prestamo",
-                    comments));
+                    comments);
+                await _context.FinancialMovements.AddAsync(interestMovement);
             }
             else
             {

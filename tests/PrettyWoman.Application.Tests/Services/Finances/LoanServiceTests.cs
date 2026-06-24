@@ -249,6 +249,43 @@ public class LoanServiceTests
     }
 
     [Fact]
+    public async Task UpdatePaymentAsync_CreatesInterestMovementWhenPaymentOriginallyHadNoInterest()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = new LoanService(context);
+        var paymentDate = new DateTime(2026, 6, 23, 10, 0, 0, DateTimeKind.Utc);
+        var loan = await service.CreateAsync(new CreateLoanDTO
+        {
+            LoanOwnerId = 1,
+            InitialAmount = 1000m
+        });
+        var paidLoan = await service.PayAsync(loan.Id, new PayLoanDTO
+        {
+            Amount = 400m,
+            InterestAmount = 0m
+        });
+        var paymentId = paidLoan.Payments.Single().Id;
+
+        var updatedLoan = await service.UpdatePaymentAsync(loan.Id, paymentId, new UpdateLoanPaymentDTO
+        {
+            CreatedAt = paymentDate,
+            Amount = 400m,
+            InterestAmount = 25m,
+            Comments = "Agrega interes"
+        });
+
+        Assert.Equal(25m, updatedLoan.InterestPaidAmount);
+
+        var interestMovement = await context.FinancialMovements
+            .SingleAsync(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanInterest);
+        Assert.Equal(paymentId, interestMovement.LoanPaymentId);
+        Assert.Equal(25m, interestMovement.Amount);
+        Assert.Equal(paymentDate, interestMovement.CreatedAt);
+        Assert.Equal("Agrega interes", interestMovement.Comments);
+    }
+
+    [Fact]
     public async Task UpdateAsync_UpdatesLoanWhenItHasNoPayments()
     {
         await using var context = CreateContext();
