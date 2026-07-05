@@ -28,7 +28,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
 
         var order = new Order
         {
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = createOrderDTO.CreatedAt ?? DateTime.UtcNow,
             OrderStatusId = (int)OrderStatusCode.Pending,
             SupplierId = createOrderDTO.SupplierId,
             PurchaseCurrencyId = createOrderDTO.PurchaseCurrencyId,
@@ -267,7 +267,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         return new FinancialMovement
         {
             Description = CreateSupplierPaymentDescription(order),
-            CreatedAt = DateTime.UtcNow,
+            CreatedAt = order.CreatedAt,
             MovementDirectionId = (int)MovementDirectionOptions.Out,
             FinancialMovementTypeId = (int)FinancialMovementTypeOption.SupplierPayment,
             Order = order,

@@ -66,6 +66,24 @@ public class OrderServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_UsesProvidedPurchaseDate()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var purchaseDate = new DateTime(2026, 6, 15, 10, 30, 0, DateTimeKind.Utc);
+        var request = CreateOrderRequest("SOHO25119", "Blusa satin");
+        request.CreatedAt = purchaseDate;
+
+        var orderId = await service.CreateAsync(request);
+
+        var order = await context.Orders.SingleAsync(order => order.Id == orderId);
+        Assert.Equal(purchaseDate, order.CreatedAt);
+        var financialMovement = await context.FinancialMovements.SingleAsync(movement => movement.OrderId == orderId);
+        Assert.Equal(purchaseDate, financialMovement.CreatedAt);
+    }
+
+    [Fact]
     public async Task UpdateAsync_ReusesProductDetailCodeWhenProductDetailIdIsProvided()
     {
         await using var context = CreateContext();

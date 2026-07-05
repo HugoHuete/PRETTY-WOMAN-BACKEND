@@ -10,6 +10,8 @@ public class CreateOrderDTO
     [Range(0, double.MaxValue, ErrorMessage = "El costo de envio del proveedor a bodega en dolares debe ser mayor o igual a cero.")]
     public decimal SupplierShippingCostUsd { get; set; }
 
+    public DateTime? CreatedAt { get; set; }
+
     public string? Comments { get; set; }
 
     [Range(1, 2, ErrorMessage = "La moneda de compra debe ser USD o NIO.")]
