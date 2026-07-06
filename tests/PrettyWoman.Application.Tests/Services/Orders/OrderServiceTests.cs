@@ -83,6 +83,28 @@ public class OrderServiceTests
         Assert.Equal(purchaseDate, financialMovement.CreatedAt);
     }
 
+
+    [Fact]
+    public async Task CreateAsync_NormalizesUnspecifiedPurchaseDateToUtc()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var purchaseDate = new DateTime(2025, 11, 24, 0, 0, 0, DateTimeKind.Unspecified);
+        var request = CreateOrderRequest("SOHO25118", "Vestido casual");
+        request.CreatedAt = purchaseDate;
+
+        var orderId = await service.CreateAsync(request);
+
+        var expectedDate = DateTime.SpecifyKind(purchaseDate, DateTimeKind.Utc);
+        var order = await context.Orders.SingleAsync(order => order.Id == orderId);
+        var financialMovement = await context.FinancialMovements.SingleAsync(movement => movement.OrderId == orderId);
+
+        Assert.Equal(DateTimeKind.Utc, order.CreatedAt.Kind);
+        Assert.Equal(expectedDate, order.CreatedAt);
+        Assert.Equal(DateTimeKind.Utc, financialMovement.CreatedAt.Kind);
+        Assert.Equal(expectedDate, financialMovement.CreatedAt);
+    }
     [Fact]
     public async Task CreateAsync_AllowsOrderWithoutProducts()
     {

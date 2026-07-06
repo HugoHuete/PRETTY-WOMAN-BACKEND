@@ -25,7 +25,7 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
         EnsureOrderCanReceive(order);
         // Check quantities and productIds are valid
         var receivedProducts = ValidateAndGetProducts(order, receiveOrderDTO.Products);
-        var receiptDate = receiveOrderDTO.ReceivedDate ?? DateTime.UtcNow;
+        var receiptDate = receiveOrderDTO.ReceivedDate.NormalizeToUtc() ?? DateTime.UtcNow;
 
         // Update TrackingNumberStatus (if any) and obtain shipping costs
         var warehouseShippingCostUsd = ApplyTrackingReceipt(order, receiveOrderDTO, receiptDate);

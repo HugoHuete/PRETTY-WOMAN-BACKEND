@@ -28,7 +28,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
 
         var order = new Order
         {
-            CreatedAt = createOrderDTO.CreatedAt ?? DateTime.UtcNow,
+            CreatedAt = createOrderDTO.CreatedAt.NormalizeToUtc() ?? DateTime.UtcNow,
             OrderStatusId = (int)OrderStatusCode.Pending,
             SupplierId = createOrderDTO.SupplierId,
             PurchaseCurrencyId = createOrderDTO.PurchaseCurrencyId,

@@ -1,4 +1,4 @@
-using AutoMapper;
+﻿using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using PrettyWoman.Application.DTOs.Orders;
@@ -67,6 +67,45 @@ public class OrderReceiptServiceTests
         Assert.Equal(365m, warehouseShippingMovement.Amount);
     }
 
+
+    [Fact]
+    public async Task ReceiveAsync_NormalizesUnspecifiedReceivedDateToUtc()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var orderService = new OrderService(context, Mapper);
+        var receiptService = new OrderReceiptService(context);
+        var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
+        var product = await context.Products.SingleAsync();
+        var receivedDate = new DateTime(2025, 11, 24, 0, 0, 0, DateTimeKind.Unspecified);
+
+        await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            ReceivedDate = receivedDate,
+            WarehouseShippingCostUsd = 10m,
+            Products =
+            [
+                new ReceiveOrderProductDTO
+                {
+                    ProductId = product.Id,
+                    Quantity = 1
+                }
+            ]
+        });
+
+        var expectedDate = DateTime.SpecifyKind(receivedDate, DateTimeKind.Utc);
+        var productReceipt = await context.ProductReceipts.SingleAsync();
+        var inventoryMovement = await context.InventoryMovements.SingleAsync();
+        var warehouseShippingMovement = await context.FinancialMovements
+            .SingleAsync(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.Expense);
+
+        Assert.Equal(DateTimeKind.Utc, productReceipt.ReceivedDate.Kind);
+        Assert.Equal(expectedDate, productReceipt.ReceivedDate);
+        Assert.Equal(DateTimeKind.Utc, inventoryMovement.CreatedAt.Kind);
+        Assert.Equal(expectedDate, inventoryMovement.CreatedAt);
+        Assert.Equal(DateTimeKind.Utc, warehouseShippingMovement.CreatedAt.Kind);
+        Assert.Equal(expectedDate, warehouseShippingMovement.CreatedAt);
+    }
     [Fact]
     public async Task ReceiveAsync_UsesTrackingShippingCostWhenOrderHasTrackingNumbers()
     {
