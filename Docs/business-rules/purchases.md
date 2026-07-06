@@ -321,5 +321,5 @@ Por tanto, al crear una orden se debe crear también un `financial_movement` rel
 
 Si una orden se actualiza antes de tener inventario recibido o recepciones registradas, el movimiento financiero relacionado debe actualizarse para reflejar el nuevo total de la compra.
 
-Una compra no puede tener total financiero menor o igual a cero, porque `financial_movements` representa movimientos reales de dinero.
+Una orden puede tener total financiero igual a cero mientras se registra de forma preliminar sin productos ni costos. En ese estado no debe crear ni conservar un `financial_movement` de compra. Cuando una actualización haga que `orders.total_cost_nio` sea mayor que cero, el backend debe crear o actualizar el movimiento financiero; si vuelve a cero antes de recibir inventario, debe eliminarlo.
 

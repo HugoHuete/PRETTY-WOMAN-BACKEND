@@ -84,6 +84,130 @@ public class OrderServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_AllowsOrderWithoutProducts()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+
+        var orderId = await service.CreateAsync(new CreateOrderDTO
+        {
+            SupplierId = 1,
+            PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd,
+            SupplierShippingCostUsd = 0m,
+            Comments = "Compra pendiente de detalle"
+        });
+
+        var order = await context.Orders
+            .Include(order => order.Products)
+            .SingleAsync(order => order.Id == orderId);
+
+        Assert.Empty(order.Products);
+        Assert.Equal(0m, order.AmountUsd);
+        Assert.Equal(0m, order.MerchandiseTotalNio);
+        Assert.Equal(0m, order.TotalCostNio);
+        Assert.False(await context.FinancialMovements.AnyAsync(movement => movement.OrderId == orderId));
+    }
+
+    [Fact]
+    public async Task UpdateAsync_AddsProductsToOrderCreatedWithoutProducts()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+
+        var orderId = await service.CreateAsync(new CreateOrderDTO
+        {
+            SupplierId = 1,
+            PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd,
+            SupplierShippingCostUsd = 0m
+        });
+        await service.UpdateAsync(orderId, new UpdateOrderDTO
+        {
+            SupplierId = 1,
+            PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd,
+            SupplierShippingCostUsd = 0m,
+            ProductDetails =
+            [
+                new CreateOrderProductDetailDTO
+                {
+                    SupplierProductCode = "SOHO25120",
+                    Name = "Pantalon cargo",
+                    SubcategoryId = 1,
+                    Variants =
+                    [
+                        new CreateOrderProductVariantDTO
+                        {
+                            SizeId = 1,
+                            Color = "Azul",
+                            Quantity = 2,
+                            UnitCost = 8m,
+                            SalePrice = 600m
+                        }
+                    ]
+                }
+            ]
+        });
+
+        var order = await context.Orders
+            .Include(order => order.Products)
+            .SingleAsync(order => order.Id == orderId);
+        var financialMovement = await context.FinancialMovements.SingleAsync(movement => movement.OrderId == orderId);
+
+        Assert.Single(order.Products);
+        Assert.Equal(584m, order.TotalCostNio);
+        Assert.Equal(order.TotalCostNio, financialMovement.Amount);
+    }
+
+
+    [Fact]
+    public async Task UpdateAsync_CreatesSupplierPaymentMovementWithOriginalOrderDate()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var purchaseDate = new DateTime(2026, 7, 5, 14, 0, 0, DateTimeKind.Utc);
+
+        var orderId = await service.CreateAsync(new CreateOrderDTO
+        {
+            SupplierId = 1,
+            PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd,
+            SupplierShippingCostUsd = 0m,
+            CreatedAt = purchaseDate
+        });
+
+        await service.UpdateAsync(orderId, new UpdateOrderDTO
+        {
+            SupplierId = 1,
+            PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd,
+            SupplierShippingCostUsd = 0m,
+            ProductDetails =
+            [
+                new CreateOrderProductDetailDTO
+                {
+                    SupplierProductCode = "SOHO25120",
+                    Name = "Pantalon cargo",
+                    SubcategoryId = 1,
+                    Variants =
+                    [
+                        new CreateOrderProductVariantDTO
+                        {
+                            SizeId = 1,
+                            Color = "Azul",
+                            Quantity = 2,
+                            UnitCost = 8m,
+                            SalePrice = 600m
+                        }
+                    ]
+                }
+            ]
+        });
+
+        var financialMovement = await context.FinancialMovements.SingleAsync(movement => movement.OrderId == orderId);
+
+        Assert.Equal(purchaseDate, financialMovement.CreatedAt);
+    }
+    [Fact]
     public async Task UpdateAsync_ReusesProductDetailCodeWhenProductDetailIdIsProvided()
     {
         await using var context = CreateContext();

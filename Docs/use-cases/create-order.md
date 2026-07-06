@@ -88,8 +88,8 @@ Estos valores se calculan en backend.
 
 ## Reglas de negocio
 
-- Cada orden debe traer al menos un `product_detail`.
-- Cada `product_detail` debe traer al menos una variante `product`.
+- Una orden puede crearse sin `productDetails` cuando la lista de productos todavía no está disponible.
+- Si se envía un `product_detail`, debe traer al menos una variante `product`.
 - No se permiten variantes duplicadas dentro del mismo `product_detail` para la misma talla y color.
 - `purchaseCurrencyId = 1` representa compra en USD.
 - `purchaseCurrencyId = 2` representa compra local en NIO.
@@ -102,7 +102,7 @@ Estos valores se calculan en backend.
 - `orders.warehouse_shipping_cost_usd` representa el envío bodega -> Nicaragua; se mantiene en `0` al crear/actualizar la orden y se debe completar desde el flujo de recepción cuando se conozca ese costo.
 - `product_details.code` es un entero, representa el código interno del negocio y lo genera el backend.
 - `product_details.supplier_product_code` es el código del proveedor.
-- Al crear una orden no se envía `productDetails[].id`.
+- Al crear una orden no se envía `productDetails[].id`. `productDetails` puede omitirse o enviarse como arreglo vacío si los productos se agregarán después con `PUT /orders/{id}`.
 - Al actualizar una orden, enviar `productDetails[].id` cuando se esté corrigiendo un `product_detail` existente para conservar su `code` interno.
 - Si se agrega un `product_detail` nuevo durante la actualización, se envía sin `id` y el backend asigna el siguiente `code` disponible.
 - El inventario disponible no aumenta al crear la orden.
@@ -121,7 +121,7 @@ Estos valores se calculan en backend.
 
 ## Movimiento financiero
 
-Crear una orden también crea un movimiento financiero de egreso:
+Crear una orden también crea un movimiento financiero de egreso cuando `order.total_cost_nio` es mayor que cero:
 
 ```txt
 type: SupplierPayment
@@ -130,7 +130,7 @@ amount: order.total_cost_nio
 order_id: order.id
 ```
 
-Si la orden se actualiza antes de recibir inventario, el movimiento financiero se actualiza con el nuevo total.
+Si la orden se actualiza antes de recibir inventario, el movimiento financiero se crea, actualiza o elimina según el nuevo total. Si la orden queda sin productos ni costos, no debe conservar un movimiento financiero de monto cero.
 
 ## Actualizar productos de una orden
 

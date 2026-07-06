@@ -43,10 +43,12 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             Products = products
         };
 
-        EnsurePurchaseHasFinancialAmount(totals.TotalCostNio);
-
         await _context.Orders.AddAsync(order);
-        await _context.FinancialMovements.AddAsync(CreateSupplierPaymentMovement(order));
+        if (order.TotalCostNio > 0)
+        {
+            await _context.FinancialMovements.AddAsync(CreateSupplierPaymentMovement(order));
+        }
+
         await _context.SaveChangesAsync();
 
         return order.Id;
@@ -81,8 +83,6 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         var products = productDetails.SelectMany(detail => detail.Products).ToList();
         var exchangeRate = await GetOrderExchangeRateAsync();
         var totals = CalculateCosts(createdProducts.ProductCosts, updateOrderDTO.PurchaseCurrencyId, exchangeRate, updateOrderDTO.SupplierShippingCostUsd);
-        EnsurePurchaseHasFinancialAmount(totals.TotalCostNio);
-
         _context.Products.RemoveRange(order.Products);
 
         var reusedProductDetailIds = productDetails
@@ -107,7 +107,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         order.Comments = updateOrderDTO.Comments;
         order.Products = products;
 
-        await UpsertSupplierPaymentMovementAsync(order);
+        await SyncSupplierPaymentMovementAsync(order);
 
         await _context.SaveChangesAsync();
     }
@@ -243,12 +243,22 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         return _mapper.Map<List<OrderTrackingNumberDTO>>(trackingNumbers);
     }
 
-    private async Task UpsertSupplierPaymentMovementAsync(Order order)
+    private async Task SyncSupplierPaymentMovementAsync(Order order)
     {
         var financialMovement = await _context.FinancialMovements
             .FirstOrDefaultAsync(movement =>
                 movement.OrderId == order.Id &&
                 movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.SupplierPayment);
+
+        if (order.TotalCostNio <= 0)
+        {
+            if (financialMovement is not null)
+            {
+                _context.FinancialMovements.Remove(financialMovement);
+            }
+
+            return;
+        }
 
         if (financialMovement is null)
         {
@@ -284,13 +294,6 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             : $"Pago a proveedor por orden #{order.Id}.";
     }
 
-    private static void EnsurePurchaseHasFinancialAmount(decimal totalCostNio)
-    {
-        if (totalCostNio <= 0)
-        {
-            throw new AppBadRequestException("La compra debe generar un movimiento financiero mayor que cero.");
-        }
-    }
 
     /// <summary>
     /// Checks if all foreign keys exists (supplierId, subcategoryId, sizeId, etc)
@@ -299,10 +302,6 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
     {
         await EnsureSupplierExistsAsync(orderDTO.SupplierId);
 
-        if (orderDTO.ProductDetails.Count == 0)
-        {
-            throw new AppBadRequestException("Debe enviar al menos un producto.");
-        }
 
         var subcategoryIds = orderDTO.ProductDetails
             .Select(productDetail => productDetail.SubcategoryId)
@@ -646,6 +645,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
     private static void NormalizeOrderFields(CreateOrderDTO orderDTO)
     {
         orderDTO.Comments = orderDTO.Comments.NormalizeOptional();
+        orderDTO.ProductDetails ??= [];
 
         foreach (var productDetail in orderDTO.ProductDetails)
         {
