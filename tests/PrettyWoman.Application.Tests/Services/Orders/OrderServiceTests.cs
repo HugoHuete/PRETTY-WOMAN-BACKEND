@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using PrettyWoman.Application.DTOs.Orders;
@@ -73,14 +73,14 @@ public class OrderServiceTests
         var service = CreateService(context);
         var purchaseDate = new DateTime(2026, 6, 15, 10, 30, 0, DateTimeKind.Utc);
         var request = CreateOrderRequest("SOHO25119", "Blusa satin");
-        request.CreatedAt = purchaseDate;
+        request.PurchaseDate = purchaseDate;
 
         var orderId = await service.CreateAsync(request);
 
         var order = await context.Orders.SingleAsync(order => order.Id == orderId);
-        Assert.Equal(purchaseDate, order.CreatedAt);
+        Assert.Equal(purchaseDate, order.PurchaseDate);
         var financialMovement = await context.FinancialMovements.SingleAsync(movement => movement.OrderId == orderId);
-        Assert.Equal(purchaseDate, financialMovement.CreatedAt);
+        Assert.Equal(purchaseDate, financialMovement.MovementDate);
     }
 
 
@@ -92,7 +92,7 @@ public class OrderServiceTests
         var service = CreateService(context);
         var purchaseDate = new DateTime(2025, 11, 24, 0, 0, 0, DateTimeKind.Unspecified);
         var request = CreateOrderRequest("SOHO25118", "Vestido casual");
-        request.CreatedAt = purchaseDate;
+        request.PurchaseDate = purchaseDate;
 
         var orderId = await service.CreateAsync(request);
 
@@ -100,10 +100,10 @@ public class OrderServiceTests
         var order = await context.Orders.SingleAsync(order => order.Id == orderId);
         var financialMovement = await context.FinancialMovements.SingleAsync(movement => movement.OrderId == orderId);
 
-        Assert.Equal(DateTimeKind.Utc, order.CreatedAt.Kind);
-        Assert.Equal(expectedDate, order.CreatedAt);
-        Assert.Equal(DateTimeKind.Utc, financialMovement.CreatedAt.Kind);
-        Assert.Equal(expectedDate, financialMovement.CreatedAt);
+        Assert.Equal(DateTimeKind.Utc, order.PurchaseDate.Kind);
+        Assert.Equal(expectedDate, order.PurchaseDate);
+        Assert.Equal(DateTimeKind.Utc, financialMovement.MovementDate.Kind);
+        Assert.Equal(expectedDate, financialMovement.MovementDate);
     }
     [Fact]
     public async Task CreateAsync_AllowsOrderWithoutProducts()
@@ -195,7 +195,7 @@ public class OrderServiceTests
             SupplierId = 1,
             PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd,
             SupplierShippingCostUsd = 0m,
-            CreatedAt = purchaseDate
+            PurchaseDate = purchaseDate
         });
 
         await service.UpdateAsync(orderId, new UpdateOrderDTO
@@ -227,7 +227,7 @@ public class OrderServiceTests
 
         var financialMovement = await context.FinancialMovements.SingleAsync(movement => movement.OrderId == orderId);
 
-        Assert.Equal(purchaseDate, financialMovement.CreatedAt);
+        Assert.Equal(purchaseDate, financialMovement.MovementDate);
     }
     [Fact]
     public async Task UpdateAsync_ReusesProductDetailCodeWhenProductDetailIdIsProvided()

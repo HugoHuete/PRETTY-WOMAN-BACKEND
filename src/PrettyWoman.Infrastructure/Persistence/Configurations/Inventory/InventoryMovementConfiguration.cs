@@ -19,6 +19,7 @@ public class InventoryMovementConfiguration : IEntityTypeConfiguration<Inventory
         builder.HasOne(x => x.ProductHold).WithMany().HasForeignKey(x => x.ProductHoldId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.ProductInventoryIssue).WithMany(x => x.InventoryMovements).HasForeignKey(x => x.ProductInventoryIssueId).OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasIndex(x => x.MovementDate);
         builder.HasIndex(x => x.CreatedAt);
         builder.HasIndex(x => x.ProductId);
         builder.HasIndex(x => x.InventoryMovementTypeId);
@@ -26,8 +27,8 @@ public class InventoryMovementConfiguration : IEntityTypeConfiguration<Inventory
         builder.HasIndex(x => x.SaleProductId);
         builder.HasIndex(x => x.ProductHoldId);
         builder.HasIndex(x => x.ProductInventoryIssueId);
-        builder.HasIndex(x => new { x.ProductId, x.CreatedAt });
-        builder.HasIndex(x => new { x.InventoryMovementTypeId, x.CreatedAt });
+        builder.HasIndex(x => new { x.ProductId, x.MovementDate });
+        builder.HasIndex(x => new { x.InventoryMovementTypeId, x.MovementDate });
 
         builder.ToTable(t =>
         {

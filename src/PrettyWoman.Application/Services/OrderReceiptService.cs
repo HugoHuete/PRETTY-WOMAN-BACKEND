@@ -56,7 +56,7 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
 
             await _context.InventoryMovements.AddAsync(new InventoryMovement
             {
-                CreatedAt = receiptDate,
+                MovementDate = receiptDate,
                 Product = item.Product,
                 InventoryMovementTypeId = (int)InventoryMovementTypeOption.PurchaseReceived,
                 FromStockBucketId = (int)InventoryStockBucketOption.External,
@@ -90,6 +90,7 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
         {
             Id = receipt.Id,
             ReceivedDate = receipt.ReceivedDate,
+            CreatedAt = receipt.CreatedAt,
             WarehouseShippingCostUsd = warehouseShippingCostUsd,
             WarehouseShippingCostNio = warehouseShippingCostNio,
             OrderStatusId = order.OrderStatusId,
@@ -283,7 +284,7 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
         return new FinancialMovement
         {
             Description = $"Pago de envío bodega a Nicaragua por orden #{order.Id}.",
-            CreatedAt = date,
+            MovementDate = date,
             MovementDirectionId = (int)MovementDirectionOptions.Out,
             FinancialMovementTypeId = (int)FinancialMovementTypeOption.Expense,
             OrderId = order.Id,

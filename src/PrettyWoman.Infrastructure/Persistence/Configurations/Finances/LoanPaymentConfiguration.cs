@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using PrettyWoman.Domain.Entities;
 
@@ -16,8 +16,9 @@ public class LoanPaymentConfiguration : IEntityTypeConfiguration<LoanPayment>
         builder.HasOne(x => x.Loan).WithMany(x => x.LoanPayments).HasForeignKey(x => x.LoanId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => x.LoanId);
+        builder.HasIndex(x => x.PaymentDate);
         builder.HasIndex(x => x.CreatedAt);
-        builder.HasIndex(x => new { x.LoanId, x.CreatedAt });
+        builder.HasIndex(x => new { x.LoanId, x.PaymentDate });
 
         builder.ToTable(t =>
         {

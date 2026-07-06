@@ -2,11 +2,11 @@ using PrettyWoman.Domain.Enums;
 
 namespace PrettyWoman.Domain.Entities;
 
-public class Order
+public class Order : IAuditableEntity
 {
     public int Id { get; set; }
-    public DateTime CreatedAt { get; set; }
-    public int OrderStatusId { get; set; } = (int) OrderStatusCode.Pending;
+    public DateTime PurchaseDate { get; set; }
+    public int OrderStatusId { get; set; } = (int)OrderStatusCode.Pending;
     public int SupplierId { get; set; }
     public int PurchaseCurrencyId { get; set; } = (int)PurchaseCurrencyOption.Usd;
     public decimal AmountUsd { get; set; }
@@ -17,6 +17,12 @@ public class Order
     public decimal WarehouseShippingCostUsd { get; set; }
     public decimal TotalCostNio { get; set; }
     public string? Comments { get; set; }
+
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? CreatedById { get; set; }
+    public string? UpdatedById { get; set; }
 
 
     public OrderStatus? OrderStatus { get; set; }

@@ -1,4 +1,4 @@
-﻿using AutoMapper;
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using PrettyWoman.Application.DTOs.Orders;
@@ -101,10 +101,10 @@ public class OrderReceiptServiceTests
 
         Assert.Equal(DateTimeKind.Utc, productReceipt.ReceivedDate.Kind);
         Assert.Equal(expectedDate, productReceipt.ReceivedDate);
-        Assert.Equal(DateTimeKind.Utc, inventoryMovement.CreatedAt.Kind);
-        Assert.Equal(expectedDate, inventoryMovement.CreatedAt);
-        Assert.Equal(DateTimeKind.Utc, warehouseShippingMovement.CreatedAt.Kind);
-        Assert.Equal(expectedDate, warehouseShippingMovement.CreatedAt);
+        Assert.Equal(DateTimeKind.Utc, inventoryMovement.MovementDate.Kind);
+        Assert.Equal(expectedDate, inventoryMovement.MovementDate);
+        Assert.Equal(DateTimeKind.Utc, warehouseShippingMovement.MovementDate.Kind);
+        Assert.Equal(expectedDate, warehouseShippingMovement.MovementDate);
     }
     [Fact]
     public async Task ReceiveAsync_UsesTrackingShippingCostWhenOrderHasTrackingNumbers()

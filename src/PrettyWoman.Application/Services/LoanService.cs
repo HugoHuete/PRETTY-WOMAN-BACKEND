@@ -1,4 +1,4 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.Common.Extensions;
 using PrettyWoman.Application.Common.Models;
@@ -36,7 +36,7 @@ public class LoanService(IApplicationDbContext context) : ILoanService
 
         var totalCount = await loansQuery.CountAsync();
         var items = await loansQuery
-            .OrderByDescending(loan => loan.CreatedAt)
+            .OrderByDescending(loan => loan.LoanDate)
             .ThenByDescending(loan => loan.Id)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
@@ -63,11 +63,11 @@ public class LoanService(IApplicationDbContext context) : ILoanService
         await EnsureLoanOwnerExistsAsync(createLoanDTO.LoanOwnerId);
 
         var exchangeRate = await GetCurrentExchangeRateAsync();
-        var createdAt = createLoanDTO.CreatedAt ?? DateTime.UtcNow;
+        var loanDate = createLoanDTO.LoanDate ?? DateTime.UtcNow;
         var comments = createLoanDTO.Comments.NormalizeOptional();
         var loan = new Loan
         {
-            CreatedAt = createdAt,
+            LoanDate = loanDate,
             LoanOwnerId = createLoanDTO.LoanOwnerId,
             InitialAmount = createLoanDTO.InitialAmount,
             InitialAmountUsd = decimal.Round(createLoanDTO.InitialAmount / exchangeRate, 2),
@@ -83,7 +83,7 @@ public class LoanService(IApplicationDbContext context) : ILoanService
             MovementDirectionOptions.In,
             createLoanDTO.InitialAmount,
             exchangeRate,
-            createdAt,
+            loanDate,
             "Prestamo recibido",
             comments));
         await _context.SaveChangesAsync();
@@ -104,7 +104,7 @@ public class LoanService(IApplicationDbContext context) : ILoanService
         await EnsureLoanOwnerExistsAsync(updateLoanDTO.LoanOwnerId);
 
         var comments = updateLoanDTO.Comments.NormalizeOptional();
-        loan.CreatedAt = updateLoanDTO.CreatedAt ?? loan.CreatedAt;
+        loan.LoanDate = updateLoanDTO.LoanDate ?? loan.LoanDate;
         loan.LoanOwnerId = updateLoanDTO.LoanOwnerId;
         loan.InitialAmount = updateLoanDTO.InitialAmount;
         loan.InitialAmountUsd = decimal.Round(updateLoanDTO.InitialAmount / loan.ExchangeRate, 2);
@@ -112,7 +112,7 @@ public class LoanService(IApplicationDbContext context) : ILoanService
         loan.Comments = comments;
 
         var receivedMovement = GetLoanReceivedMovement(loan);
-        receivedMovement.CreatedAt = loan.CreatedAt;
+        receivedMovement.MovementDate = loan.LoanDate;
         receivedMovement.Amount = updateLoanDTO.InitialAmount;
         receivedMovement.Comments = comments;
 
@@ -152,12 +152,12 @@ public class LoanService(IApplicationDbContext context) : ILoanService
         ValidatePaymentAmount(payLoanDTO.Amount, balance);
         ValidateInterestAmount(payLoanDTO.InterestAmount);
 
-        var paymentDate = payLoanDTO.CreatedAt ?? DateTime.UtcNow;
+        var paymentDate = payLoanDTO.PaymentDate ?? DateTime.UtcNow;
         var comments = payLoanDTO.Comments.NormalizeOptional();
         var payment = new LoanPayment
         {
             Loan = loan,
-            CreatedAt = paymentDate,
+            PaymentDate = paymentDate,
             PrincipalAmount = payLoanDTO.Amount,
             InterestAmount = payLoanDTO.InterestAmount,
             ExchangeRate = loan.ExchangeRate,
@@ -213,16 +213,16 @@ public class LoanService(IApplicationDbContext context) : ILoanService
         ValidatePaymentAmount(updatePaymentDTO.Amount, availableBalance);
         ValidateInterestAmount(updatePaymentDTO.InterestAmount);
 
-        var paymentDate = updatePaymentDTO.CreatedAt ?? payment.CreatedAt;
+        var paymentDate = updatePaymentDTO.PaymentDate ?? payment.PaymentDate;
         var comments = updatePaymentDTO.Comments.NormalizeOptional();
 
-        payment.CreatedAt = paymentDate;
+        payment.PaymentDate = paymentDate;
         payment.PrincipalAmount = updatePaymentDTO.Amount;
         payment.InterestAmount = updatePaymentDTO.InterestAmount;
         payment.Comments = comments;
 
         var principalMovement = GetPaymentMovement(payment, FinancialMovementTypeOption.LoanPayment);
-        principalMovement.CreatedAt = paymentDate;
+        principalMovement.MovementDate = paymentDate;
         principalMovement.Amount = updatePaymentDTO.Amount;
         principalMovement.Comments = comments;
 
@@ -247,7 +247,7 @@ public class LoanService(IApplicationDbContext context) : ILoanService
             }
             else
             {
-                interestMovement.CreatedAt = paymentDate;
+                interestMovement.MovementDate = paymentDate;
                 interestMovement.Amount = updatePaymentDTO.InterestAmount;
                 interestMovement.Comments = comments;
             }
@@ -284,6 +284,7 @@ public class LoanService(IApplicationDbContext context) : ILoanService
     private static readonly Expression<Func<Loan, LoanDTO>> LoanDTOProjection = loan => new LoanDTO
     {
         Id = loan.Id,
+        LoanDate = loan.LoanDate,
         CreatedAt = loan.CreatedAt,
         LoanOwnerId = loan.LoanOwnerId,
         LoanOwnerName = loan.LoanOwner != null ? loan.LoanOwner.Name : null,
@@ -296,11 +297,12 @@ public class LoanService(IApplicationDbContext context) : ILoanService
         ExchangeRate = loan.ExchangeRate,
         IsActive = loan.InitialAmount - loan.LoanPayments.Sum(payment => payment.PrincipalAmount) > 0 && loan.ClosedAt == null,
         Payments = loan.LoanPayments
-            .OrderByDescending(payment => payment.CreatedAt)
+            .OrderByDescending(payment => payment.PaymentDate)
             .ThenByDescending(payment => payment.Id)
             .Select(payment => new LoanPaymentDTO
             {
                 Id = payment.Id,
+                PaymentDate = payment.PaymentDate,
                 CreatedAt = payment.CreatedAt,
                 Amount = payment.PrincipalAmount,
                 InterestAmount = payment.InterestAmount,
@@ -318,14 +320,14 @@ public class LoanService(IApplicationDbContext context) : ILoanService
         MovementDirectionOptions direction,
         decimal amount,
         decimal exchangeRate,
-        DateTime createdAt,
+        DateTime movementDate,
         string description,
         string? comments)
     {
         return new FinancialMovement
         {
             Description = description,
-            CreatedAt = createdAt,
+            MovementDate = movementDate,
             MovementDirectionId = (int)direction,
             FinancialMovementTypeId = (int)movementType,
             Loan = loan,
@@ -383,8 +385,8 @@ public class LoanService(IApplicationDbContext context) : ILoanService
         }
 
         loan.ClosedAt = loan.LoanPayments
-                     .OrderByDescending(payment => payment.CreatedAt)
-                     .FirstOrDefault()?.CreatedAt;
+                     .OrderByDescending(payment => payment.PaymentDate)
+                     .FirstOrDefault()?.PaymentDate;
     }
 
     private static void ValidateLoanAmount(decimal amount)

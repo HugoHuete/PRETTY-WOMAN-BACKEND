@@ -20,11 +20,12 @@ public class SalePaymentConfiguration : IEntityTypeConfiguration<SalePayment>
         builder.HasOne(x => x.PaymentMethod).WithMany().HasForeignKey(x => x.PaymentMethodId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.PaymentTerminal).WithMany().HasForeignKey(x => x.PaymentTerminalId).OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasIndex(x => x.PaymentDate);
         builder.HasIndex(x => x.CreatedAt);
-        builder.HasIndex(x => new { x.SaleId, x.CreatedAt });
+        builder.HasIndex(x => new { x.SaleId, x.PaymentDate });
         builder.HasIndex(x => x.PaymentMethodId);
         builder.HasIndex(x => x.PaymentTerminalId);
-        builder.HasIndex(x => new { x.UserId, x.CreatedAt });
+        builder.HasIndex(x => new { x.UserId, x.PaymentDate });
 
         builder.ToTable(t =>
         {

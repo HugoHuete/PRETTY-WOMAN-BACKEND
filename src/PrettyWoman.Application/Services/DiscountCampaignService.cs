@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.Common.Extensions;
 using PrettyWoman.Application.DTOs.Discounts;
 using PrettyWoman.Application.Exceptions;
@@ -111,6 +111,10 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
                 StartDate = campaign.StartDate,
                 EndDate = campaign.EndDate,
                 Enabled = campaign.Enabled,
+                CreatedAt = campaign.CreatedAt,
+                UpdatedAt = campaign.UpdatedAt,
+                CreatedById = campaign.CreatedById,
+                UpdatedById = campaign.UpdatedById,
                 Products = campaign.DiscountCampaignProducts
                     .OrderBy(product => product.Product != null && product.Product.ProductDetail != null ? product.Product.ProductDetail.Name : string.Empty)
                     .ThenBy(product => product.Product != null && product.Product.Size != null ? product.Product.Size.DisplayOrder : 0)
@@ -146,6 +150,10 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
                 StartDate = campaign.StartDate,
                 EndDate = campaign.EndDate,
                 Enabled = campaign.Enabled,
+                CreatedAt = campaign.CreatedAt,
+                UpdatedAt = campaign.UpdatedAt,
+                CreatedById = campaign.CreatedById,
+                UpdatedById = campaign.UpdatedById,
                 Products = campaign.DiscountCampaignProducts
                     .OrderBy(product => product.Product != null && product.Product.ProductDetail != null ? product.Product.ProductDetail.Name : string.Empty)
                     .ThenBy(product => product.Product != null && product.Product.Size != null ? product.Product.Size.DisplayOrder : 0)

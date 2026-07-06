@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.DTOs.Loans;
 using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Services;
@@ -20,7 +20,7 @@ public class LoanServiceTests
 
         var loan = await service.CreateAsync(new CreateLoanDTO
         {
-            CreatedAt = date,
+            LoanDate = date,
             LoanOwnerId = 1,
             InitialAmount = 3650m,
             Comments = "Capital temporal"
@@ -129,7 +129,7 @@ public class LoanServiceTests
 
         var updatedLoan = await service.PayAsync(loan.Id, new PayLoanDTO
         {
-            CreatedAt = paymentDate,
+            PaymentDate = paymentDate,
             Amount = 1000m,
             InterestAmount = 20m
         });
@@ -175,7 +175,7 @@ public class LoanServiceTests
         });
         var paidLoan = await service.PayAsync(loan.Id, new PayLoanDTO
         {
-            CreatedAt = firstDate,
+            PaymentDate = firstDate,
             Amount = 400m,
             InterestAmount = 50m,
             Comments = "Primer pago"
@@ -184,7 +184,7 @@ public class LoanServiceTests
 
         var updatedLoan = await service.UpdatePaymentAsync(loan.Id, paymentId, new UpdateLoanPaymentDTO
         {
-            CreatedAt = secondDate,
+            PaymentDate = secondDate,
             Amount = 250m,
             InterestAmount = 30m,
             Comments = "Correccion pago"
@@ -195,7 +195,7 @@ public class LoanServiceTests
         Assert.Null(updatedLoan.ClosedAt);
         var payment = Assert.Single(updatedLoan.Payments);
         Assert.Equal(paymentId, payment.Id);
-        Assert.Equal(secondDate, payment.CreatedAt);
+        Assert.Equal(secondDate, payment.PaymentDate);
         Assert.Equal(250m, payment.Amount);
         Assert.Equal(30m, payment.InterestAmount);
         Assert.Equal(280m, payment.TotalAmount);
@@ -209,13 +209,13 @@ public class LoanServiceTests
             .SingleAsync(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanPayment);
         Assert.Equal(paymentId, paymentMovement.LoanPaymentId);
         Assert.Equal(250m, paymentMovement.Amount);
-        Assert.Equal(secondDate, paymentMovement.CreatedAt);
+        Assert.Equal(secondDate, paymentMovement.MovementDate);
 
         var interestMovement = await context.FinancialMovements
             .SingleAsync(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanInterest);
         Assert.Equal(paymentId, interestMovement.LoanPaymentId);
         Assert.Equal(30m, interestMovement.Amount);
-        Assert.Equal(secondDate, interestMovement.CreatedAt);
+        Assert.Equal(secondDate, interestMovement.MovementDate);
     }
 
     [Fact]
@@ -269,7 +269,7 @@ public class LoanServiceTests
 
         var updatedLoan = await service.UpdatePaymentAsync(loan.Id, paymentId, new UpdateLoanPaymentDTO
         {
-            CreatedAt = paymentDate,
+            PaymentDate = paymentDate,
             Amount = 400m,
             InterestAmount = 25m,
             Comments = "Agrega interes"
@@ -281,7 +281,7 @@ public class LoanServiceTests
             .SingleAsync(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanInterest);
         Assert.Equal(paymentId, interestMovement.LoanPaymentId);
         Assert.Equal(25m, interestMovement.Amount);
-        Assert.Equal(paymentDate, interestMovement.CreatedAt);
+        Assert.Equal(paymentDate, interestMovement.MovementDate);
         Assert.Equal("Agrega interes", interestMovement.Comments);
     }
 

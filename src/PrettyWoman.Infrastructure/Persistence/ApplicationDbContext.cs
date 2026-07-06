@@ -7,8 +7,46 @@ namespace PrettyWoman.Infrastructure.Persistence;
 
 public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbContext
 {
+    private readonly ICurrentUserService? _currentUserService;
+
     public ApplicationDbContext(DbContextOptions options) : base(options)
     {
+    }
+
+    public ApplicationDbContext(DbContextOptions options, ICurrentUserService currentUserService) : base(options)
+    {
+        _currentUserService = currentUserService;
+    }
+
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        ApplyAuditValues();
+        return base.SaveChangesAsync(cancellationToken);
+    }
+
+    private void ApplyAuditValues()
+    {
+        var now = DateTime.UtcNow;
+        var userId = _currentUserService?.UserId;
+
+        foreach (var entry in ChangeTracker.Entries<IAuditableEntity>())
+        {
+            if (entry.State == EntityState.Added)
+            {
+                entry.Entity.CreatedAt = entry.Entity.CreatedAt == default ? now : entry.Entity.CreatedAt;
+                entry.Entity.CreatedById ??= userId;
+                continue;
+            }
+
+            if (entry.State == EntityState.Modified)
+            {
+                entry.Property(entity => entity.CreatedAt).IsModified = false;
+                entry.Property(entity => entity.CreatedById).IsModified = false;
+                entry.Entity.UpdatedAt = now;
+                entry.Entity.UpdatedById = userId;
+            }
+        }
     }
 
     protected override void OnModelCreating(ModelBuilder builder)

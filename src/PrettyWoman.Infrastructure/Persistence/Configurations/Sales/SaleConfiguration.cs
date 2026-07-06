@@ -25,11 +25,12 @@ public class SaleConfiguration : IEntityTypeConfiguration<Sale>
         builder.HasOne(x => x.Client).WithMany(x => x.Sales).HasForeignKey(x => x.ClientId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Municipality).WithMany().HasForeignKey(x => x.MunicipalityId).OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasIndex(x => x.SaleDate);
         builder.HasIndex(x => x.CreatedAt);
-        builder.HasIndex(x => new { x.SaleStatusId, x.CreatedAt });
-        builder.HasIndex(x => new { x.SalePaymentStatusId, x.CreatedAt });
-        builder.HasIndex(x => new { x.SaleChannelId, x.CreatedAt });
-        builder.HasIndex(x => new { x.UserId, x.CreatedAt });
+        builder.HasIndex(x => new { x.SaleStatusId, x.SaleDate });
+        builder.HasIndex(x => new { x.SalePaymentStatusId, x.SaleDate });
+        builder.HasIndex(x => new { x.SaleChannelId, x.SaleDate });
+        builder.HasIndex(x => new { x.UserId, x.SaleDate });
         builder.HasIndex(x => x.ClientId);
         builder.HasIndex(x => x.MunicipalityId);
 

@@ -1,9 +1,9 @@
 namespace PrettyWoman.Domain.Entities;
 
-public class SalePayment
+public class SalePayment : IAuditableEntity
 {
     public int Id { get; set; }
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime PaymentDate { get; set; }
     public int SaleId { get; set; }
     public int PaymentMethodId { get; set; }
     public int? PaymentTerminalId { get; set; }
@@ -14,6 +14,11 @@ public class SalePayment
     public decimal IncomeTaxAmount { get; set; }
     public decimal NetReceivedAmount { get; set; }
     public required string UserId { get; set; }
+
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? CreatedById { get; set; }
+    public string? UpdatedById { get; set; }
 
 
     public Sale? Sale { get; set; }

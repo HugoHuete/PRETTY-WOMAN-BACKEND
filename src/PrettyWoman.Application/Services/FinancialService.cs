@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.Common.Extensions;
 using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.DTOs.Finances;
@@ -26,7 +26,7 @@ public class FinancialService(IApplicationDbContext context) : IFinancialService
                     .Where(movement => movement.MovementDirectionId == (int)MovementDirectionOptions.Out)
                     .Sum(movement => movement.Amount),
                 MovementCount = group.Count(),
-                LastMovementAt = group.Max(movement => (DateTime?)movement.CreatedAt)
+                LastMovementAt = group.Max(movement => (DateTime?)movement.MovementDate)
             })
             .FirstOrDefaultAsync();
 
@@ -61,12 +61,12 @@ public class FinancialService(IApplicationDbContext context) : IFinancialService
 
         if (query.FromDate.HasValue)
         {
-            movementsQuery = movementsQuery.Where(movement => movement.CreatedAt >= query.FromDate.Value);
+            movementsQuery = movementsQuery.Where(movement => movement.MovementDate >= query.FromDate.Value);
         }
 
         if (query.ToDate.HasValue)
         {
-            movementsQuery = movementsQuery.Where(movement => movement.CreatedAt < query.ToDate.Value.AddDays(1));
+            movementsQuery = movementsQuery.Where(movement => movement.MovementDate < query.ToDate.Value.AddDays(1));
         }
 
         if (query.FinancialMovementTypeId.HasValue)
@@ -83,7 +83,7 @@ public class FinancialService(IApplicationDbContext context) : IFinancialService
 
         var totalCount = await movementsQuery.CountAsync();
         var items = await movementsQuery
-            .OrderByDescending(movement => movement.CreatedAt)
+            .OrderByDescending(movement => movement.MovementDate)
             .ThenByDescending(movement => movement.Id)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
@@ -112,7 +112,7 @@ public class FinancialService(IApplicationDbContext context) : IFinancialService
         var movement = new FinancialMovement
         {
             Description = description,
-            CreatedAt = createMovementDTO.CreatedAt ?? DateTime.UtcNow,
+            MovementDate = createMovementDTO.MovementDate ?? DateTime.UtcNow,
             MovementDirectionId = movementDirectionId,
             FinancialMovementTypeId = createMovementDTO.FinancialMovementTypeId,
             ExpenseCategoryId = movementType == FinancialMovementTypeOption.Expense ? createMovementDTO.ExpenseCategoryId : null,
@@ -142,7 +142,7 @@ public class FinancialService(IApplicationDbContext context) : IFinancialService
         await ValidateExpenseCategoryAsync(movementType, updateMovementDTO.ExpenseCategoryId);
 
         movement.Description = description;
-        movement.CreatedAt = updateMovementDTO.CreatedAt ?? movement.CreatedAt;
+        movement.MovementDate = updateMovementDTO.MovementDate ?? movement.MovementDate;
         movement.MovementDirectionId = movementDirectionId;
         movement.FinancialMovementTypeId = updateMovementDTO.FinancialMovementTypeId;
         movement.ExpenseCategoryId = movementType == FinancialMovementTypeOption.Expense ? updateMovementDTO.ExpenseCategoryId : null;
@@ -183,6 +183,7 @@ public class FinancialService(IApplicationDbContext context) : IFinancialService
         {
             Id = movement.Id,
             Description = movement.Description,
+            MovementDate = movement.MovementDate,
             CreatedAt = movement.CreatedAt,
             MovementDirectionId = movement.MovementDirectionId,
             MovementDirectionName = movement.MovementDirection != null ? movement.MovementDirection.Name : null,

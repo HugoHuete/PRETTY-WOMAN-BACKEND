@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using PrettyWoman.Domain.Entities;
 
@@ -21,6 +21,7 @@ public class FinancialMovementConfiguration : IEntityTypeConfiguration<Financial
         builder.HasOne(x => x.Loan).WithMany(x => x.FinancialMovements).HasForeignKey(x => x.LoanId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.LoanPayment).WithMany(x => x.FinancialMovements).HasForeignKey(x => x.LoanPaymentId).OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasIndex(x => x.MovementDate);
         builder.HasIndex(x => x.CreatedAt);
         builder.HasIndex(x => x.MovementDirectionId);
         builder.HasIndex(x => x.FinancialMovementTypeId);
@@ -29,8 +30,8 @@ public class FinancialMovementConfiguration : IEntityTypeConfiguration<Financial
         builder.HasIndex(x => x.SalePaymentId);
         builder.HasIndex(x => x.LoanId);
         builder.HasIndex(x => x.LoanPaymentId);
-        builder.HasIndex(x => new { x.FinancialMovementTypeId, x.CreatedAt });
-        builder.HasIndex(x => new { x.MovementDirectionId, x.CreatedAt });
+        builder.HasIndex(x => new { x.FinancialMovementTypeId, x.MovementDate });
+        builder.HasIndex(x => new { x.MovementDirectionId, x.MovementDate });
 
         builder.ToTable(t =>
         {

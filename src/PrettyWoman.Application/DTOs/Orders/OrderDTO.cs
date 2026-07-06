@@ -5,6 +5,7 @@ namespace PrettyWoman.Application.DTOs.Orders;
 public class OrderDTO
 {
     public int Id { get; set; }
+    public DateTime PurchaseDate { get; set; }
     public DateTime CreatedAt { get; set; }
     public int OrderStatusId { get; set; }
     public int SupplierId { get; set; }
@@ -31,7 +32,7 @@ public class OrderDTO
 
     public string? Comments { get; set; }
 
-    [Range(typeof(decimal), "0.0001", "79228162514264337593543950335", ErrorMessage = "La tasa de cambio debe ser mayor que cero.")]
+    [Range(typeof(decimal), "0.01", "1000", ErrorMessage = "La tasa de cambio debe ser mayor que cero.")]
     public decimal ExchangeRate { get; set; }
 
     public string? OrderStatusName { get; set; }

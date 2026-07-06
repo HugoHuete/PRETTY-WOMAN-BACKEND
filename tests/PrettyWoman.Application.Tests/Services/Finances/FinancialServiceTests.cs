@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.DTOs.Finances;
 using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Services;
@@ -136,14 +136,14 @@ public class FinancialServiceTests
         var movement = await service.CreateManualMovementAsync(new CreateFinancialMovementDTO
         {
             Description = "Aporte inicial",
-            CreatedAt = date,
+            MovementDate = date,
             FinancialMovementTypeId = (int)FinancialMovementTypeOption.OwnerInvestment,
             Amount = 1000m,
             Comments = "Capital"
         });
 
         Assert.Equal("Aporte inicial", movement.Description);
-        Assert.Equal(date, movement.CreatedAt);
+        Assert.Equal(date, movement.MovementDate);
         Assert.Equal((int)MovementDirectionOptions.In, movement.MovementDirectionId);
         Assert.Equal((int)FinancialMovementTypeOption.OwnerInvestment, movement.FinancialMovementTypeId);
         Assert.Equal(1000m, movement.Amount);
@@ -237,14 +237,14 @@ public class FinancialServiceTests
         var updated = await service.UpdateManualMovementAsync(movement.Id, new UpdateFinancialMovementDTO
         {
             Description = "Retiro socio",
-            CreatedAt = newDate,
+            MovementDate = newDate,
             FinancialMovementTypeId = (int)FinancialMovementTypeOption.OwnerWithdrawal,
             Amount = 250m,
             Comments = "Correccion"
         });
 
         Assert.Equal("Retiro socio", updated.Description);
-        Assert.Equal(newDate, updated.CreatedAt);
+        Assert.Equal(newDate, updated.MovementDate);
         Assert.Equal((int)MovementDirectionOptions.Out, updated.MovementDirectionId);
         Assert.Equal((int)FinancialMovementTypeOption.OwnerWithdrawal, updated.FinancialMovementTypeId);
         Assert.Equal(250m, updated.Amount);
@@ -314,6 +314,7 @@ public class FinancialServiceTests
         return new FinancialMovement
         {
             Description = description,
+            MovementDate = createdAt,
             CreatedAt = createdAt,
             MovementDirectionId = (int)direction,
             FinancialMovementTypeId = (int)type,

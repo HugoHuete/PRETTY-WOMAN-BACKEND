@@ -28,7 +28,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
 
         var order = new Order
         {
-            CreatedAt = createOrderDTO.CreatedAt.NormalizeToUtc() ?? DateTime.UtcNow,
+            PurchaseDate = createOrderDTO.PurchaseDate.NormalizeToUtc() ?? DateTime.UtcNow,
             OrderStatusId = (int)OrderStatusCode.Pending,
             SupplierId = createOrderDTO.SupplierId,
             PurchaseCurrencyId = createOrderDTO.PurchaseCurrencyId,
@@ -96,6 +96,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
 
         _context.ProductDetails.RemoveRange(removedProductDetails);
 
+        order.PurchaseDate = updateOrderDTO.PurchaseDate.NormalizeToUtc() ?? order.PurchaseDate;
         order.SupplierId = updateOrderDTO.SupplierId;
         order.PurchaseCurrencyId = updateOrderDTO.PurchaseCurrencyId;
         order.AmountUsd = totals.AmountUsd;
@@ -208,7 +209,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                     .ThenInclude(productDetail => productDetail!.Subcategory)
             .Include(order => order.Products)
                 .ThenInclude(product => product.Size)
-            .OrderByDescending(order => order.CreatedAt)
+            .OrderByDescending(order => order.PurchaseDate)
             .ToListAsync();
 
         return orders.Select(MapOrderDto).ToList();
@@ -266,6 +267,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             return;
         }
 
+        financialMovement.MovementDate = order.PurchaseDate;
         financialMovement.Amount = order.TotalCostNio;
         financialMovement.ExchangeRate = order.ExchangeRate;
         financialMovement.Description = CreateSupplierPaymentDescription(order);
@@ -277,7 +279,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         return new FinancialMovement
         {
             Description = CreateSupplierPaymentDescription(order),
-            CreatedAt = order.CreatedAt,
+            MovementDate = order.PurchaseDate,
             MovementDirectionId = (int)MovementDirectionOptions.Out,
             FinancialMovementTypeId = (int)FinancialMovementTypeOption.SupplierPayment,
             Order = order,

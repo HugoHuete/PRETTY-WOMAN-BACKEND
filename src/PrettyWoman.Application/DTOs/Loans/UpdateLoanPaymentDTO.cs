@@ -1,10 +1,10 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace PrettyWoman.Application.DTOs.Loans;
 
 public class UpdateLoanPaymentDTO
 {
-    public DateTime? CreatedAt { get; set; }
+    public DateTime? PaymentDate { get; set; }
 
     public decimal Amount { get; set; }
 

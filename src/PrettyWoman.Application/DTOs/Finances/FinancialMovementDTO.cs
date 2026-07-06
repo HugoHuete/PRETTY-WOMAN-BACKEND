@@ -1,9 +1,10 @@
-﻿namespace PrettyWoman.Application.DTOs.Finances;
+namespace PrettyWoman.Application.DTOs.Finances;
 
 public class FinancialMovementDTO
 {
     public int Id { get; set; }
     public required string Description { get; set; }
+    public DateTime MovementDate { get; set; }
     public DateTime CreatedAt { get; set; }
     public int MovementDirectionId { get; set; }
     public string? MovementDirectionName { get; set; }

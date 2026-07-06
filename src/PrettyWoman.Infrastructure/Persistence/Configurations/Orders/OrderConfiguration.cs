@@ -19,6 +19,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(x => x.WarehouseShippingCostUsd).HasPrecision(14, 2);
         builder.Property(x => x.TotalCostNio).HasPrecision(14, 2);
 
+        builder.HasIndex(x => x.PurchaseDate);
+        builder.HasIndex(x => x.CreatedAt);
+        builder.HasIndex(x => new { x.SupplierId, x.PurchaseDate });
+        builder.HasIndex(x => new { x.OrderStatusId, x.PurchaseDate });
+
 
         builder.HasOne(x => x.OrderStatus).WithMany().HasForeignKey(x => x.OrderStatusId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Supplier).WithMany(x => x.Orders).HasForeignKey(x => x.SupplierId).OnDelete(DeleteBehavior.Restrict);

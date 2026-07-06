@@ -1,9 +1,8 @@
 namespace PrettyWoman.Domain.Entities;
 
-public class InventoryMovement
+public class InventoryMovement : IAuditableEntity
 {
     public int Id { get; set; }
-    public DateTime CreatedAt { get; set; }
     public int ProductId { get; set; }
     public int InventoryMovementTypeId { get; set; }
     public int FromStockBucketId { get; set; }
@@ -14,6 +13,12 @@ public class InventoryMovement
     public int? ProductHoldId { get; set; }
     public int? ProductInventoryIssueId { get; set; }
     public string? Comments { get; set; }
+
+    public DateTime MovementDate { get; set; }
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime? UpdatedAt { get; set; }
+    public string? CreatedById { get; set; }
+    public string? UpdatedById { get; set; }
 
 
 

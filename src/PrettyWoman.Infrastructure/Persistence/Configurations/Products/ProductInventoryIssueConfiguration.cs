@@ -17,6 +17,7 @@ public class ProductInventoryIssueConfiguration : IEntityTypeConfiguration<Produ
         builder.HasIndex(x => x.ProductId);
         builder.HasIndex(x => x.ProductInventoryIssueTypeId);
         builder.HasIndex(x => x.ProductInventoryIssueStatusId);
+        builder.HasIndex(x => x.IssueDate);
         builder.HasIndex(x => x.CreatedAt);
 
         builder.ToTable(t =>

@@ -1,8 +1,9 @@
-﻿namespace PrettyWoman.Application.DTOs.Loans;
+namespace PrettyWoman.Application.DTOs.Loans;
 
 public class LoanDTO
 {
     public int Id { get; set; }
+    public DateTime LoanDate { get; set; }
     public DateTime CreatedAt { get; set; }
     public int LoanOwnerId { get; set; }
     public string? LoanOwnerName { get; set; }
