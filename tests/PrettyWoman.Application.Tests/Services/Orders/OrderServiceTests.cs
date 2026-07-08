@@ -85,7 +85,7 @@ public class OrderServiceTests
 
 
     [Fact]
-    public async Task CreateAsync_NormalizesUnspecifiedPurchaseDateToUtc()
+    public async Task CreateAsync_InterpretsUnspecifiedPurchaseDateAsBusinessLocalTime()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -96,7 +96,7 @@ public class OrderServiceTests
 
         var orderId = await service.CreateAsync(request);
 
-        var expectedDate = DateTime.SpecifyKind(purchaseDate, DateTimeKind.Utc);
+        var expectedDate = new DateTime(2025, 11, 24, 6, 0, 0, DateTimeKind.Utc);
         var order = await context.Orders.SingleAsync(order => order.Id == orderId);
         var financialMovement = await context.FinancialMovements.SingleAsync(movement => movement.OrderId == orderId);
 

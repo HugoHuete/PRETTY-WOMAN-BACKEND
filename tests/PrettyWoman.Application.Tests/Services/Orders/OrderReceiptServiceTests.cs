@@ -2,6 +2,7 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using PrettyWoman.Application.DTOs.Orders;
+using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Mappings;
 using PrettyWoman.Application.Services;
 using PrettyWoman.Domain.Entities;
@@ -71,7 +72,7 @@ public class OrderReceiptServiceTests
 
 
     [Fact]
-    public async Task ReceiveAsync_NormalizesUnspecifiedReceivedDateToUtc()
+    public async Task ReceiveAsync_InterpretsUnspecifiedReceivedDateAsBusinessLocalTime()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -95,7 +96,7 @@ public class OrderReceiptServiceTests
             ]
         });
 
-        var expectedDate = DateTime.SpecifyKind(receivedDate, DateTimeKind.Utc);
+        var expectedDate = new DateTime(2025, 11, 24, 6, 0, 0, DateTimeKind.Utc);
         var productReceipt = await context.ProductReceipts.SingleAsync();
         var inventoryMovement = await context.InventoryMovements.SingleAsync();
         var warehouseShippingMovement = await context.FinancialMovements
@@ -164,6 +165,72 @@ public class OrderReceiptServiceTests
         Assert.Equal(receipt.Id, tracking.ProductReceiptId);
     }
 
+    [Fact]
+    public async Task ReceiveAsync_RejectsDirectWarehouseShippingCostWhenOrderHasTrackingNumbers()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var orderService = new OrderService(context, Mapper);
+        var receiptService = new OrderReceiptService(context);
+        var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
+        var product = await context.Products.SingleAsync();
+
+        context.OrderTrackingNumbers.Add(new OrderTrackingNumber
+        {
+            OrderId = orderId,
+            ShippingCompanyId = 1,
+            TrackingNumber = "1Z999"
+        });
+        await context.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            WarehouseShippingCostUsd = 10m,
+            Products =
+            [
+                new ReceiveOrderProductDTO
+                {
+                    ProductId = product.Id,
+                    Quantity = 1
+                }
+            ]
+        }));
+
+        Assert.Contains("tracking", exception.Message);
+    }
+
+    [Fact]
+    public async Task ReceiveAsync_RejectsMissingTrackingCostsWhenOrderHasTrackingNumbers()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var orderService = new OrderService(context, Mapper);
+        var receiptService = new OrderReceiptService(context);
+        var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
+        var product = await context.Products.SingleAsync();
+
+        context.OrderTrackingNumbers.Add(new OrderTrackingNumber
+        {
+            OrderId = orderId,
+            ShippingCompanyId = 1,
+            TrackingNumber = "1Z999"
+        });
+        await context.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            Products =
+            [
+                new ReceiveOrderProductDTO
+                {
+                    ProductId = product.Id,
+                    Quantity = 1
+                }
+            ]
+        }));
+
+        Assert.Contains("Debe enviar al menos un tracking", exception.Message);
+    }
 
     [Fact]
     public async Task ReceiveAsync_AllocatesWarehouseShippingByEstimatedProductWeight()

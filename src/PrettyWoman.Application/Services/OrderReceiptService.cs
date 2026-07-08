@@ -299,6 +299,8 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
     private static void NormalizeFields(ReceiveOrderDTO receiveOrderDTO)
     {
         receiveOrderDTO.Comments = receiveOrderDTO.Comments.NormalizeOptional();
+        receiveOrderDTO.TrackingNumbers ??= [];
+        receiveOrderDTO.Products ??= [];
     }
 
     private sealed record ReceivedProduct(Product Product, int Quantity, decimal Weight);
