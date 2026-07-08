@@ -12,4 +12,5 @@ public class ProductDetail
 
     public ICollection<Product> Products { get; set; } = [];
     public ICollection<ProductImage> ProductImages { get; set; } = [];
+    public ICollection<DiscountCampaignProduct> DiscountCampaignProducts { get; set; } = [];
 }

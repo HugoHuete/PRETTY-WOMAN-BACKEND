@@ -27,5 +27,4 @@ public class Product
     public ICollection<ProductHold> ProductHolds { get; set; } = [];
     public ICollection<ProductInventoryIssue> ProductInventoryIssues { get; set; } = [];
     public ICollection<ProductReceiptDetail> ProductReceiptDetails { get; set; } = [];
-    public ICollection<DiscountCampaignProduct> DiscountCampaignProducts { get; set; } = [];
 }

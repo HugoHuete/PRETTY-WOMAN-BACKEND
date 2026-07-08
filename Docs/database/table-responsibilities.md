@@ -375,7 +375,7 @@ Define nombre, fechas y si está habilitada.
 
 ## discount_campaign_products
 
-Productos incluidos en una promoción y tipo de descuento aplicado.
+Productos generales product_details incluidos en una promocion y tipo de descuento aplicado.
 
 ## discount_types
 

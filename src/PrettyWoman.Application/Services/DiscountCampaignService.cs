@@ -15,7 +15,7 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
     public async Task<int> CreateAsync(CreateDiscountCampaignDTO createDiscountCampaignDTO)
     {
         NormalizeAndValidateCampaign(createDiscountCampaignDTO);
-        await ValidateProductsAsync(createDiscountCampaignDTO.Products);
+        await ValidateProductDetailsAsync(createDiscountCampaignDTO.Products);
         await EnsureNameIsUniqueAsync(createDiscountCampaignDTO.Name);
 
         var discountCampaign = new DiscountCampaign
@@ -27,7 +27,7 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             DiscountCampaignProducts = createDiscountCampaignDTO.Products
                 .Select(product => new DiscountCampaignProduct
                 {
-                    ProductId = product.ProductId,
+                    ProductDetailId = product.ProductDetailId,
                     DiscountTypeId = product.DiscountTypeId,
                     DiscountValue = product.DiscountValue
                 })
@@ -48,7 +48,7 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             ?? throw new AppNotFoundException($"La campania de descuento con id '{id}' no existe.");
 
         NormalizeAndValidateCampaign(updateDiscountCampaignDTO);
-        await ValidateProductsAsync(updateDiscountCampaignDTO.Products);
+        await ValidateProductDetailsAsync(updateDiscountCampaignDTO.Products);
         await EnsureNameIsUniqueAsync(updateDiscountCampaignDTO.Name, id);
 
         discountCampaign.Name = updateDiscountCampaignDTO.Name;
@@ -56,21 +56,21 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         discountCampaign.EndDate = updateDiscountCampaignDTO.EndDate;
         discountCampaign.Enabled = updateDiscountCampaignDTO.Enabled;
 
-        var existingProductsByProductId = discountCampaign.DiscountCampaignProducts
-            .ToDictionary(product => product.ProductId);
-        var requestedProductIds = updateDiscountCampaignDTO.Products
-            .Select(product => product.ProductId)
+        var existingProductsByProductDetailId = discountCampaign.DiscountCampaignProducts
+            .ToDictionary(product => product.ProductDetailId);
+        var requestedProductDetailIds = updateDiscountCampaignDTO.Products
+            .Select(product => product.ProductDetailId)
             .ToHashSet();
 
         var productsToRemove = discountCampaign.DiscountCampaignProducts
-            .Where(product => !requestedProductIds.Contains(product.ProductId))
+            .Where(product => !requestedProductDetailIds.Contains(product.ProductDetailId))
             .ToList();
 
         _context.DiscountCampaignProducts.RemoveRange(productsToRemove);
 
         foreach (var product in updateDiscountCampaignDTO.Products)
         {
-            if (existingProductsByProductId.TryGetValue(product.ProductId, out var existingProduct))
+            if (existingProductsByProductDetailId.TryGetValue(product.ProductDetailId, out var existingProduct))
             {
                 existingProduct.DiscountTypeId = product.DiscountTypeId;
                 existingProduct.DiscountValue = product.DiscountValue;
@@ -79,7 +79,7 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
 
             discountCampaign.DiscountCampaignProducts.Add(new DiscountCampaignProduct
             {
-                ProductId = product.ProductId,
+                ProductDetailId = product.ProductDetailId,
                 DiscountTypeId = product.DiscountTypeId,
                 DiscountValue = product.DiscountValue
             });
@@ -116,17 +116,13 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
                 CreatedById = campaign.CreatedById,
                 UpdatedById = campaign.UpdatedById,
                 Products = campaign.DiscountCampaignProducts
-                    .OrderBy(product => product.Product != null && product.Product.ProductDetail != null ? product.Product.ProductDetail.Name : string.Empty)
-                    .ThenBy(product => product.Product != null && product.Product.Size != null ? product.Product.Size.DisplayOrder : 0)
+                    .OrderBy(product => product.ProductDetail != null ? product.ProductDetail.Name : string.Empty)
                     .Select(product => new DiscountCampaignProductDTO
                     {
                         Id = product.Id,
-                        ProductId = product.ProductId,
-                        ProductName = product.Product != null && product.Product.ProductDetail != null ? product.Product.ProductDetail.Name : null,
-                        ProductCode = product.Product != null && product.Product.ProductDetail != null ? product.Product.ProductDetail.Code : null,
-                        SizeId = product.Product != null ? product.Product.SizeId : null,
-                        SizeName = product.Product != null && product.Product.Size != null ? product.Product.Size.Name : null,
-                        Color = product.Product != null ? product.Product.Color : null,
+                        ProductDetailId = product.ProductDetailId,
+                        ProductName = product.ProductDetail != null ? product.ProductDetail.Name : null,
+                        ProductCode = product.ProductDetail != null ? product.ProductDetail.Code : null,
                         DiscountTypeId = product.DiscountTypeId,
                         DiscountTypeName = product.DiscountType != null ? product.DiscountType.Name : null,
                         DiscountValue = product.DiscountValue
@@ -155,17 +151,13 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
                 CreatedById = campaign.CreatedById,
                 UpdatedById = campaign.UpdatedById,
                 Products = campaign.DiscountCampaignProducts
-                    .OrderBy(product => product.Product != null && product.Product.ProductDetail != null ? product.Product.ProductDetail.Name : string.Empty)
-                    .ThenBy(product => product.Product != null && product.Product.Size != null ? product.Product.Size.DisplayOrder : 0)
+                    .OrderBy(product => product.ProductDetail != null ? product.ProductDetail.Name : string.Empty)
                     .Select(product => new DiscountCampaignProductDTO
                     {
                         Id = product.Id,
-                        ProductId = product.ProductId,
-                        ProductName = product.Product != null && product.Product.ProductDetail != null ? product.Product.ProductDetail.Name : null,
-                        ProductCode = product.Product != null && product.Product.ProductDetail != null ? product.Product.ProductDetail.Code : null,
-                        SizeId = product.Product != null ? product.Product.SizeId : null,
-                        SizeName = product.Product != null && product.Product.Size != null ? product.Product.Size.Name : null,
-                        Color = product.Product != null ? product.Product.Color : null,
+                        ProductDetailId = product.ProductDetailId,
+                        ProductName = product.ProductDetail != null ? product.ProductDetail.Name : null,
+                        ProductCode = product.ProductDetail != null ? product.ProductDetail.Code : null,
                         DiscountTypeId = product.DiscountTypeId,
                         DiscountTypeName = product.DiscountType != null ? product.DiscountType.Name : null,
                         DiscountValue = product.DiscountValue
@@ -206,39 +198,39 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         return name;
     }
 
-    private async Task ValidateProductsAsync(IReadOnlyCollection<CreateDiscountCampaignProductDTO> products)
+    private async Task ValidateProductDetailsAsync(IReadOnlyCollection<CreateDiscountCampaignProductDTO> products)
     {
         foreach (var product in products)
         {
             ValidateDiscountValue(product);
         }
 
-        var repeatedProductId = products
-            .GroupBy(product => product.ProductId)
+        var repeatedProductDetailId = products
+            .GroupBy(product => product.ProductDetailId)
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
             .FirstOrDefault();
 
-        if (repeatedProductId > 0)
+        if (repeatedProductDetailId > 0)
         {
-            throw new AppBadRequestException($"El producto con id '{repeatedProductId}' esta repetido en la campania.");
+            throw new AppBadRequestException($"El producto detalle con id '{repeatedProductDetailId}' esta repetido en la campania.");
         }
 
-        var productIds = products
-            .Select(product => product.ProductId)
+        var productDetailIds = products
+            .Select(product => product.ProductDetailId)
             .Distinct()
             .ToList();
 
-        var existingProductIds = await _context.Products
-            .Where(product => productIds.Contains(product.Id))
+        var existingProductDetailIds = await _context.ProductDetails
+            .Where(product => productDetailIds.Contains(product.Id))
             .Select(product => product.Id)
             .ToListAsync();
 
-        var missingProductId = productIds.Except(existingProductIds).FirstOrDefault();
+        var missingProductDetailId = productDetailIds.Except(existingProductDetailIds).FirstOrDefault();
 
-        if (missingProductId > 0)
+        if (missingProductDetailId > 0)
         {
-            throw new AppNotFoundException($"El producto con id '{missingProductId}' no existe.");
+            throw new AppNotFoundException($"El producto detalle con id '{missingProductDetailId}' no existe.");
         }
 
         var discountTypeIds = products

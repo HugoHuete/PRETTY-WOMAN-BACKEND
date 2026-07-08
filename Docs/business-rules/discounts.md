@@ -34,12 +34,12 @@ current_date <= end_date
 
 ## Regla: productos en promoción
 
-`discount_campaign_products` define qué productos participan en una campaña y qué descuento aplica.
+`discount_campaign_products` define que productos generales (`product_details`) participan en una campania y que descuento aplica.
 
 Cada registro debe indicar:
 
 - campaña
-- producto o producto general según la decisión final del modelo
+- producto general (`product_detail_id`)
 - tipo de descuento
 - valor del descuento
 
@@ -51,14 +51,14 @@ Tipos sugeridos:
 
 ## Regla: evitar promociones traslapadas
 
-Un producto no debería tener dos promociones activas al mismo tiempo.
+Un producto general no deberia tener dos promociones activas al mismo tiempo.
 
 La primera versión puede validar esto desde la app antes de crear una promoción.
 
 Regla recomendada:
 
 ```txt
-No permitir dos descuentos activos para el mismo producto en rangos de fecha que se traslapan.
+No permitir dos descuentos activos para el mismo producto general (`product_detail_id`) en rangos de fecha que se traslapan.
 ```
 
 Si en el futuro se decide permitirlo, debe existir una regla de prioridad clara.
