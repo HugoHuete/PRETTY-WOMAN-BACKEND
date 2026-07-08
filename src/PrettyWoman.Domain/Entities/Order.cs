@@ -28,5 +28,6 @@ public class Order : IAuditableEntity
     public OrderStatus? OrderStatus { get; set; }
     public Supplier? Supplier { get; set; }
     public ICollection<OrderTrackingNumber> OrderTrackingNumbers { get; set; } = [];
+    public ICollection<ProductReceipt> ProductReceipts { get; set; } = [];
     public ICollection<Product> Products { get; set; } = [];
 }

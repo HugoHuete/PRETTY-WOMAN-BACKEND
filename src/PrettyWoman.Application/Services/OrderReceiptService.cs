@@ -34,6 +34,7 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
 
         var receipt = new ProductReceipt
         {
+            OrderId = order.Id,
             ReceivedDate = receiptDate
         };
 
@@ -89,6 +90,7 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
         return new OrderReceiptDTO
         {
             Id = receipt.Id,
+            OrderId = receipt.OrderId,
             ReceivedDate = receipt.ReceivedDate,
             CreatedAt = receipt.CreatedAt,
             WarehouseShippingCostUsd = warehouseShippingCostUsd,

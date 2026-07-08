@@ -8,6 +8,10 @@ public class ProductReceiptConfiguration : IEntityTypeConfiguration<ProductRecei
 {
     public void Configure(EntityTypeBuilder<ProductReceipt> builder)
     {
+        builder.HasOne(x => x.Order).WithMany(x => x.ProductReceipts).HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(x => x.OrderId);
+        builder.HasIndex(x => new { x.OrderId, x.ReceivedDate });
         builder.HasIndex(x => x.ReceivedDate);
         builder.HasIndex(x => x.CreatedAt);
     }

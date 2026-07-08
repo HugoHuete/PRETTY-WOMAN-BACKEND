@@ -49,6 +49,8 @@ public class OrderReceiptServiceTests
             .SingleAsync(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.Expense);
 
         Assert.Equal(productReceipt.Id, receipt.Id);
+        Assert.Equal(orderId, receipt.OrderId);
+        Assert.Equal(orderId, productReceipt.OrderId);
         Assert.Equal(10m, receipt.WarehouseShippingCostUsd);
         Assert.Equal(365m, receipt.WarehouseShippingCostNio);
         Assert.Equal((int)OrderStatusCode.PartiallyReceived, receipt.OrderStatusId);
