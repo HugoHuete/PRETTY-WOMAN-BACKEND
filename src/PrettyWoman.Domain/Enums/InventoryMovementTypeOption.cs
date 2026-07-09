@@ -1,4 +1,5 @@
-namespace PrettyWoman.Domain.Enums;
+﻿namespace PrettyWoman.Domain.Enums;
+
 public enum InventoryMovementTypeOption
 {
     PurchaseReceived = 1,
@@ -6,17 +7,19 @@ public enum InventoryMovementTypeOption
     SaleCancelled = 3,
     CustomerReturn = 4, // Devuelto
     ExchangeReturn = 5, // Cambiado
-    Damaged = 6,
-    Repaired = 7,
-    Lost = 8,
-    Found = 9,
-    Discarded = 10,
-    Donation = 11,
-    AdjustmentIncrease = 12,
-    AdjustmentDecrease = 13,
+
+    // Movimientos generados por ProductInventoryIssue. El detalle del motivo/resultado vive en el issue.
+    IssueOpened = 6,
+    IssueReturnedToAvailable = 7,
+    IssueRemovedFromInventory = 8,
 
     // Estas reservaciones sumas y restan a la cantidad "reservada"
-    ReservationCreated = 14,
-    ReservationReleased = 15,
-    ReservationConvertedToSale = 16
+    ReservationCreated = 9,
+    ReservationReleased = 10,
+    ReservationConvertedToSale = 11,
+
+    Donation = 12,
+    AdjustmentIncrease = 13,
+    AdjustmentDecrease = 14
+
 }
