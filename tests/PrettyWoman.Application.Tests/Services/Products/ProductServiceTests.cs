@@ -3,6 +3,7 @@ using PrettyWoman.Application.DTOs.Products;
 using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Services;
 using PrettyWoman.Domain.Entities;
+using PrettyWoman.Domain.Enums;
 using PrettyWoman.Infrastructure.Persistence;
 
 namespace PrettyWoman.Application.Tests.Services.Products;
@@ -53,7 +54,54 @@ public class ProductServiceTests
     }
 
     [Fact]
-    public async Task GetByIdAsync_ReturnsProductDetailWithProductsAndPrimaryImage()
+    public async Task GetAllAsync_FiltersByCode()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var service = CreateService(context);
+
+        var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1002 });
+
+        var productDetail = Assert.Single(result.Items);
+        Assert.Equal("Blusa satin", productDetail.Name);
+        Assert.Equal(1002, productDetail.Code);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_FiltersByDiscountCampaignId()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var service = CreateService(context);
+
+        var result = await service.GetAllAsync(new ProductQueryDTO { DiscountCampaignId = 2 });
+
+        var productDetail = Assert.Single(result.Items);
+        Assert.Equal("Blusa satin", productDetail.Name);
+        Assert.All(productDetail.Products, product => Assert.Null(product.DiscountedSalePrice));
+    }
+
+    [Fact]
+    public async Task GetAllAsync_ReturnsOnlyActiveDiscountedPrice()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var service = CreateService(context);
+
+        var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1001 });
+
+        var productDetail = Assert.Single(result.Items);
+        Assert.All(productDetail.Products, product =>
+        {
+            Assert.Equal(650m, product.SalePrice);
+            Assert.Equal(585m, product.DiscountedSalePrice);
+            Assert.Equal(1, product.DiscountCampaignId);
+            Assert.Equal("Promo vigente", product.DiscountCampaignName);
+        });
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_ReturnsProductDetailWithProductsPrimaryImageAndDiscountedPrice()
     {
         await using var context = CreateContext();
         await SeedProductsAsync(context);
@@ -70,6 +118,7 @@ public class ProductServiceTests
         Assert.Equal("Ropa", result.CategoryName);
         Assert.Equal("pantalon-primary.jpg", result.PrimaryImageUrl);
         Assert.Equal(2, result.Products.Count);
+        Assert.All(result.Products, product => Assert.Equal(585m, product.DiscountedSalePrice));
     }
 
     [Fact]
@@ -148,6 +197,44 @@ public class ProductServiceTests
         };
 
         context.ProductDetails.AddRange(pants, blouse, shoes);
+
+        var now = DateTime.UtcNow;
+        context.DiscountCampaigns.AddRange(
+            new DiscountCampaign
+            {
+                Id = 1,
+                Name = "Promo vigente",
+                StartDate = now.AddDays(-1),
+                EndDate = now.AddDays(1),
+                Enabled = true,
+                DiscountCampaignProducts =
+                [
+                    new DiscountCampaignProduct
+                    {
+                        ProductDetail = pants,
+                        DiscountTypeId = (int)DiscountTypeOption.Percentage,
+                        DiscountValue = 10m
+                    }
+                ]
+            },
+            new DiscountCampaign
+            {
+                Id = 2,
+                Name = "Promo futura",
+                StartDate = now.AddDays(1),
+                EndDate = now.AddDays(2),
+                Enabled = true,
+                DiscountCampaignProducts =
+                [
+                    new DiscountCampaignProduct
+                    {
+                        ProductDetail = blouse,
+                        DiscountTypeId = (int)DiscountTypeOption.FixedPrice,
+                        DiscountValue = 300m
+                    }
+                ]
+            });
+
         await context.SaveChangesAsync();
     }
 

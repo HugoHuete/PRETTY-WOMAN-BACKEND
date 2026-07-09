@@ -14,4 +14,7 @@ public class ProductVariantDTO
     public int ReservedQuantity { get; set; }
     public int UnavailableQuantity { get; set; }
     public decimal SalePrice { get; set; }
+    public decimal? DiscountedSalePrice { get; set; }
+    public int? DiscountCampaignId { get; set; }
+    public string? DiscountCampaignName { get; set; }
 }

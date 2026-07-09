@@ -4,6 +4,7 @@ using PrettyWoman.Application.DTOs.Products;
 using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Interfaces;
 using PrettyWoman.Domain.Entities;
+using PrettyWoman.Domain.Enums;
 
 namespace PrettyWoman.Application.Services;
 
@@ -22,55 +23,25 @@ public class ProductService(IApplicationDbContext context) : IProductService
         productDetailsQuery = ApplyProductDetailFilters(productDetailsQuery, query);
 
         var totalCount = await productDetailsQuery.CountAsync();
-        var items = await productDetailsQuery
+        var productDetails = await productDetailsQuery
+            .Include(productDetail => productDetail.Subcategory)
+                .ThenInclude(subcategory => subcategory!.Category)
+            .Include(productDetail => productDetail.ProductImages)
+            .Include(productDetail => productDetail.DiscountCampaignProducts)
+                .ThenInclude(discount => discount.DiscountCampaign)
+            .Include(productDetail => productDetail.Products)
+                .ThenInclude(product => product.Size)
+                    .ThenInclude(size => size!.SizeGroup)
             .OrderBy(productDetail => productDetail.Name)
             .ThenBy(productDetail => productDetail.Code)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
-            .Select(productDetail => new ProductDetailDTO
-            {
-                Id = productDetail.Id,
-                SupplierProductCode = productDetail.SupplierProductCode,
-                Code = productDetail.Code,
-                Name = productDetail.Name,
-                SubcategoryId = productDetail.SubcategoryId,
-                SubcategoryName = productDetail.Subcategory != null ? productDetail.Subcategory.Name : null,
-                CategoryId = productDetail.Subcategory != null ? productDetail.Subcategory.CategoryId : null,
-                CategoryName = productDetail.Subcategory != null && productDetail.Subcategory.Category != null
-                    ? productDetail.Subcategory.Category.Name
-                    : null,
-                PrimaryImageUrl = productDetail.ProductImages
-                    .OrderByDescending(image => image.IsPrimary)
-                    .ThenBy(image => image.SortOrder)
-                    .Select(image => image.ImageUrl)
-                    .FirstOrDefault(),
-                Products = productDetail.Products
-                    .Where(product =>
-                        (!query.SizeId.HasValue || product.SizeId == query.SizeId.Value) &&
-                        (!query.Availability.HasValue ||
-                            (query.Availability.Value == ProductAvailabilityFilter.Available && product.AvailableQuantity > 0) ||
-                            (query.Availability.Value == ProductAvailabilityFilter.Reserved && product.ReservedQuantity > 0) ||
-                            (query.Availability.Value == ProductAvailabilityFilter.Unavailable && product.UnavailableQuantity > 0)))
-                    .OrderBy(product => product.Size != null ? product.Size.DisplayOrder : 0)
-                    .ThenBy(product => product.Color)
-                    .Select(product => new ProductVariantDTO
-                    {
-                        Id = product.Id,
-                        SizeId = product.SizeId,
-                        SizeName = product.Size != null ? product.Size.Name : null,
-                        SizeGroupId = product.Size != null ? product.Size.SizeGroupId : null,
-                        SizeGroupName = product.Size != null && product.Size.SizeGroup != null ? product.Size.SizeGroup.Name : null,
-                        Color = product.Color,
-                        Quantity = product.Quantity,
-                        ReceivedQuantity = product.ReceivedQuantity,
-                        AvailableQuantity = product.AvailableQuantity,
-                        ReservedQuantity = product.ReservedQuantity,
-                        UnavailableQuantity = product.UnavailableQuantity,
-                        SalePrice = product.SalePrice
-                    })
-                    .ToList()
-            })
             .ToListAsync();
+
+        var now = DateTime.UtcNow;
+        var items = productDetails
+            .Select(productDetail => MapProductDetail(productDetail, query, now))
+            .ToList();
 
         return new PaginatedResult<ProductDetailDTO>
         {
@@ -85,52 +56,33 @@ public class ProductService(IApplicationDbContext context) : IProductService
     {
         var productDetail = await _context.ProductDetails
             .AsNoTracking()
-            .Where(productDetail => productDetail.Id == id)
-            .Select(productDetail => new ProductDetailDTO
-            {
-                Id = productDetail.Id,
-                SupplierProductCode = productDetail.SupplierProductCode,
-                Code = productDetail.Code,
-                Name = productDetail.Name,
-                SubcategoryId = productDetail.SubcategoryId,
-                SubcategoryName = productDetail.Subcategory != null ? productDetail.Subcategory.Name : null,
-                CategoryId = productDetail.Subcategory != null ? productDetail.Subcategory.CategoryId : null,
-                CategoryName = productDetail.Subcategory != null && productDetail.Subcategory.Category != null
-                    ? productDetail.Subcategory.Category.Name
-                    : null,
-                PrimaryImageUrl = productDetail.ProductImages
-                    .OrderByDescending(image => image.IsPrimary)
-                    .ThenBy(image => image.SortOrder)
-                    .Select(image => image.ImageUrl)
-                    .FirstOrDefault(),
-                Products = productDetail.Products
-                    .OrderBy(product => product.Size != null ? product.Size.DisplayOrder : 0)
-                    .ThenBy(product => product.Color)
-                    .Select(product => new ProductVariantDTO
-                    {
-                        Id = product.Id,
-                        SizeId = product.SizeId,
-                        SizeName = product.Size != null ? product.Size.Name : null,
-                        SizeGroupId = product.Size != null ? product.Size.SizeGroupId : null,
-                        SizeGroupName = product.Size != null && product.Size.SizeGroup != null ? product.Size.SizeGroup.Name : null,
-                        Color = product.Color,
-                        Quantity = product.Quantity,
-                        ReceivedQuantity = product.ReceivedQuantity,
-                        AvailableQuantity = product.AvailableQuantity,
-                        ReservedQuantity = product.ReservedQuantity,
-                        UnavailableQuantity = product.UnavailableQuantity,
-                        SalePrice = product.SalePrice
-                    })
-                    .ToList()
-            })
-            .FirstOrDefaultAsync()
+            .Include(productDetail => productDetail.Subcategory)
+                .ThenInclude(subcategory => subcategory!.Category)
+            .Include(productDetail => productDetail.ProductImages)
+            .Include(productDetail => productDetail.DiscountCampaignProducts)
+                .ThenInclude(discount => discount.DiscountCampaign)
+            .Include(productDetail => productDetail.Products)
+                .ThenInclude(product => product.Size)
+                    .ThenInclude(size => size!.SizeGroup)
+            .FirstOrDefaultAsync(productDetail => productDetail.Id == id)
             ?? throw new AppNotFoundException($"El producto con id '{id}' no existe.");
 
-        return productDetail;
+        return MapProductDetail(productDetail, new ProductQueryDTO(), DateTime.UtcNow);
     }
 
     private static IQueryable<ProductDetail> ApplyProductDetailFilters(IQueryable<ProductDetail> query, ProductQueryDTO filters)
     {
+        if (filters.Code.HasValue)
+        {
+            query = query.Where(productDetail => productDetail.Code == filters.Code.Value);
+        }
+
+        if (filters.DiscountCampaignId.HasValue)
+        {
+            query = query.Where(productDetail => productDetail.DiscountCampaignProducts
+                .Any(discount => discount.DiscountCampaignId == filters.DiscountCampaignId.Value));
+        }
+
         if (filters.CategoryId.HasValue)
         {
             query = query.Where(productDetail =>
@@ -156,6 +108,91 @@ public class ProductService(IApplicationDbContext context) : IProductService
         return query;
     }
 
+    private static ProductDetailDTO MapProductDetail(ProductDetail productDetail, ProductQueryDTO query, DateTime now)
+    {
+        return new ProductDetailDTO
+        {
+            Id = productDetail.Id,
+            SupplierProductCode = productDetail.SupplierProductCode,
+            Code = productDetail.Code,
+            Name = productDetail.Name,
+            SubcategoryId = productDetail.SubcategoryId,
+            SubcategoryName = productDetail.Subcategory?.Name,
+            CategoryId = productDetail.Subcategory?.CategoryId,
+            CategoryName = productDetail.Subcategory?.Category?.Name,
+            PrimaryImageUrl = productDetail.ProductImages
+                .OrderByDescending(image => image.IsPrimary)
+                .ThenBy(image => image.SortOrder)
+                .Select(image => image.ImageUrl)
+                .FirstOrDefault(),
+            Products = productDetail.Products
+                .Where(product =>
+                    (!query.SizeId.HasValue || product.SizeId == query.SizeId.Value) &&
+                    (!query.Availability.HasValue ||
+                        (query.Availability.Value == ProductAvailabilityFilter.Available && product.AvailableQuantity > 0) ||
+                        (query.Availability.Value == ProductAvailabilityFilter.Reserved && product.ReservedQuantity > 0) ||
+                        (query.Availability.Value == ProductAvailabilityFilter.Unavailable && product.UnavailableQuantity > 0)))
+                .OrderBy(product => product.Size?.DisplayOrder ?? 0)
+                .ThenBy(product => product.Color)
+                .Select(product => MapProductVariant(productDetail, product, now))
+                .ToList()
+        };
+    }
+
+    private static ProductVariantDTO MapProductVariant(ProductDetail productDetail, Product product, DateTime now)
+    {
+        var discount = GetBestActiveDiscount(productDetail, product.SalePrice, now);
+
+        return new ProductVariantDTO
+        {
+            Id = product.Id,
+            SizeId = product.SizeId,
+            SizeName = product.Size?.Name,
+            SizeGroupId = product.Size?.SizeGroupId,
+            SizeGroupName = product.Size?.SizeGroup?.Name,
+            Color = product.Color,
+            Quantity = product.Quantity,
+            ReceivedQuantity = product.ReceivedQuantity,
+            AvailableQuantity = product.AvailableQuantity,
+            ReservedQuantity = product.ReservedQuantity,
+            UnavailableQuantity = product.UnavailableQuantity,
+            SalePrice = product.SalePrice,
+            DiscountedSalePrice = discount?.DiscountedSalePrice,
+            DiscountCampaignId = discount?.CampaignId,
+            DiscountCampaignName = discount?.CampaignName
+        };
+    }
+
+    private static ActiveDiscountDTO? GetBestActiveDiscount(ProductDetail productDetail, decimal salePrice, DateTime now)
+    {
+        return productDetail.DiscountCampaignProducts
+            .Where(discount =>
+                discount.DiscountCampaign is { Enabled: true } &&
+                discount.DiscountCampaign.StartDate <= now &&
+                discount.DiscountCampaign.EndDate >= now)
+            .Select(discount => new ActiveDiscountDTO(
+                discount.DiscountCampaignId,
+                discount.DiscountCampaign!.Name,
+                CalculateDiscountedPrice(salePrice, discount.DiscountTypeId, discount.DiscountValue)))
+            .Where(discount => discount.DiscountedSalePrice < salePrice)
+            .OrderBy(discount => discount.DiscountedSalePrice)
+            .ThenBy(discount => discount.CampaignId)
+            .FirstOrDefault();
+    }
+
+    private static decimal CalculateDiscountedPrice(decimal salePrice, int discountTypeId, decimal discountValue)
+    {
+        var discountedPrice = (DiscountTypeOption)discountTypeId switch
+        {
+            DiscountTypeOption.FixedAmount => salePrice - discountValue,
+            DiscountTypeOption.Percentage => salePrice * (1 - discountValue / 100),
+            DiscountTypeOption.FixedPrice => discountValue,
+            _ => salePrice
+        };
+
+        return Math.Round(Math.Max(0, discountedPrice), 2, MidpointRounding.AwayFromZero);
+    }
+
     private static void NormalizePagination(ProductQueryDTO query)
     {
         if (query.Page <= 0)
@@ -173,4 +210,6 @@ public class ProductService(IApplicationDbContext context) : IProductService
             query.PageSize = 100;
         }
     }
+
+    private sealed record ActiveDiscountDTO(int CampaignId, string CampaignName, decimal DiscountedSalePrice);
 }
