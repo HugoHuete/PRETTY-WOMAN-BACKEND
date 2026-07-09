@@ -68,8 +68,8 @@ Puede trabajar con:
 | Autenticacion | Login | Admin, Vendedor | Iniciar sesion | Credenciales | `POST /api/v1/auth/login` |
 | Autenticacion | Usuarios | Admin | Crear usuario, desbloquear usuario | Usuarios, roles/permisos | `POST /api/v1/auth/users`, `POST /api/v1/auth/users/{id}/unlock` |
 | Dashboard | Resumen | Admin, Vendedor | Ver ventas, pagos, stock y alertas | Balance, movimientos, ventas, inventario | Pendiente de endpoint especifico |
-| Productos | Lista de productos | Admin, Vendedor | Buscar, filtrar, paginar, abrir detalle | Productos, categoria, subcategoria, talla, stock | `GET /api/v1/products` |
-| Productos | Detalle de producto | Admin, Vendedor | Ver informacion completa y disponibilidad | Producto, variantes/detalle, stock | `GET /api/v1/products/{id}` |
+| Productos | Lista de productos | Admin, Vendedor | Buscar, filtrar, paginar, abrir detalle | Productos, categoria, subcategoria, talla, stock | `GET /api/v1/product-details` |
+| Productos | Detalle de producto | Admin, Vendedor | Ver informacion completa y disponibilidad | Producto, variantes/detalle, stock | `GET /api/v1/product-details/{productDetailId}` |
 | Catalogos | Categorias | Admin | Listar, crear, editar | Categorias | `GET /api/v1/categories`, `POST /api/v1/categories`, `PUT /api/v1/categories/{id}` |
 | Catalogos | Subcategorias | Admin | Listar, filtrar por categoria, crear, editar | Subcategorias, categorias | `GET /api/v1/subcategories`, `GET /api/v1/categories/{id}/subcategories`, `POST /api/v1/subcategories`, `PUT /api/v1/subcategories/{id}` |
 | Catalogos | Tallas | Admin | Listar, crear, editar | Tallas | `GET /api/v1/sizes`, `POST /api/v1/sizes`, `PUT /api/v1/sizes/{id}` |

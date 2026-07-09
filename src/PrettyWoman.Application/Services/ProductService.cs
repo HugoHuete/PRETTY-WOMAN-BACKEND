@@ -70,6 +70,70 @@ public class ProductService(IApplicationDbContext context) : IProductService
         return MapProductDetail(productDetail, new ProductQueryDTO(), DateTime.UtcNow);
     }
 
+    public async Task<IEnumerable<ProductInventoryMovementDTO>> GetInventoryMovementsAsync(int productDetailId, int? productId = null)
+    {
+        var productDetailExists = await _context.ProductDetails
+            .AsNoTracking()
+            .AnyAsync(productDetail => productDetail.Id == productDetailId);
+
+        if (!productDetailExists)
+        {
+            throw new AppNotFoundException($"El producto con id '{productDetailId}' no existe.");
+        }
+
+        if (productId.HasValue)
+        {
+            var productBelongsToProductDetail = await _context.Products
+                .AsNoTracking()
+                .AnyAsync(product => product.Id == productId.Value && product.ProductDetailId == productDetailId);
+
+            if (!productBelongsToProductDetail)
+            {
+                throw new AppNotFoundException($"La variante con id '{productId.Value}' no existe para el producto con id '{productDetailId}'.");
+            }
+        }
+
+        var movementsQuery = _context.InventoryMovements
+            .AsNoTracking()
+            .Where(movement => movement.Product != null && movement.Product.ProductDetailId == productDetailId);
+
+        if (productId.HasValue)
+        {
+            movementsQuery = movementsQuery.Where(movement => movement.ProductId == productId.Value);
+        }
+
+        return await movementsQuery
+            .OrderByDescending(movement => movement.MovementDate)
+            .ThenByDescending(movement => movement.CreatedAt)
+            .ThenByDescending(movement => movement.Id)
+            .Select(movement => new ProductInventoryMovementDTO
+            {
+                Id = movement.Id,
+                ProductId = movement.ProductId,
+                ProductDetailId = movement.Product!.ProductDetailId,
+                ProductName = movement.Product.ProductDetail != null ? movement.Product.ProductDetail.Name : null,
+                ProductCode = movement.Product.ProductDetail != null ? movement.Product.ProductDetail.Code : null,
+                SizeId = movement.Product.SizeId,
+                SizeName = movement.Product.Size != null ? movement.Product.Size.Name : null,
+                Color = movement.Product.Color,
+                MovementDate = movement.MovementDate,
+                InventoryMovementTypeId = movement.InventoryMovementTypeId,
+                InventoryMovementTypeName = movement.InventoryMovementType != null ? movement.InventoryMovementType.Name : null,
+                FromStockBucketId = movement.FromStockBucketId,
+                FromStockBucketName = movement.FromStockBucket != null ? movement.FromStockBucket.Name : null,
+                ToStockBucketId = movement.ToStockBucketId,
+                ToStockBucketName = movement.ToStockBucket != null ? movement.ToStockBucket.Name : null,
+                Quantity = movement.Quantity,
+                OrderId = movement.OrderId,
+                SaleProductId = movement.SaleProductId,
+                ProductHoldId = movement.ProductHoldId,
+                ProductInventoryIssueId = movement.ProductInventoryIssueId,
+                Comments = movement.Comments,
+                CreatedAt = movement.CreatedAt
+            })
+            .ToListAsync();
+    }
+
     private static IQueryable<ProductDetail> ApplyProductDetailFilters(IQueryable<ProductDetail> query, ProductQueryDTO filters)
     {
         if (filters.Code.HasValue)
