@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using PrettyWoman.Domain.Entities;
 
@@ -27,7 +27,7 @@ public class FinancialMovementConfiguration : IEntityTypeConfiguration<Financial
         builder.HasIndex(x => x.FinancialMovementTypeId);
         builder.HasIndex(x => x.ExpenseCategoryId);
         builder.HasIndex(x => x.OrderId);
-        builder.HasIndex(x => x.SalePaymentMovementId);
+        builder.HasIndex(x => x.SalePaymentMovementId).IsUnique().HasFilter("sale_payment_movement_id IS NOT NULL");
         builder.HasIndex(x => x.LoanId);
         builder.HasIndex(x => x.LoanPaymentId);
         builder.HasIndex(x => new { x.FinancialMovementTypeId, x.MovementDate });
@@ -35,13 +35,8 @@ public class FinancialMovementConfiguration : IEntityTypeConfiguration<Financial
 
         builder.ToTable(t =>
         {
-            t.HasCheckConstraint(
-                "ck_financial_movements_amount_positive",
-                "amount > 0");
-            t.HasCheckConstraint(
-                "ck_financial_movements_exchange_rate_positive",
-                "exchange_rate > 0");
+            t.HasCheckConstraint("ck_financial_movements_amount_positive", "amount > 0");
+            t.HasCheckConstraint("ck_financial_movements_exchange_rate_positive", "exchange_rate > 0");
         });
     }
 }
-

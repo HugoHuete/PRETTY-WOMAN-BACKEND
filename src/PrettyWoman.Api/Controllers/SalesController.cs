@@ -46,25 +46,30 @@ public class SalesController(ISaleService saleService) : ControllerBase
     }
 
     [HttpPost("{id:int}/payment-movements")]
-    public async Task<ActionResult<int>> AddPaymentMovement(int id, [FromBody] CreateSalePaymentMovementDTO createPaymentMovementDTO)
+    public async Task<ActionResult<int>> AddPaymentMovement(int id, [FromBody] CreateSalePaymentMovementDTO paymentMovement)
     {
-        var paymentMovementId = await _saleService.AddPaymentMovementAsync(id, createPaymentMovementDTO);
+        var paymentMovementId = await _saleService.AddPaymentMovementAsync(id, paymentMovement);
         return CreatedAtAction(nameof(GetById), new { id }, paymentMovementId);
     }
 
     [HttpPatch("{id:int}/payment-movements/{paymentMovementId:int}")]
-    public async Task<IActionResult> UpdatePaymentMovement(int id, int paymentMovementId, [FromBody] UpdateSalePaymentMovementDTO updatePaymentMovementDTO)
+    public async Task<IActionResult> UpdatePaymentMovement(int id, int paymentMovementId, [FromBody] UpdateSalePaymentMovementDTO paymentMovement)
     {
-        await _saleService.UpdatePaymentMovementAsync(id, paymentMovementId, updatePaymentMovementDTO);
+        await _saleService.UpdatePaymentMovementAsync(id, paymentMovementId, paymentMovement);
+        return NoContent();
+    }
+
+    [HttpPost("{id:int}/payment-movements/adjustments")]
+    public async Task<IActionResult> AdjustPaymentMovements(int id, [FromBody] AdjustSalePaymentMovementsDTO adjustment)
+    {
+        await _saleService.AdjustPaymentMovementsAsync(id, adjustment);
         return NoContent();
     }
 
     [HttpPost("{id:int}/payment-movements/{paymentMovementId:int}/refunds")]
-    public async Task<ActionResult<int>> RefundPaymentMovement(int id, int paymentMovementId, [FromBody] RefundSalePaymentMovementDTO refundPaymentMovementDTO)
+    public async Task<ActionResult<int>> RefundPaymentMovement(int id, int paymentMovementId, [FromBody] RefundSalePaymentMovementDTO refund)
     {
-        var refundPaymentMovementId = await _saleService.RefundPaymentMovementAsync(id, paymentMovementId, refundPaymentMovementDTO);
+        var refundPaymentMovementId = await _saleService.RefundPaymentMovementAsync(id, paymentMovementId, refund);
         return CreatedAtAction(nameof(GetById), new { id }, refundPaymentMovementId);
     }
 }
-
-
