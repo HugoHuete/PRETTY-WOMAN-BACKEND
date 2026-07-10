@@ -44,6 +44,27 @@ public class SalesController(ISaleService saleService) : ControllerBase
         await _saleService.ReplaceProductsAsync(id, replaceSaleProductsDTO);
         return NoContent();
     }
+
+    [HttpPost("{id:int}/payment-movements")]
+    public async Task<ActionResult<int>> AddPaymentMovement(int id, [FromBody] CreateSalePaymentMovementDTO createPaymentMovementDTO)
+    {
+        var paymentMovementId = await _saleService.AddPaymentMovementAsync(id, createPaymentMovementDTO);
+        return CreatedAtAction(nameof(GetById), new { id }, paymentMovementId);
+    }
+
+    [HttpPatch("{id:int}/payment-movements/{paymentMovementId:int}")]
+    public async Task<IActionResult> UpdatePaymentMovement(int id, int paymentMovementId, [FromBody] UpdateSalePaymentMovementDTO updatePaymentMovementDTO)
+    {
+        await _saleService.UpdatePaymentMovementAsync(id, paymentMovementId, updatePaymentMovementDTO);
+        return NoContent();
+    }
+
+    [HttpPost("{id:int}/payment-movements/{paymentMovementId:int}/refunds")]
+    public async Task<ActionResult<int>> RefundPaymentMovement(int id, int paymentMovementId, [FromBody] RefundSalePaymentMovementDTO refundPaymentMovementDTO)
+    {
+        var refundPaymentMovementId = await _saleService.RefundPaymentMovementAsync(id, paymentMovementId, refundPaymentMovementDTO);
+        return CreatedAtAction(nameof(GetById), new { id }, refundPaymentMovementId);
+    }
 }
 
 

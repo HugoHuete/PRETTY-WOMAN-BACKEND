@@ -108,3 +108,8 @@ uploads/
 wwwroot/uploads/
 wwwroot/generated/
 prueba.json
+
+
+# Local CodeGraph index
+.codegraph/
+.codegraph-*/

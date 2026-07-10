@@ -43,8 +43,8 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
         var products = await LoadSaleProductsAsync(createSaleDTO.Products);
         var saleProducts = CreateSaleProducts(createSaleDTO.Products, products);
         var payments = await CreateSalePaymentMovementsAsync(createSaleDTO.PaymentMovements);
-        var totals = CalculateSaleTotals(saleProducts, payments);
-        var paymentTotal = payments.Sum(payment => payment.GrossAmount);
+        var totals = CalculateSaleTotals(saleProducts);
+        var paymentTotal = CalculatePaymentTotal(payments);
         var exchangeRate = payments.Count == 0 ? 0 : await GetCurrentExchangeRateAsync();
 
         EnsurePaymentRules(createSaleDTO.SaleChannelId, totals.Total, paymentTotal);
@@ -73,7 +73,7 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
 
         foreach (var payment in sale.PaymentMovements)
         {
-            await _context.FinancialMovements.AddAsync(CreateSalePaymentMovement(payment, exchangeRate));
+            await _context.FinancialMovements.AddAsync(CreateFinancialMovementForSalePaymentMovement(payment, exchangeRate));
         }
 
         await _context.Sales.AddAsync(sale);
@@ -93,7 +93,7 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
         var saleChannelId = patchSaleHeaderDTO.HasSaleChannelId
             ? patchSaleHeaderDTO.SaleChannelId!.Value
             : sale.SaleChannelId;
-        var paymentTotal = sale.PaymentMovements.Sum(payment => payment.GrossAmount);
+        var paymentTotal = CalculatePaymentTotal(sale.PaymentMovements);
         EnsurePaymentRules(saleChannelId, sale.Total, paymentTotal, allowOverpayment: true);
 
         if (patchSaleHeaderDTO.HasSaleDate)
@@ -145,9 +145,9 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
 
         var products = await LoadSaleProductsAsync(replaceSaleProductsDTO.Products);
         var saleProducts = CreateSaleProducts(replaceSaleProductsDTO.Products, products);
-        var totals = CalculateSaleTotals(saleProducts, []);
+        var totals = CalculateSaleTotals(saleProducts);
 
-        var paymentTotal = sale.PaymentMovements.Sum(payment => payment.GrossAmount);
+        var paymentTotal = CalculatePaymentTotal(sale.PaymentMovements);
         EnsurePaymentRules(sale.SaleChannelId, totals.Total, paymentTotal, allowOverpayment: true);
 
         sale.SalePaymentStatusId = ResolvePaymentStatus(totals.Total, paymentTotal);
@@ -162,6 +162,75 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
         }
 
         await _context.SaveChangesAsync();
+    }
+
+    public async Task<int> AddPaymentMovementAsync(int saleId, CreateSalePaymentMovementDTO createPaymentMovementDTO)
+    {
+        await ValidatePaymentRequestAsync(createPaymentMovementDTO);
+
+        var sale = await GetSaleWithDetailsAsync(saleId, asNoTracking: false);
+        EnsureSalePaymentMovementsCanBeChanged(sale);
+
+        var payment = await CreateSalePaymentMovementAsync(createPaymentMovementDTO);
+        var paymentTotal = CalculatePaymentTotal(sale.PaymentMovements) + payment.GrossAmount;
+        EnsurePaymentRules(sale.SaleChannelId, sale.Total, paymentTotal);
+
+        sale.PaymentMovements.Add(payment);
+        sale.SalePaymentStatusId = ResolvePaymentStatus(sale.Total, paymentTotal);
+
+        var exchangeRate = await GetCurrentExchangeRateAsync();
+        await _context.FinancialMovements.AddAsync(CreateFinancialMovementForSalePaymentMovement(payment, exchangeRate));
+        await _context.SaveChangesAsync();
+
+        return payment.Id;
+    }
+
+    public async Task UpdatePaymentMovementAsync(int saleId, int paymentMovementId, UpdateSalePaymentMovementDTO updatePaymentMovementDTO)
+    {
+        await ValidatePaymentRequestAsync(updatePaymentMovementDTO);
+
+        var sale = await GetSaleWithDetailsAsync(saleId, asNoTracking: false);
+        EnsureSalePaymentMovementsCanBeChanged(sale);
+
+        var payment = GetSalePaymentMovement(sale, paymentMovementId);
+        EnsureSalePaymentMovementCanBeUpdated(payment);
+
+        var currentPaymentTotal = CalculatePaymentTotal(sale.PaymentMovements);
+        var updatedPaymentTotal = currentPaymentTotal - payment.GrossAmount + updatePaymentMovementDTO.GrossAmount;
+        EnsurePaymentRules(sale.SaleChannelId, sale.Total, updatedPaymentTotal);
+
+        await ApplyPaymentAmountsAsync(
+            payment,
+            updatePaymentMovementDTO.MovementDate,
+            updatePaymentMovementDTO.PaymentMethodId,
+            updatePaymentMovementDTO.PaymentTerminalId,
+            updatePaymentMovementDTO.GrossAmount);
+
+        sale.SalePaymentStatusId = ResolvePaymentStatus(sale.Total, updatedPaymentTotal);
+        await SyncFinancialMovementAsync(payment);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<int> RefundPaymentMovementAsync(int saleId, int paymentMovementId, RefundSalePaymentMovementDTO refundPaymentMovementDTO)
+    {
+        var sale = await GetSaleWithDetailsAsync(saleId, asNoTracking: false);
+        EnsureSalePaymentMovementsCanBeChanged(sale);
+
+        var originalPayment = GetSalePaymentMovement(sale, paymentMovementId);
+        EnsureSalePaymentMovementCanBeRefunded(originalPayment);
+
+        var refund = await CreateRefundPaymentMovementAsync(originalPayment, refundPaymentMovementDTO);
+        var paymentTotal = CalculatePaymentTotal(sale.PaymentMovements) - refund.GrossAmount;
+        EnsureRefundDoesNotBreakInStorePaymentRule(sale, paymentTotal);
+
+        sale.PaymentMovements.Add(refund);
+        sale.SalePaymentStatusId = ResolvePaymentStatus(sale.Total, paymentTotal);
+
+        var exchangeRate = await GetCurrentExchangeRateAsync();
+        await _context.FinancialMovements.AddAsync(CreateFinancialMovementForSalePaymentMovement(refund, exchangeRate));
+        await _context.SaveChangesAsync();
+
+        return refund.Id;
     }
 
     private async Task<Sale> GetSaleWithDetailsAsync(int id, bool asNoTracking)
@@ -183,6 +252,8 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
                 .ThenInclude(payment => payment.PaymentMethod)
             .Include(sale => sale.PaymentMovements)
                 .ThenInclude(payment => payment.PaymentTerminal)
+            .Include(sale => sale.PaymentMovements)
+                .ThenInclude(payment => payment.ReversalMovements)
             .Include(sale => sale.Deliveries)
             .AsQueryable();
 
@@ -301,22 +372,32 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
     {
         foreach (var payment in payments)
         {
-            if (payment.GrossAmount <= 0)
-            {
-                throw new AppBadRequestException("El monto de cada pago debe ser mayor que cero.");
-            }
-
-            if (!await _context.PaymentMethods.AnyAsync(method => method.Id == payment.PaymentMethodId))
-            {
-                throw new AppNotFoundException($"El metodo de pago con id '{payment.PaymentMethodId}' no existe.");
-            }
-
-            if (payment.PaymentTerminalId.HasValue &&
-                !await _context.PaymentTerminals.AnyAsync(terminal => terminal.Id == payment.PaymentTerminalId.Value && terminal.Enabled))
-            {
-                throw new AppBadRequestException($"La terminal de pago con id '{payment.PaymentTerminalId.Value}' no existe o no esta habilitada.");
-            }
+            await ValidatePaymentRequestAsync(payment);
         }
+    }
+
+    private async Task ValidatePaymentRequestAsync(CreateSalePaymentMovementDTO payment)
+    {
+        await ValidatePaymentDataAsync(payment.PaymentMethodId, payment.PaymentTerminalId, payment.GrossAmount);
+    }
+
+    private async Task ValidatePaymentRequestAsync(UpdateSalePaymentMovementDTO payment)
+    {
+        await ValidatePaymentDataAsync(payment.PaymentMethodId, payment.PaymentTerminalId, payment.GrossAmount);
+    }
+
+    private async Task ValidatePaymentDataAsync(int paymentMethodId, int? paymentTerminalId, decimal grossAmount)
+    {
+        if (grossAmount <= 0)
+        {
+            throw new AppBadRequestException("El monto de cada pago debe ser mayor que cero.");
+        }
+
+        if (!await _context.PaymentMethods.AnyAsync(method => method.Id == paymentMethodId))
+        {
+            throw new AppNotFoundException($"El metodo de pago con id '{paymentMethodId}' no existe.");
+        }
+
     }
 
     private async Task<List<Product>> LoadSaleProductsAsync(List<CreateSaleProductDTO> productRequests)
@@ -383,50 +464,157 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
 
     private async Task<List<SalePaymentMovement>> CreateSalePaymentMovementsAsync(List<CreateSalePaymentMovementDTO> paymentRequests)
     {
-        var terminalIds = paymentRequests
-            .Where(payment => payment.PaymentTerminalId.HasValue)
-            .Select(payment => payment.PaymentTerminalId!.Value)
-            .Distinct()
-            .ToList();
-
-        var terminals = terminalIds.Count == 0
-            ? []
-            : await _context.PaymentTerminals
-                .Where(terminal => terminalIds.Contains(terminal.Id))
-                .ToListAsync();
-
-        return paymentRequests.Select(paymentRequest =>
+        var payments = new List<SalePaymentMovement>();
+        foreach (var paymentRequest in paymentRequests)
         {
-            var terminal = paymentRequest.PaymentTerminalId.HasValue
-                ? terminals.First(item => item.Id == paymentRequest.PaymentTerminalId.Value)
-                : null;
+            payments.Add(await CreateSalePaymentMovementAsync(paymentRequest));
+        }
 
-            var commissionAmount = terminal is null
-                ? 0
-                : Math.Round(paymentRequest.GrossAmount * terminal.ComissionPercentage / 100, 2);
-            
-            // The income tax is calculated on the amount after deducting the commission from the gross amount.
-            var incomeTaxAmount = terminal is null
-                ? 0
-                : Math.Round((paymentRequest.GrossAmount - commissionAmount) * terminal.IncomeTaxPercentage / 100, 2);
-
-            return new SalePaymentMovement
-            {
-                MovementDate = paymentRequest.MovementDate ?? DateTime.UtcNow,
-                PaymentMethodId = paymentRequest.PaymentMethodId,
-                PaymentTerminalId = paymentRequest.PaymentTerminalId,
-                GrossAmount = paymentRequest.GrossAmount,
-                CommissionPercentage = terminal?.ComissionPercentage ?? 0,
-                CommissionAmount = commissionAmount,
-                IncomeTaxPercentage = terminal?.IncomeTaxPercentage ?? 0,
-                IncomeTaxAmount = incomeTaxAmount,
-                NetReceivedAmount = paymentRequest.GrossAmount - commissionAmount - incomeTaxAmount,
-                UserId = ResolveUserId()
-            };
-        }).ToList();
+        return payments;
     }
 
-    private static SaleTotals CalculateSaleTotals(List<SaleProduct> products, List<SalePaymentMovement> payments)
+    private async Task<SalePaymentMovement> CreateSalePaymentMovementAsync(CreateSalePaymentMovementDTO paymentRequest)
+    {
+        var payment = new SalePaymentMovement
+        {
+            MovementDirectionId = (int)MovementDirectionOptions.In,
+            UserId = ResolveUserId()
+        };
+
+        await ApplyPaymentAmountsAsync(
+            payment,
+            paymentRequest.MovementDate,
+            paymentRequest.PaymentMethodId,
+            paymentRequest.PaymentTerminalId,
+            paymentRequest.GrossAmount);
+
+        return payment;
+    }
+
+    private async Task ApplyPaymentAmountsAsync(
+        SalePaymentMovement payment,
+        DateTime? movementDate,
+        int paymentMethodId,
+        int? paymentTerminalId,
+        decimal grossAmount)
+    {
+        var terminal = paymentTerminalId.HasValue
+            ? await _context.PaymentTerminals.FirstAsync(item => item.Id == paymentTerminalId.Value)
+            : null;
+
+        var commissionAmount = terminal is null
+            ? 0
+            : Math.Round(grossAmount * terminal.ComissionPercentage / 100, 2);
+        var incomeTaxAmount = terminal is null
+            ? 0
+            : Math.Round((grossAmount - commissionAmount) * terminal.IncomeTaxPercentage / 100, 2);
+
+        payment.MovementDate = movementDate ?? DateTime.UtcNow;
+        payment.PaymentMethodId = paymentMethodId;
+        payment.PaymentTerminalId = paymentTerminalId;
+        payment.GrossAmount = grossAmount;
+        payment.CommissionPercentage = terminal?.ComissionPercentage ?? 0;
+        payment.CommissionAmount = commissionAmount;
+        payment.IncomeTaxPercentage = terminal?.IncomeTaxPercentage ?? 0;
+        payment.IncomeTaxAmount = incomeTaxAmount;
+        payment.NetReceivedAmount = grossAmount - commissionAmount - incomeTaxAmount;
+    }
+
+    private async Task<SalePaymentMovement> CreateRefundPaymentMovementAsync(
+        SalePaymentMovement originalPayment,
+        RefundSalePaymentMovementDTO refundPaymentMovementDTO)
+    {
+        var refundedAmount = originalPayment.ReversalMovements.Sum(movement => movement.GrossAmount);
+        var remainingRefundableAmount = originalPayment.GrossAmount - refundedAmount;
+
+        if (remainingRefundableAmount <= 0)
+        {
+            throw new AppBadRequestException("El pago ya fue reembolsado completamente.");
+        }
+
+        if (originalPayment.PaymentMethodId == (int)PaymentMethodOption.Card)
+        {
+            return CreateCardRefundPaymentMovement(originalPayment, refundPaymentMovementDTO, refundedAmount);
+        }
+
+        var refundPaymentMethodId = refundPaymentMovementDTO.PaymentMethodId ?? originalPayment.PaymentMethodId;
+        if (refundPaymentMethodId == (int)PaymentMethodOption.Card)
+        {
+            throw new AppBadRequestException("Solo se puede reembolsar por tarjeta cuando el pago original fue por tarjeta.");
+        }
+
+        if (refundPaymentMovementDTO.PaymentTerminalId.HasValue)
+        {
+            throw new AppBadRequestException("Los reembolsos en efectivo o transferencia no deben asociarse a una terminal de pago.");
+        }
+
+        var refundAmount = refundPaymentMovementDTO.GrossAmount ?? remainingRefundableAmount;
+        if (refundAmount <= 0 || refundAmount > remainingRefundableAmount)
+        {
+            throw new AppBadRequestException("El monto del reembolso no puede exceder el saldo pendiente de reembolsar del pago.");
+        }
+
+        await ValidatePaymentDataAsync(refundPaymentMethodId, null, refundAmount);
+
+        return new SalePaymentMovement
+        {
+            MovementDate = refundPaymentMovementDTO.MovementDate ?? DateTime.UtcNow,
+            MovementDirectionId = (int)MovementDirectionOptions.Out,
+            PaymentMethodId = refundPaymentMethodId,
+            ReversedSalePaymentMovementId = originalPayment.Id,
+            GrossAmount = refundAmount,
+            CommissionPercentage = 0,
+            CommissionAmount = 0,
+            IncomeTaxPercentage = 0,
+            IncomeTaxAmount = 0,
+            NetReceivedAmount = refundAmount,
+            UserId = ResolveUserId()
+        };
+    }
+
+    private SalePaymentMovement CreateCardRefundPaymentMovement(
+        SalePaymentMovement originalPayment,
+        RefundSalePaymentMovementDTO refundPaymentMovementDTO,
+        decimal refundedAmount)
+    {
+        if (refundedAmount > 0)
+        {
+            throw new AppBadRequestException("Los pagos por tarjeta solo se pueden anular una vez y por el monto completo.");
+        }
+
+        if (refundPaymentMovementDTO.PaymentMethodId.HasValue && refundPaymentMovementDTO.PaymentMethodId.Value != originalPayment.PaymentMethodId)
+        {
+            throw new AppBadRequestException("El reembolso de una tarjeta debe usar el mismo metodo de pago del pago original.");
+        }
+
+        if (refundPaymentMovementDTO.PaymentTerminalId.HasValue && refundPaymentMovementDTO.PaymentTerminalId.Value != originalPayment.PaymentTerminalId)
+        {
+            throw new AppBadRequestException("El reembolso de una tarjeta debe usar la misma terminal del pago original.");
+        }
+
+        if (refundPaymentMovementDTO.GrossAmount.HasValue && refundPaymentMovementDTO.GrossAmount.Value != originalPayment.GrossAmount)
+        {
+            throw new AppBadRequestException("Los pagos por tarjeta solo se pueden anular por el monto completo.");
+        }
+
+        return new SalePaymentMovement
+        {
+            MovementDate = refundPaymentMovementDTO.MovementDate ?? DateTime.UtcNow,
+            MovementDirectionId = (int)MovementDirectionOptions.Out,
+            PaymentMethodId = originalPayment.PaymentMethodId,
+            PaymentTerminalId = originalPayment.PaymentTerminalId,
+            ReversedSalePaymentMovementId = originalPayment.Id,
+            GrossAmount = originalPayment.GrossAmount,
+            CommissionPercentage = originalPayment.CommissionPercentage,
+            CommissionAmount = originalPayment.CommissionAmount,
+            IncomeTaxPercentage = originalPayment.IncomeTaxPercentage,
+            IncomeTaxAmount = originalPayment.IncomeTaxAmount,
+            NetReceivedAmount = originalPayment.NetReceivedAmount,
+            UserId = ResolveUserId()
+        };
+    }
+
+    private static SaleTotals CalculateSaleTotals(List<SaleProduct> products)
     {
         var subtotal = Math.Round(products.Sum(product => product.OriginalUnitPrice * product.Quantity), 2);
         var totalDiscount = Math.Round(products.Sum(product => product.DiscountAmount * product.Quantity), 2);
@@ -545,7 +733,79 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
         {
             throw new AppBadRequestException("No se pueden reemplazar los productos de una venta cancelada, enviada o completada.");
         }
+    }
 
+    private static void EnsureSalePaymentMovementsCanBeChanged(Sale sale)
+    {
+        if (sale.SaleStatusId == (int)SaleStatusOption.Cancelled)
+        {
+            throw new AppBadRequestException("No se pueden modificar los pagos de una venta cancelada.");
+        }
+    }
+
+    private static SalePaymentMovement GetSalePaymentMovement(Sale sale, int paymentMovementId)
+    {
+        return sale.PaymentMovements.FirstOrDefault(payment => payment.Id == paymentMovementId)
+            ?? throw new AppNotFoundException($"El movimiento de pago con id '{paymentMovementId}' no existe para la venta indicada.");
+    }
+
+    private static void EnsureSalePaymentMovementCanBeUpdated(SalePaymentMovement payment)
+    {
+        if (payment.MovementDirectionId != (int)MovementDirectionOptions.In)
+        {
+            throw new AppBadRequestException("Solo se pueden actualizar pagos de entrada. Los reembolsos deben registrarse como movimientos nuevos.");
+        }
+
+        if (payment.ReversalMovements.Count > 0)
+        {
+            throw new AppBadRequestException("No se puede actualizar un pago que ya tiene reembolsos registrados.");
+        }
+    }
+
+    private static void EnsureSalePaymentMovementCanBeRefunded(SalePaymentMovement payment)
+    {
+        if (payment.MovementDirectionId != (int)MovementDirectionOptions.In)
+        {
+            throw new AppBadRequestException("Solo se pueden reembolsar pagos de entrada.");
+        }
+    }
+
+    private static void EnsureRefundDoesNotBreakInStorePaymentRule(Sale sale, decimal paymentTotal)
+    {
+        if (sale.SaleChannelId == (int)SaleChannelOption.InStoreSale && paymentTotal < sale.Total)
+        {
+            throw new AppBadRequestException("Las ventas en local no pueden quedar con pago menor al total despues del reembolso.");
+        }
+    }
+
+    private async Task SyncFinancialMovementAsync(SalePaymentMovement payment)
+    {
+        var movement = await _context.FinancialMovements
+            .FirstOrDefaultAsync(item => item.SalePaymentMovementId == payment.Id);
+
+        if (movement is null)
+        {
+            var exchangeRate = await GetCurrentExchangeRateAsync();
+            await _context.FinancialMovements.AddAsync(CreateFinancialMovementForSalePaymentMovement(payment, exchangeRate));
+            return;
+        }
+
+        movement.Description = payment.MovementDirectionId == (int)MovementDirectionOptions.In
+            ? "Pago de venta."
+            : "Reembolso de venta.";
+        movement.MovementDate = payment.MovementDate;
+        movement.MovementDirectionId = payment.MovementDirectionId;
+        movement.FinancialMovementTypeId = payment.MovementDirectionId == (int)MovementDirectionOptions.In
+            ? (int)FinancialMovementTypeOption.SalePayment
+            : (int)FinancialMovementTypeOption.CustomerRefund;
+        movement.Amount = payment.NetReceivedAmount;
+    }
+
+    private static decimal CalculatePaymentTotal(IEnumerable<SalePaymentMovement> payments)
+    {
+        return payments.Sum(payment => payment.MovementDirectionId == (int)MovementDirectionOptions.Out
+            ? -payment.GrossAmount
+            : payment.GrossAmount);
     }
 
     private static void NormalizeSaleFields(CreateSaleDTO saleDTO)
@@ -585,14 +845,14 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
             ?? throw new AppBadRequestException("Debe existir una tasa de cambio bancaria habilitada para registrar movimientos financieros.");
     }
 
-    private static FinancialMovement CreateSalePaymentMovement(SalePaymentMovement payment, decimal exchangeRate)
+    private static FinancialMovement CreateFinancialMovementForSalePaymentMovement(SalePaymentMovement payment, decimal exchangeRate)
     {
         return new FinancialMovement
         {
-            Description = "Pago de venta.",
+            Description = payment.MovementDirectionId == (int)MovementDirectionOptions.In ? "Pago de venta." : "Reembolso de venta.",
             MovementDate = payment.MovementDate,
             MovementDirectionId = payment.MovementDirectionId,
-            FinancialMovementTypeId = (int)FinancialMovementTypeOption.SalePayment,
+            FinancialMovementTypeId = payment.MovementDirectionId == (int)MovementDirectionOptions.In ? (int)FinancialMovementTypeOption.SalePayment : (int)FinancialMovementTypeOption.CustomerRefund,
             SalePaymentMovement = payment,
             Amount = payment.NetReceivedAmount,
             ExchangeRate = exchangeRate,

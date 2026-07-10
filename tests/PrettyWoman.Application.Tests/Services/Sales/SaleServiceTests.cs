@@ -324,6 +324,207 @@ public class SaleServiceTests
         Assert.Single(sale.Products);
         Assert.Equal(secondProduct.Id, sale.Products.Single().ProductId);
     }
+
+    [Fact]
+    public async Task AddPaymentMovementAsync_AddsPaymentAndFinancialMovement()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.Reserved,
+            Products =
+            [
+                new CreateSaleProductDTO
+                {
+                    ProductId = product.Id,
+                    Quantity = 1,
+                    DiscountSourceId = (int)DiscountSourceOption.None
+                }
+            ]
+        });
+
+        var paymentId = await service.AddPaymentMovementAsync(saleId, new CreateSalePaymentMovementDTO
+        {
+            MovementDate = new DateTime(2026, 7, 10, 11, 0, 0, DateTimeKind.Utc),
+            PaymentMethodId = (int)PaymentMethodOption.Cash,
+            GrossAmount = 200m
+        });
+
+        var sale = await context.Sales.Include(item => item.PaymentMovements).SingleAsync(item => item.Id == saleId);
+        var movement = await context.FinancialMovements.SingleAsync(item => item.SalePaymentMovementId == paymentId);
+
+        Assert.Equal((int)SalePaymentStatusOption.PartiallyPaid, sale.SalePaymentStatusId);
+        Assert.Single(sale.PaymentMovements);
+        Assert.Equal(200m, movement.Amount);
+        Assert.Equal((int)MovementDirectionOptions.In, movement.MovementDirectionId);
+        Assert.Equal((int)FinancialMovementTypeOption.SalePayment, movement.FinancialMovementTypeId);
+    }
+
+    [Fact]
+    public async Task UpdatePaymentMovementAsync_UpdatesPaymentAndFinancialMovement()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.Reserved,
+            Products =
+            [
+                new CreateSaleProductDTO
+                {
+                    ProductId = product.Id,
+                    Quantity = 1,
+                    DiscountSourceId = (int)DiscountSourceOption.None
+                }
+            ],
+            PaymentMovements =
+            [
+                new CreateSalePaymentMovementDTO
+                {
+                    PaymentMethodId = (int)PaymentMethodOption.Cash,
+                    GrossAmount = 200m
+                }
+            ]
+        });
+        var paymentId = await context.SalePaymentMovements
+            .Where(item => item.SaleId == saleId)
+            .Select(item => item.Id)
+            .SingleAsync();
+
+        await service.UpdatePaymentMovementAsync(saleId, paymentId, new UpdateSalePaymentMovementDTO
+        {
+            MovementDate = new DateTime(2026, 7, 10, 12, 0, 0, DateTimeKind.Utc),
+            PaymentMethodId = (int)PaymentMethodOption.Transfer,
+            GrossAmount = 500m
+        });
+
+        var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        var payment = await context.SalePaymentMovements.SingleAsync(item => item.Id == paymentId);
+        var movement = await context.FinancialMovements.SingleAsync(item => item.SalePaymentMovementId == paymentId);
+
+        Assert.Equal((int)SalePaymentStatusOption.Paid, sale.SalePaymentStatusId);
+        Assert.Equal((int)PaymentMethodOption.Transfer, payment.PaymentMethodId);
+        Assert.Equal(500m, payment.GrossAmount);
+        Assert.Equal(new DateTime(2026, 7, 10, 12, 0, 0, DateTimeKind.Utc), movement.MovementDate);
+        Assert.Equal(500m, movement.Amount);
+    }
+
+    [Fact]
+    public async Task RefundPaymentMovementAsync_AllowsPartialCashRefundAndUpdatesPaymentStatus()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.Reserved,
+            Products =
+            [
+                new CreateSaleProductDTO
+                {
+                    ProductId = product.Id,
+                    Quantity = 1,
+                    DiscountSourceId = (int)DiscountSourceOption.None
+                }
+            ],
+            PaymentMovements =
+            [
+                new CreateSalePaymentMovementDTO
+                {
+                    PaymentMethodId = (int)PaymentMethodOption.Cash,
+                    GrossAmount = 500m
+                }
+            ]
+        });
+        var paymentId = await context.SalePaymentMovements
+            .Where(item => item.SaleId == saleId)
+            .Select(item => item.Id)
+            .SingleAsync();
+
+        var refundId = await service.RefundPaymentMovementAsync(saleId, paymentId, new RefundSalePaymentMovementDTO
+        {
+            PaymentMethodId = (int)PaymentMethodOption.Transfer,
+            GrossAmount = 200m
+        });
+
+        var sale = await context.Sales.Include(item => item.PaymentMovements).SingleAsync(item => item.Id == saleId);
+        var refund = await context.SalePaymentMovements.SingleAsync(item => item.Id == refundId);
+        var movement = await context.FinancialMovements.SingleAsync(item => item.SalePaymentMovementId == refundId);
+
+        Assert.Equal((int)SalePaymentStatusOption.PartiallyPaid, sale.SalePaymentStatusId);
+        Assert.Equal((int)MovementDirectionOptions.Out, refund.MovementDirectionId);
+        Assert.Equal(paymentId, refund.ReversedSalePaymentMovementId);
+        Assert.Equal(200m, refund.GrossAmount);
+        Assert.Equal((int)FinancialMovementTypeOption.CustomerRefund, movement.FinancialMovementTypeId);
+        Assert.Equal((int)MovementDirectionOptions.Out, movement.MovementDirectionId);
+    }
+
+    [Fact]
+    public async Task RefundPaymentMovementAsync_RequiresFullRefundForCardPayments()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.Reserved,
+            Products =
+            [
+                new CreateSaleProductDTO
+                {
+                    ProductId = product.Id,
+                    Quantity = 1,
+                    DiscountSourceId = (int)DiscountSourceOption.None
+                }
+            ],
+            PaymentMovements =
+            [
+                new CreateSalePaymentMovementDTO
+                {
+                    PaymentMethodId = (int)PaymentMethodOption.Card,
+                    PaymentTerminalId = 1,
+                    GrossAmount = 500m
+                }
+            ]
+        });
+        var paymentId = await context.SalePaymentMovements
+            .Where(item => item.SaleId == saleId)
+            .Select(item => item.Id)
+            .SingleAsync();
+
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.RefundPaymentMovementAsync(saleId, paymentId, new RefundSalePaymentMovementDTO
+        {
+            GrossAmount = 200m
+        }));
+
+        var refundId = await service.RefundPaymentMovementAsync(saleId, paymentId, new RefundSalePaymentMovementDTO());
+        var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        var originalPayment = await context.SalePaymentMovements.SingleAsync(item => item.Id == paymentId);
+        var refund = await context.SalePaymentMovements.SingleAsync(item => item.Id == refundId);
+        var movement = await context.FinancialMovements.SingleAsync(item => item.SalePaymentMovementId == refundId);
+
+        Assert.Equal((int)SalePaymentStatusOption.Unpaid, sale.SalePaymentStatusId);
+        Assert.Equal(originalPayment.GrossAmount, refund.GrossAmount);
+        Assert.Equal(originalPayment.CommissionAmount, refund.CommissionAmount);
+        Assert.Equal(originalPayment.IncomeTaxAmount, refund.IncomeTaxAmount);
+        Assert.Equal(originalPayment.NetReceivedAmount, movement.Amount);
+        Assert.Equal((int)FinancialMovementTypeOption.CustomerRefund, movement.FinancialMovementTypeId);
+    }
     private static SaleService CreateService(ApplicationDbContext context)
     {
         return new SaleService(context, new TestCurrentUserService());
@@ -368,8 +569,9 @@ public class SaleServiceTests
             new SaleProductStatus { Id = (int)SaleProductStatusOption.Completed, Name = nameof(SaleProductStatusOption.Completed) });
         context.DiscountSources.Add(new DiscountSource { Id = (int)DiscountSourceOption.None, Name = nameof(DiscountSourceOption.None) });
         context.PaymentMethods.AddRange(
-            new PaymentMethod { Id = 1, Name = "Efectivo" },
-            new PaymentMethod { Id = 2, Name = "Tarjeta" });
+            new PaymentMethod { Id = (int)PaymentMethodOption.Cash, Name = "Efectivo" },
+            new PaymentMethod { Id = (int)PaymentMethodOption.Transfer, Name = "Transferencia" },
+            new PaymentMethod { Id = (int)PaymentMethodOption.Card, Name = "Tarjeta" });
         context.PaymentTerminals.Add(new PaymentTerminal
         {
             Id = 1,
