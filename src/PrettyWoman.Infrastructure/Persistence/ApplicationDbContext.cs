@@ -102,7 +102,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public DbSet<PaymentMethod> PaymentMethods { get; set; }
     public DbSet<PaymentTerminal> PaymentTerminals { get; set; }
     public DbSet<SalePaymentStatus> SalePaymentStatuses { get; set; }
-    public DbSet<SalePayment> SalePayments { get; set; }
+    public DbSet<SalePaymentMovement> SalePaymentMovements { get; set; }
 
 
     // Deliveries
@@ -132,6 +132,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
 
 
 }
+
 
 
 

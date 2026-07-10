@@ -1,13 +1,15 @@
 namespace PrettyWoman.Application.DTOs.Sales;
 
-public class SalePaymentDTO
+public class SalePaymentMovementDTO
 {
     public int Id { get; set; }
-    public DateTime PaymentDate { get; set; }
+    public DateTime MovementDate { get; set; }
+    public int MovementDirectionId { get; set; }
     public int PaymentMethodId { get; set; }
     public string? PaymentMethodName { get; set; }
     public int? PaymentTerminalId { get; set; }
     public string? PaymentTerminalName { get; set; }
+    public int? ReversedSalePaymentMovementId { get; set; }
     public decimal GrossAmount { get; set; }
     public decimal CommissionPercentage { get; set; }
     public decimal CommissionAmount { get; set; }

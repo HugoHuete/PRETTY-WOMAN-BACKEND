@@ -29,6 +29,7 @@ public class Sale : IAuditableEntity
     public Client? Client { get; set; }
     public Municipality? Municipality { get; set; }
     public List<SaleProduct> Products { get; set; } = [];
-    public List<SalePayment> Payments { get; set; } = [];
+    public List<SalePaymentMovement> PaymentMovements { get; set; } = [];
     public List<SaleDelivery> Deliveries { get; set; } = [];
 }
+

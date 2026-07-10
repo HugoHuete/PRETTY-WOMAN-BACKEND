@@ -46,7 +46,7 @@ public interface IApplicationDbContext
     DbSet<PaymentMethod> PaymentMethods { get; }
     DbSet<PaymentTerminal> PaymentTerminals { get; }
     DbSet<SalePaymentStatus> SalePaymentStatuses { get; }
-    DbSet<SalePayment> SalePayments { get; }
+    DbSet<SalePaymentMovement> SalePaymentMovements { get; }
 
     // Deliveries
     DbSet<DeliveryAgency> DeliveryAgencies { get; }
@@ -72,3 +72,4 @@ public interface IApplicationDbContext
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
 }
+

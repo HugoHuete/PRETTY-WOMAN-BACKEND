@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using PrettyWoman.Application.DTOs.Sales;
 using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Interfaces;
@@ -23,6 +24,7 @@ public class SaleServiceTests
         {
             SaleDate = new DateTime(2026, 7, 10, 10, 0, 0, DateTimeKind.Utc),
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            SaleStatusId = (int)SaleStatusOption.Reserved,
             Products =
             [
                 new CreateSaleProductDTO
@@ -32,17 +34,17 @@ public class SaleServiceTests
                     DiscountSourceId = (int)DiscountSourceOption.None
                 }
             ],
-            Payments =
+            PaymentMovements =
             [
-                new CreateSalePaymentDTO
+                new CreateSalePaymentMovementDTO
                 {
-                    PaymentDate = new DateTime(2026, 7, 10, 10, 1, 0, DateTimeKind.Utc),
+                    MovementDate = new DateTime(2026, 7, 10, 10, 1, 0, DateTimeKind.Utc),
                     PaymentMethodId = 1,
                     GrossAmount = 500m
                 },
-                new CreateSalePaymentDTO
+                new CreateSalePaymentMovementDTO
                 {
-                    PaymentDate = new DateTime(2026, 7, 10, 10, 2, 0, DateTimeKind.Utc),
+                    MovementDate = new DateTime(2026, 7, 10, 10, 2, 0, DateTimeKind.Utc),
                     PaymentMethodId = 2,
                     PaymentTerminalId = 1,
                     GrossAmount = 500m
@@ -52,7 +54,7 @@ public class SaleServiceTests
 
         var sale = await context.Sales
             .Include(item => item.Products)
-            .Include(item => item.Payments)
+            .Include(item => item.PaymentMovements)
             .SingleAsync(item => item.Id == saleId);
         var updatedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
         var movements = await context.FinancialMovements.OrderBy(item => item.Id).ToListAsync();
@@ -61,7 +63,7 @@ public class SaleServiceTests
         Assert.Equal(1000m, sale.Subtotal);
         Assert.Equal(1000m, sale.Total);
         Assert.Equal(2, updatedProduct.AvailableQuantity);
-        Assert.Equal(2, sale.Payments.Count);
+        Assert.Equal(2, sale.PaymentMovements.Count);
         Assert.Equal(2, movements.Count);
         Assert.Equal(500m, movements[0].Amount);
         Assert.Equal(470.25m, movements[1].Amount);
@@ -87,9 +89,9 @@ public class SaleServiceTests
                     DiscountSourceId = (int)DiscountSourceOption.None
                 }
             ],
-            Payments =
+            PaymentMovements =
             [
-                new CreateSalePaymentDTO
+                new CreateSalePaymentMovementDTO
                 {
                     PaymentMethodId = 1,
                     GrossAmount = 500m
@@ -101,6 +103,227 @@ public class SaleServiceTests
         Assert.False(await context.Sales.AnyAsync());
     }
 
+    [Fact]
+    public async Task PatchHeaderAsync_UpdatesHeaderWithoutReplacingProductsOrInventoryMovements()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.Reserved,
+            Products =
+            [
+                new CreateSaleProductDTO
+                {
+                    ProductId = product.Id,
+                    Quantity = 1,
+                    DiscountSourceId = (int)DiscountSourceOption.None
+                }
+            ]
+        });
+
+        var originalSaleProductId = await context.SaleProducts
+            .Where(item => item.SaleId == saleId)
+            .Select(item => item.Id)
+            .SingleAsync();
+        var originalInventoryMovementId = await context.InventoryMovements
+            .Where(item => item.SaleProductId == originalSaleProductId)
+            .Select(item => item.Id)
+            .SingleAsync();
+
+        await service.PatchHeaderAsync(saleId, new PatchSaleHeaderDTO
+        {
+            SaleDate = new DateTime(2026, 7, 11, 12, 0, 0, DateTimeKind.Utc),
+            Comments = "Cliente pidio envolver para regalo"
+        });
+
+        var sale = await context.Sales.Include(item => item.Products).SingleAsync(item => item.Id == saleId);
+        var updatedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        var inventoryMovement = await context.InventoryMovements.SingleAsync(item => item.Id == originalInventoryMovementId);
+
+        Assert.Equal(new DateTime(2026, 7, 11, 12, 0, 0, DateTimeKind.Utc), sale.SaleDate);
+        Assert.Equal("Cliente pidio envolver para regalo", sale.Comments);
+        Assert.Equal(originalSaleProductId, sale.Products.Single().Id);
+        Assert.Equal(originalSaleProductId, inventoryMovement.SaleProductId);
+        Assert.Equal(new DateTime(2026, 7, 11, 12, 0, 0, DateTimeKind.Utc), inventoryMovement.MovementDate);
+        Assert.Equal(2, updatedProduct.AvailableQuantity);
+    }
+
+    [Fact]
+    public async Task PatchHeaderAsync_AllowsClearingNullableHeaderFields()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        context.Clients.Add(new Client { Id = 1, Name = "Cliente prueba" });
+        await context.SaveChangesAsync();
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.Pending,
+            ClientId = 1,
+            MunicipalityId = 1,
+            Comments = "Entregar por la tarde",
+            Products =
+            [
+                new CreateSaleProductDTO
+                {
+                    ProductId = product.Id,
+                    Quantity = 1,
+                    DiscountSourceId = (int)DiscountSourceOption.None
+                }
+            ]
+        });
+
+        var patch = JsonSerializer.Deserialize<PatchSaleHeaderDTO>(
+            """
+            {
+              "ClientId": null,
+              "MunicipalityId": null,
+              "Comments": null
+            }
+            """)!;
+
+        await service.PatchHeaderAsync(saleId, patch);
+
+        var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
+
+        Assert.Null(sale.ClientId);
+        Assert.Null(sale.MunicipalityId);
+        Assert.Null(sale.Comments);
+    }
+
+    [Fact]
+    public async Task ReplaceProductsAsync_ReplacesProductsAndRecalculatesInventoryAndTotals()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var firstProduct = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        var secondProduct = await AddProductAsync(context, availableQuantity: 4, salePrice: 300m, unitCostNio: 100m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.Reserved,
+            Products =
+            [
+                new CreateSaleProductDTO
+                {
+                    ProductId = firstProduct.Id,
+                    Quantity = 1,
+                    DiscountSourceId = (int)DiscountSourceOption.None
+                }
+            ]
+        });
+
+        await service.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
+        {
+            Products =
+            [
+                new CreateSaleProductDTO
+                {
+                    ProductId = secondProduct.Id,
+                    Quantity = 2,
+                    DiscountSourceId = (int)DiscountSourceOption.None,
+                    DiscountAmount = 25m
+                }
+            ]
+        });
+
+        var sale = await context.Sales.Include(item => item.Products).SingleAsync(item => item.Id == saleId);
+        var reloadedFirstProduct = await context.Products.SingleAsync(item => item.Id == firstProduct.Id);
+        var reloadedSecondProduct = await context.Products.SingleAsync(item => item.Id == secondProduct.Id);
+        var movements = await context.InventoryMovements.ToListAsync();
+
+        Assert.Equal(600m, sale.Subtotal);
+        Assert.Equal(50m, sale.TotalDiscount);
+        Assert.Equal(550m, sale.Total);
+        Assert.Equal(firstProduct.Quantity, reloadedFirstProduct.AvailableQuantity);
+        Assert.Equal(2, reloadedSecondProduct.AvailableQuantity);
+        Assert.Single(sale.Products);
+        Assert.Equal(secondProduct.Id, sale.Products.Single().ProductId);
+        Assert.Single(movements);
+        Assert.Equal(sale.Products.Single().Id, movements.Single().SaleProductId);
+    }
+    [Fact]
+    public async Task ReplaceProductsAsync_AllowsPaidSaleWithPendingDeliveryAndMarksRefundPendingWhenOverpaid()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var firstProduct = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        var secondProduct = await AddProductAsync(context, availableQuantity: 4, salePrice: 300m, unitCostNio: 100m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.ReadyForDelivery,
+            Products =
+            [
+                new CreateSaleProductDTO
+                {
+                    ProductId = firstProduct.Id,
+                    Quantity = 1,
+                    DiscountSourceId = (int)DiscountSourceOption.None
+                }
+            ],
+            PaymentMovements =
+            [
+                new CreateSalePaymentMovementDTO
+                {
+                    PaymentMethodId = 1,
+                    GrossAmount = 500m
+                }
+            ]
+        });
+
+        context.SaleDeliveries.Add(new SaleDelivery
+        {
+            Code = "DEL-001",
+            SaleId = saleId,
+            MunicipalityId = 1,
+            DeliveryAgencyId = 1,
+            DeliveryStatusId = (int)DeliveryStatusCode.Pending,
+            AmountToCollect = 0,
+            ShippingChargedToClient = 0,
+            ShippingPaidToAgency = 0,
+            UserId = "test-user"
+        });
+        await context.SaveChangesAsync();
+
+        await service.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
+        {
+            Products =
+            [
+                new CreateSaleProductDTO
+                {
+                    ProductId = secondProduct.Id,
+                    Quantity = 1,
+                    DiscountSourceId = (int)DiscountSourceOption.None
+                }
+            ]
+        });
+
+        var sale = await context.Sales.Include(item => item.Products).SingleAsync(item => item.Id == saleId);
+        var reloadedFirstProduct = await context.Products.SingleAsync(item => item.Id == firstProduct.Id);
+        var reloadedSecondProduct = await context.Products.SingleAsync(item => item.Id == secondProduct.Id);
+
+        Assert.Equal(300m, sale.Total);
+        Assert.Equal((int)SalePaymentStatusOption.RefundPending, sale.SalePaymentStatusId);
+        Assert.Equal(firstProduct.Quantity, reloadedFirstProduct.AvailableQuantity);
+        Assert.Equal(3, reloadedSecondProduct.AvailableQuantity);
+        Assert.Single(sale.Products);
+        Assert.Equal(secondProduct.Id, sale.Products.Single().ProductId);
+    }
     private static SaleService CreateService(ApplicationDbContext context)
     {
         return new SaleService(context, new TestCurrentUserService());
@@ -128,7 +351,21 @@ public class SaleServiceTests
 
     private static async Task SeedCatalogAsync(ApplicationDbContext context)
     {
-        context.SaleChannels.Add(new SaleChannel { Id = (int)SaleChannelOption.InStoreSale, Name = nameof(SaleChannelOption.InStoreSale) });
+        context.SaleChannels.AddRange(
+            new SaleChannel { Id = (int)SaleChannelOption.InStoreSale, Name = nameof(SaleChannelOption.InStoreSale) },
+            new SaleChannel { Id = (int)SaleChannelOption.Whatsapp, Name = nameof(SaleChannelOption.Whatsapp) });
+        context.SaleStatuses.AddRange(
+            new SaleStatus { Id = (int)SaleStatusOption.Pending, Name = nameof(SaleStatusOption.Pending) },
+            new SaleStatus { Id = (int)SaleStatusOption.Reserved, Name = nameof(SaleStatusOption.Reserved) },
+            new SaleStatus { Id = (int)SaleStatusOption.ReadyForDelivery, Name = nameof(SaleStatusOption.ReadyForDelivery) });
+        context.SalePaymentStatuses.AddRange(
+            new SalePaymentStatus { Id = (int)SalePaymentStatusOption.Unpaid, Name = nameof(SalePaymentStatusOption.Unpaid) },
+            new SalePaymentStatus { Id = (int)SalePaymentStatusOption.PartiallyPaid, Name = nameof(SalePaymentStatusOption.PartiallyPaid) },
+            new SalePaymentStatus { Id = (int)SalePaymentStatusOption.Paid, Name = nameof(SalePaymentStatusOption.Paid) },
+            new SalePaymentStatus { Id = (int)SalePaymentStatusOption.RefundPending, Name = nameof(SalePaymentStatusOption.RefundPending) });
+        context.SaleProductStatuses.AddRange(
+            new SaleProductStatus { Id = (int)SaleProductStatusOption.Pending, Name = nameof(SaleProductStatusOption.Pending) },
+            new SaleProductStatus { Id = (int)SaleProductStatusOption.Completed, Name = nameof(SaleProductStatusOption.Completed) });
         context.DiscountSources.Add(new DiscountSource { Id = (int)DiscountSourceOption.None, Name = nameof(DiscountSourceOption.None) });
         context.PaymentMethods.AddRange(
             new PaymentMethod { Id = 1, Name = "Efectivo" },
@@ -166,9 +403,4 @@ public class SaleServiceTests
         public string? UserId => "test-user";
     }
 }
-
-
-
-
-
 

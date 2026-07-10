@@ -191,7 +191,7 @@ public class FinancialService(IApplicationDbContext context) : IFinancialService
             FinancialMovementTypeName = movement.FinancialMovementType != null ? movement.FinancialMovementType.Name : null,
             ExpenseCategoryId = movement.ExpenseCategoryId,
             OrderId = movement.OrderId,
-            SalePaymentId = movement.SalePaymentId,
+            SalePaymentMovementId = movement.SalePaymentMovementId,
             LoanId = movement.LoanId,
             LoanPaymentId = movement.LoanPaymentId,
             Amount = movement.Amount,
@@ -256,7 +256,7 @@ public class FinancialService(IApplicationDbContext context) : IFinancialService
     {
         EnsureManualMovementTypeIsAllowed((FinancialMovementTypeOption)movement.FinancialMovementTypeId);
 
-        if (movement.OrderId.HasValue || movement.SalePaymentId.HasValue || movement.LoanId.HasValue || movement.LoanPaymentId.HasValue)
+        if (movement.OrderId.HasValue || movement.SalePaymentMovementId.HasValue || movement.LoanId.HasValue || movement.LoanPaymentId.HasValue)
         {
             throw new AppBadRequestException("Este movimiento financiero esta relacionado con otro flujo y no se puede modificar manualmente desde finanzas.");
         }
@@ -321,5 +321,3 @@ public class FinancialService(IApplicationDbContext context) : IFinancialService
             ?? throw new AppBadRequestException("Debe existir una tasa de cambio bancaria habilitada para registrar movimientos financieros.");
     }
 }
-
-

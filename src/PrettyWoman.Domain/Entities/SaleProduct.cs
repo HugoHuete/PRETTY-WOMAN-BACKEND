@@ -25,3 +25,4 @@ public class SaleProduct
     public DiscountCampaign? DiscountCampaign { get; set; }
     public SaleProductStatus? SaleProductStatus { get; set; }
 }
+

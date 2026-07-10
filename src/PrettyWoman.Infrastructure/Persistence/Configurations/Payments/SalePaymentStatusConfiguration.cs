@@ -31,7 +31,14 @@ public class SalePaymentStatusConfiguration : IEntityTypeConfiguration<SalePayme
             {
                 Id = (int) SalePaymentStatusOption.Paid,
                 Name = nameof(SalePaymentStatusOption.Paid)
+            },
+            new SalePaymentStatus
+            {
+                Id = (int) SalePaymentStatusOption.RefundPending,
+                Name = nameof(SalePaymentStatusOption.RefundPending)
             }
         );
     }
 }
+
+

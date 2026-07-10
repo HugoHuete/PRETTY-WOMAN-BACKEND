@@ -31,10 +31,19 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id }, id);
     }
 
-    [HttpPut("{id:int}")]
-    public async Task<IActionResult> Update(int id, [FromBody] UpdateSaleDTO updateSaleDTO)
+    [HttpPatch("{id:int}")]
+    public async Task<IActionResult> PatchHeader(int id, [FromBody] PatchSaleHeaderDTO patchSaleHeaderDTO)
     {
-        await _saleService.UpdateAsync(id, updateSaleDTO);
+        await _saleService.PatchHeaderAsync(id, patchSaleHeaderDTO);
+        return NoContent();
+    }
+
+    [HttpPut("{id:int}/products")]
+    public async Task<IActionResult> ReplaceProducts(int id, [FromBody] ReplaceSaleProductsDTO replaceSaleProductsDTO)
+    {
+        await _saleService.ReplaceProductsAsync(id, replaceSaleProductsDTO);
         return NoContent();
     }
 }
+
+

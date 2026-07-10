@@ -42,7 +42,7 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
 
         var products = await LoadSaleProductsAsync(createSaleDTO.Products);
         var saleProducts = CreateSaleProducts(createSaleDTO.Products, products);
-        var payments = await CreateSalePaymentsAsync(createSaleDTO.Payments);
+        var payments = await CreateSalePaymentMovementsAsync(createSaleDTO.PaymentMovements);
         var totals = CalculateSaleTotals(saleProducts, payments);
         var paymentTotal = payments.Sum(payment => payment.GrossAmount);
         var exchangeRate = payments.Count == 0 ? 0 : await GetCurrentExchangeRateAsync();
@@ -63,7 +63,7 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
             ClientId = createSaleDTO.ClientId,
             MunicipalityId = createSaleDTO.MunicipalityId,
             Products = saleProducts,
-            Payments = payments
+            PaymentMovements = payments
         };
 
         if (SaleAffectsInventory(createSaleDTO.SaleStatusId))
@@ -71,7 +71,7 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
             ApplyInventoryOutput(sale);
         }
 
-        foreach (var payment in sale.Payments)
+        foreach (var payment in sale.PaymentMovements)
         {
             await _context.FinancialMovements.AddAsync(CreateSalePaymentMovement(payment, exchangeRate));
         }
@@ -82,13 +82,53 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
         return sale.Id;
     }
 
-    public async Task UpdateAsync(int id, UpdateSaleDTO updateSaleDTO)
+    public async Task PatchHeaderAsync(int id, PatchSaleHeaderDTO patchSaleHeaderDTO)
     {
-        NormalizeSaleFields(updateSaleDTO);
-        await ValidateSaleRequestAsync(updateSaleDTO);
+        NormalizeSaleFields(patchSaleHeaderDTO);
+        await ValidateSaleHeaderPatchAsync(patchSaleHeaderDTO);
 
         var sale = await GetSaleWithDetailsAsync(id, asNoTracking: false);
-        EnsureSaleCanBeUpdated(sale);
+        EnsureSaleHeaderCanBePatched(sale);
+
+        var saleChannelId = patchSaleHeaderDTO.HasSaleChannelId
+            ? patchSaleHeaderDTO.SaleChannelId!.Value
+            : sale.SaleChannelId;
+        var paymentTotal = sale.PaymentMovements.Sum(payment => payment.GrossAmount);
+        EnsurePaymentRules(saleChannelId, sale.Total, paymentTotal, allowOverpayment: true);
+
+        if (patchSaleHeaderDTO.HasSaleDate)
+        {
+            sale.SaleDate = patchSaleHeaderDTO.SaleDate!.Value;
+            SyncInventoryMovementDates(sale);
+        }
+
+        sale.SaleChannelId = saleChannelId;
+
+        if (patchSaleHeaderDTO.HasClientId)
+        {
+            sale.ClientId = patchSaleHeaderDTO.ClientId;
+        }
+
+        if (patchSaleHeaderDTO.HasMunicipalityId)
+        {
+            sale.MunicipalityId = patchSaleHeaderDTO.MunicipalityId;
+        }
+
+        if (patchSaleHeaderDTO.HasComments)
+        {
+            sale.Comments = patchSaleHeaderDTO.Comments;
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task ReplaceProductsAsync(int id, ReplaceSaleProductsDTO replaceSaleProductsDTO)
+    {
+        NormalizeSaleFields(replaceSaleProductsDTO);
+        await ValidateSaleProductsReplacementAsync(replaceSaleProductsDTO);
+
+        var sale = await GetSaleWithDetailsAsync(id, asNoTracking: false);
+        EnsureSaleProductsCanBeReplaced(sale);
 
         if (SaleAffectsInventory(sale.SaleStatusId))
         {
@@ -103,25 +143,20 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
         _context.InventoryMovements.RemoveRange(inventoryMovements);
         _context.SaleProducts.RemoveRange(sale.Products);
 
-        var products = await LoadSaleProductsAsync(updateSaleDTO.Products);
-        var saleProducts = CreateSaleProducts(updateSaleDTO.Products, products);
+        var products = await LoadSaleProductsAsync(replaceSaleProductsDTO.Products);
+        var saleProducts = CreateSaleProducts(replaceSaleProductsDTO.Products, products);
         var totals = CalculateSaleTotals(saleProducts, []);
 
-        EnsurePaymentRules(updateSaleDTO.SaleChannelId, totals.Total, paymentTotal: 0);
+        var paymentTotal = sale.PaymentMovements.Sum(payment => payment.GrossAmount);
+        EnsurePaymentRules(sale.SaleChannelId, totals.Total, paymentTotal, allowOverpayment: true);
 
-        sale.SaleDate = updateSaleDTO.SaleDate ?? sale.SaleDate;
-        sale.SaleChannelId = updateSaleDTO.SaleChannelId;
-        sale.SaleStatusId = updateSaleDTO.SaleStatusId;
-        sale.SalePaymentStatusId = (int)SalePaymentStatusOption.Unpaid;
+        sale.SalePaymentStatusId = ResolvePaymentStatus(totals.Total, paymentTotal);
         sale.Subtotal = totals.Subtotal;
         sale.TotalDiscount = totals.TotalDiscount;
         sale.Total = totals.Total;
-        sale.Comments = updateSaleDTO.Comments;
-        sale.ClientId = updateSaleDTO.ClientId;
-        sale.MunicipalityId = updateSaleDTO.MunicipalityId;
         sale.Products = saleProducts;
 
-        if (SaleAffectsInventory(updateSaleDTO.SaleStatusId))
+        if (SaleAffectsInventory(sale.SaleStatusId))
         {
             ApplyInventoryOutput(sale);
         }
@@ -144,9 +179,9 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
                 .ThenInclude(saleProduct => saleProduct.DiscountSource)
             .Include(sale => sale.Products)
                 .ThenInclude(saleProduct => saleProduct.SaleProductStatus)
-            .Include(sale => sale.Payments)
+            .Include(sale => sale.PaymentMovements)
                 .ThenInclude(payment => payment.PaymentMethod)
-            .Include(sale => sale.Payments)
+            .Include(sale => sale.PaymentMovements)
                 .ThenInclude(payment => payment.PaymentTerminal)
             .Include(sale => sale.Deliveries)
             .AsQueryable();
@@ -170,18 +205,32 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
         await ValidateOptionalReferencesAsync(saleDTO.ClientId, saleDTO.MunicipalityId);
         await ValidateRequestedSaleStatusAsync(saleDTO.SaleStatusId);
         await ValidateProductRequestAsync(saleDTO.Products);
-        await ValidatePaymentRequestAsync(saleDTO.Payments);
+        await ValidatePaymentRequestAsync(saleDTO.PaymentMovements);
     }
 
-    private async Task ValidateSaleRequestAsync(UpdateSaleDTO saleDTO)
+    private async Task ValidateSaleHeaderPatchAsync(PatchSaleHeaderDTO saleDTO)
     {
-        if (!await _context.SaleChannels.AnyAsync(channel => channel.Id == saleDTO.SaleChannelId))
+        if (saleDTO.HasSaleDate && !saleDTO.SaleDate.HasValue)
         {
-            throw new AppNotFoundException($"El canal de venta con id '{saleDTO.SaleChannelId}' no existe.");
+            throw new AppBadRequestException("La fecha de la venta no puede ser nula.");
+        }
+
+        if (saleDTO.HasSaleChannelId && !saleDTO.SaleChannelId.HasValue)
+        {
+            throw new AppBadRequestException("El canal de venta no puede ser nulo.");
+        }
+
+        if (saleDTO.SaleChannelId.HasValue &&
+            !await _context.SaleChannels.AnyAsync(channel => channel.Id == saleDTO.SaleChannelId.Value))
+        {
+            throw new AppNotFoundException($"El canal de venta con id '{saleDTO.SaleChannelId.Value}' no existe.");
         }
 
         await ValidateOptionalReferencesAsync(saleDTO.ClientId, saleDTO.MunicipalityId);
-        await ValidateRequestedSaleStatusAsync(saleDTO.SaleStatusId);
+    }
+
+    private async Task ValidateSaleProductsReplacementAsync(ReplaceSaleProductsDTO saleDTO)
+    {
         await ValidateProductRequestAsync(saleDTO.Products);
     }
 
@@ -248,7 +297,7 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
         }
     }
 
-    private async Task ValidatePaymentRequestAsync(List<CreateSalePaymentDTO> payments)
+    private async Task ValidatePaymentRequestAsync(List<CreateSalePaymentMovementDTO> payments)
     {
         foreach (var payment in payments)
         {
@@ -332,7 +381,7 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
         }).ToList();
     }
 
-    private async Task<List<SalePayment>> CreateSalePaymentsAsync(List<CreateSalePaymentDTO> paymentRequests)
+    private async Task<List<SalePaymentMovement>> CreateSalePaymentMovementsAsync(List<CreateSalePaymentMovementDTO> paymentRequests)
     {
         var terminalIds = paymentRequests
             .Where(payment => payment.PaymentTerminalId.HasValue)
@@ -361,9 +410,9 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
                 ? 0
                 : Math.Round((paymentRequest.GrossAmount - commissionAmount) * terminal.IncomeTaxPercentage / 100, 2);
 
-            return new SalePayment
+            return new SalePaymentMovement
             {
-                PaymentDate = paymentRequest.PaymentDate ?? DateTime.UtcNow,
+                MovementDate = paymentRequest.MovementDate ?? DateTime.UtcNow,
                 PaymentMethodId = paymentRequest.PaymentMethodId,
                 PaymentTerminalId = paymentRequest.PaymentTerminalId,
                 GrossAmount = paymentRequest.GrossAmount,
@@ -377,7 +426,7 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
         }).ToList();
     }
 
-    private static SaleTotals CalculateSaleTotals(List<SaleProduct> products, List<SalePayment> payments)
+    private static SaleTotals CalculateSaleTotals(List<SaleProduct> products, List<SalePaymentMovement> payments)
     {
         var subtotal = Math.Round(products.Sum(product => product.OriginalUnitPrice * product.Quantity), 2);
         var totalDiscount = Math.Round(products.Sum(product => product.DiscountAmount * product.Quantity), 2);
@@ -401,17 +450,27 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
             return (int)SalePaymentStatusOption.PartiallyPaid;
         }
 
+        if (paymentTotal > amountToCharge)
+        {
+            return (int)SalePaymentStatusOption.RefundPending;
+        }
+
         return (int)SalePaymentStatusOption.Paid;
     }
 
-    private static void EnsurePaymentRules(int saleChannelId, decimal amountToCharge, decimal paymentTotal)
+    private static void EnsurePaymentRules(int saleChannelId, decimal amountToCharge, decimal paymentTotal, bool allowOverpayment = false)
     {
-        if (paymentTotal > amountToCharge)
+        if (!allowOverpayment && paymentTotal > amountToCharge)
         {
             throw new AppBadRequestException("La suma de pagos no puede exceder el total de la venta.");
         }
 
-        if (saleChannelId == (int)SaleChannelOption.InStoreSale && paymentTotal != amountToCharge)
+        if (saleChannelId == (int)SaleChannelOption.InStoreSale && !allowOverpayment && paymentTotal != amountToCharge)
+        {
+            throw new AppBadRequestException("Las ventas en local deben quedar pagadas completamente al momento de registrarse.");
+        }
+
+        if (saleChannelId == (int)SaleChannelOption.InStoreSale && allowOverpayment && paymentTotal < amountToCharge)
         {
             throw new AppBadRequestException("Las ventas en local deben quedar pagadas completamente al momento de registrarse.");
         }
@@ -453,34 +512,59 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
         }
     }
 
-    private static void EnsureSaleCanBeUpdated(Sale sale)
+    private static void SyncInventoryMovementDates(Sale sale)
+    {
+        if (!SaleAffectsInventory(sale.SaleStatusId))
+        {
+            return;
+        }
+
+        foreach (var saleProduct in sale.Products)
+        {
+            var movement = saleProduct.Product?.InventoryMovements
+                .FirstOrDefault(item => item.SaleProductId == saleProduct.Id);
+
+            if (movement is not null)
+            {
+                movement.MovementDate = sale.SaleDate;
+            }
+        }
+    }
+
+    private static void EnsureSaleHeaderCanBePatched(Sale sale)
+    {
+        if (sale.SaleStatusId == (int)SaleStatusOption.Cancelled)
+        {
+            throw new AppBadRequestException("No se puede actualizar la cabecera de una venta cancelada.");
+        }
+    }
+
+    private static void EnsureSaleProductsCanBeReplaced(Sale sale)
     {
         if (sale.SaleStatusId is (int)SaleStatusOption.Cancelled or (int)SaleStatusOption.SentForDelivery or (int)SaleStatusOption.Completed)
         {
-            throw new AppBadRequestException("No se puede actualizar una venta cancelada, enviada o completada desde la actualizacion general.");
+            throw new AppBadRequestException("No se pueden reemplazar los productos de una venta cancelada, enviada o completada.");
         }
 
-        if (sale.Payments.Count > 0)
-        {
-            throw new AppBadRequestException("No se puede actualizar una venta con pagos registrados desde la actualizacion general.");
-        }
-
-        if (sale.Deliveries.Count > 0)
-        {
-            throw new AppBadRequestException("No se puede actualizar una venta con envios registrados desde la actualizacion general.");
-        }
     }
 
     private static void NormalizeSaleFields(CreateSaleDTO saleDTO)
     {
         saleDTO.Comments = saleDTO.Comments.NormalizeOptional();
         saleDTO.Products ??= [];
-        saleDTO.Payments ??= [];
+        saleDTO.PaymentMovements ??= [];
     }
 
-    private static void NormalizeSaleFields(UpdateSaleDTO saleDTO)
+    private static void NormalizeSaleFields(PatchSaleHeaderDTO saleDTO)
     {
-        saleDTO.Comments = saleDTO.Comments.NormalizeOptional();
+        if (saleDTO.HasComments)
+        {
+            saleDTO.Comments = saleDTO.Comments.NormalizeOptional();
+        }
+    }
+
+    private static void NormalizeSaleFields(ReplaceSaleProductsDTO saleDTO)
+    {
         saleDTO.Products ??= [];
     }
 
@@ -501,15 +585,15 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
             ?? throw new AppBadRequestException("Debe existir una tasa de cambio bancaria habilitada para registrar movimientos financieros.");
     }
 
-    private static FinancialMovement CreateSalePaymentMovement(SalePayment payment, decimal exchangeRate)
+    private static FinancialMovement CreateSalePaymentMovement(SalePaymentMovement payment, decimal exchangeRate)
     {
         return new FinancialMovement
         {
             Description = "Pago de venta.",
-            MovementDate = payment.PaymentDate,
-            MovementDirectionId = (int)MovementDirectionOptions.In,
+            MovementDate = payment.MovementDate,
+            MovementDirectionId = payment.MovementDirectionId,
             FinancialMovementTypeId = (int)FinancialMovementTypeOption.SalePayment,
-            SalePayment = payment,
+            SalePaymentMovement = payment,
             Amount = payment.NetReceivedAmount,
             ExchangeRate = exchangeRate,
             Comments = null
@@ -555,14 +639,16 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
                 SaleProductStatusId = product.SaleProductStatusId,
                 SaleProductStatusName = product.SaleProductStatus?.Name
             }).ToList(),
-            Payments = sale.Payments.Select(payment => new SalePaymentDTO
+            PaymentMovements = sale.PaymentMovements.Select(payment => new SalePaymentMovementDTO
             {
                 Id = payment.Id,
-                PaymentDate = payment.PaymentDate,
+                MovementDate = payment.MovementDate,
+                MovementDirectionId = payment.MovementDirectionId,
                 PaymentMethodId = payment.PaymentMethodId,
                 PaymentMethodName = payment.PaymentMethod?.Name,
                 PaymentTerminalId = payment.PaymentTerminalId,
                 PaymentTerminalName = payment.PaymentTerminal?.Name,
+                ReversedSalePaymentMovementId = payment.ReversedSalePaymentMovementId,
                 GrossAmount = payment.GrossAmount,
                 CommissionPercentage = payment.CommissionPercentage,
                 CommissionAmount = payment.CommissionAmount,
@@ -578,8 +664,3 @@ public class SaleService(IApplicationDbContext context, ICurrentUserService curr
         decimal TotalDiscount,
         decimal Total);
 }
-
-
-
-
-

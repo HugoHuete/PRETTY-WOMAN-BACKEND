@@ -11,5 +11,6 @@ public class CreateSaleDTO
     public int? MunicipalityId { get; set; }
     public string? Comments { get; set; }
     public List<CreateSaleProductDTO> Products { get; set; } = [];
-    public List<CreateSalePaymentDTO> Payments { get; set; } = [];
+    public List<CreateSalePaymentMovementDTO> PaymentMovements { get; set; } = [];
 }
+
