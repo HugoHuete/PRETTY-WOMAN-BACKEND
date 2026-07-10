@@ -8,10 +8,11 @@ using PrettyWoman.Domain.Enums;
 
 namespace PrettyWoman.Application.Services;
 
-public class SalePaymentMovementService(IApplicationDbContext context, ICurrentUserService currentUserService) : ISalePaymentMovementService
+public class SalePaymentMovementService(IApplicationDbContext context, ICurrentUserService currentUserService, ISaleDeliveryService deliveryService) : ISalePaymentMovementService
 {
     private readonly IApplicationDbContext _context = context;
     private readonly ICurrentUserService _currentUserService = currentUserService;
+    private readonly ISaleDeliveryService _deliveryService = deliveryService;
 
     public async Task<List<SalePaymentMovement>> CreateInitialAsync(List<CreateSalePaymentMovementDTO> paymentMovements)
     {
@@ -47,6 +48,7 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
 
         sale.PaymentMovements.Add(payment);
         sale.SalePaymentStatusId = SalePaymentMovementRules.ResolveStatus(sale.Total, paymentTotal);
+        await _deliveryService.SyncActiveAmountToCollectAsync(sale.Id, sale.Total, paymentTotal);
         await CreateFinancialMovementsAsync([payment]);
         await SaveWithConcurrencyHandlingAsync();
 
@@ -94,6 +96,7 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
 
         await ApplyPaymentAmountsAsync(payment, movementDate, paymentMethodId, paymentTerminalId, grossAmount);
         sale.SalePaymentStatusId = SalePaymentMovementRules.ResolveStatus(sale.Total, updatedPaymentTotal);
+        await _deliveryService.SyncActiveAmountToCollectAsync(sale.Id, sale.Total, updatedPaymentTotal);
         await SyncFinancialMovementAsync(payment);
         await SaveWithConcurrencyHandlingAsync();
     }
@@ -110,6 +113,7 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
 
         RegisterRefund(sale, originalPayment, refundMovement);
         sale.SalePaymentStatusId = SalePaymentMovementRules.ResolveStatus(sale.Total, paymentTotal);
+        await _deliveryService.SyncActiveAmountToCollectAsync(sale.Id, sale.Total, paymentTotal);
         await CreateFinancialMovementsAsync([refundMovement]);
         await SaveWithConcurrencyHandlingAsync();
 
@@ -142,6 +146,7 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
         var paymentTotal = SalePaymentMovementRules.CalculateTotal(sale.PaymentMovements);
         SalePaymentMovementRules.EnsureAllowedTotal(sale.SaleChannelId, sale.Total, paymentTotal);
         sale.SalePaymentStatusId = SalePaymentMovementRules.ResolveStatus(sale.Total, paymentTotal);
+        await _deliveryService.SyncActiveAmountToCollectAsync(sale.Id, sale.Total, paymentTotal);
 
         await CreateFinancialMovementsAsync(newPayments.Concat(refunds));
         await SaveWithConcurrencyHandlingAsync();

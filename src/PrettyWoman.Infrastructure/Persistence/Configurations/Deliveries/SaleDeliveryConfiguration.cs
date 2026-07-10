@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using PrettyWoman.Domain.Entities;
+using PrettyWoman.Domain.Enums;
 
 namespace PrettyWoman.Infrastructure.Persistence.Configurations.Deliveries;
 
@@ -32,6 +33,10 @@ public class SaleDeliveryConfiguration : IEntityTypeConfiguration<SaleDelivery>
         builder.HasIndex(x => x.DeliveryAgencyId);
         builder.HasIndex(x => x.DeliveryStatusId);
         builder.HasIndex(x => new { x.UserId, x.CreatedAt });
+        builder.HasIndex(x => x.SaleId)
+            .IsUnique()
+            .HasDatabaseName("ux_sale_deliveries_sale_id_active")
+            .HasFilter($"delivery_status_id <> {(int)DeliveryStatusCode.Completed} AND delivery_status_id <> {(int)DeliveryStatusCode.Cancelled}");
 
         builder.ToTable(t =>
         {

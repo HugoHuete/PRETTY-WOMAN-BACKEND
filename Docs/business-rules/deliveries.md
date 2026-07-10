@@ -1,108 +1,44 @@
-# Deliveries Business Rules
+# Delivery Business Rules
 
-## Objetivo
+## Scope
 
-Registrar envíos y reenvíos asociados a una venta, sin obligar a que cada venta tenga envío.
+A delivery belongs to a sale and records one delivery attempt. A sale can have historical deliveries, but only one may be active at a time.
 
-## Tablas principales
+## Active delivery
 
-- `sale_deliveries`
-- `delivery_statuses`
-- `delivery_agencies`
-- `sales`
-- `municipalities`
+A delivery is active while its status is neither `Completed` nor `Cancelled`.
 
-## Regla: una venta puede tener cero, uno o varios envíos
+- A sale cannot create a second active delivery.
+- A new delivery is allowed only after every previous delivery is `Completed` or `Cancelled`.
+- Completed and cancelled sales cannot create or send a delivery.
+- A local sale (`InStoreSale`) cannot have a delivery.
+- A sale cannot be changed to `InStoreSale` while it has an active delivery.
 
-Venta local:
+## Sale states
 
-- No requiere registro en `sale_deliveries`.
+- Creating a delivery sets the sale to `ReadyForDelivery`.
+- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/send` sets the sale to `SentForDelivery`.
+- The delivery remains `Pending` until a later operational process marks it `Completed` or `Cancelled`.
+- A completed or cancelled sale must not retain an active delivery. The current API does not expose those sale transitions; any future endpoint for them must first require that all deliveries are terminal.
 
-Venta con envío:
+## Collection amount
 
-- Debe tener uno o más registros en `sale_deliveries`.
+For an agency with `can_collect_cash_on_delivery = true`:
 
-Reenvío:
+`amount_to_collect = max(0, sale.total - net_payment_total) + shipping_charged_to_client`
 
-- Debe registrarse como un nuevo `sale_delivery` asociado a la misma venta.
+`net_payment_total` includes payments and refunds. The amount is recalculated when payments, refunds, grouped payment adjustments, or sale products change while the delivery is active.
 
-## Regla: `sale_deliveries` representa intentos o eventos de envío
+For an agency with `can_collect_cash_on_delivery = false`:
 
-Cada registro representa un envío o intento de envío.
+- The sale product total must be fully paid; an overpayment also satisfies this rule.
+- `shipping_charged_to_client` remains the price charged to the customer for the delivery.
+- `amount_to_collect` is zero because the agency cannot collect on delivery.
 
-Debe guardar:
+The amount collected by the agency is not a sale payment until the business receives the remittance.
 
-- venta relacionada
-- fecha del envío
-- agencia de entrega
-- código o tracking interno
-- monto a cobrar si aplica
-- costo de entrega cobrado a la clienta
-- costo realmente pagado a la agencia
-- nombre del cliente o receptor
-- dirección
-- teléfono
-- estado de entrega
-- comentarios
+## Creation input
 
-## Regla: varios envíos en una misma venta
+Creating a delivery accepts only its operational data: code, municipality, agency, optional client, shipping charged to the client, and comments. `shipping_charged_to_client` is not a separate cash-on-delivery instruction; the agency only follows `amount_to_collect`.
 
-Casos válidos:
-
-- La clienta no contestó y se reprogramó.
-- Se envió a dirección incorrecta.
-- Hubo cambio de agencia.
-- Se hizo un reenvío por error operativo.
-
-No se debe sobrescribir el envío anterior. Se debe registrar un nuevo envío para conservar historial.
-
-## Estados recomendados para `delivery_statuses`
-
-- `Pending`
-- `Sent`
-- `Delivered`
-- `Failed`
-- `Returned`
-- `Rescheduled`
-- `Cancelled`
-
-## Regla: costo cobrado vs costo pagado
-
-Es importante diferenciar:
-
-- monto cobrado a la clienta por envío
-- monto realmente pagado a la agencia
-
-La diferencia afecta ganancia.
-
-Ejemplo:
-
-```txt
-shipping_charged_to_client = 100
-shipping_paid_to_agency = 80
-shipping_margin = 20
-```
-
-## Regla: productos enviados para selección
-
-Si se envían varias tallas para que la clienta escoja una:
-
-- El envío registra el intento logístico.
-- La venta final solo debe incluir el producto escogido.
-- Las prendas adicionales enviadas para seleccion de talla deben manejarse con `product_holds` o movimientos de inventario.
-
-## Regla: `delivery_agency_id` pertenece al envío
-
-La agencia de entrega debe estar en `sale_deliveries`, no en `sales`.
-
-Razón: una venta puede tener varios envíos, cada uno con agencia diferente.
-
-## Regla: capacidad de recaudo de la agencia
-
-`delivery_agencies.can_collect_cash_on_delivery` indica si la agencia puede cobrar efectivo al momento de entregar.
-
-- Si la agencia no puede recaudar, la venta debe estar pagada completamente y `sale_deliveries.amount_to_collect` debe ser `0`.
-- Si la agencia puede recaudar, `amount_to_collect` puede ser mayor que `0`.
-- El monto que la agencia recauda no representa un pago recibido por el negocio. El pago se registra cuando la agencia entrega o transfiere la remesa.
-
-La capacidad pertenece al catálogo de agencias, no se debe inferir desde el nombre de la agencia ni mantener una lista fija en código.
+`amount_collected_nio`, `amount_collected_usd`, and `shipping_paid_to_agency` are not received here. They belong to the later agency reconciliation process.

@@ -1,0 +1,11 @@
+using PrettyWoman.Application.DTOs.Sales;
+
+namespace PrettyWoman.Application.Interfaces;
+
+public interface ISaleDeliveryService
+{
+    Task<int> CreateAsync(int saleId, CreateSaleDeliveryDTO delivery);
+    Task MarkAsSentAsync(int saleId, int deliveryId);
+    Task SyncActiveAmountToCollectAsync(int saleId, decimal saleTotal, decimal paymentTotal);
+    Task EnsureSaleChannelCanBeChangedAsync(int saleId, int saleChannelId);
+}

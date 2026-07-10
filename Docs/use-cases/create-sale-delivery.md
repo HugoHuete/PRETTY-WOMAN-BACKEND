@@ -1,65 +1,43 @@
-# Crear envío de venta
+# Create Sale Delivery
 
-## Objetivo
+## Endpoints
 
-Registrar un intento de envío asociado a una venta.
+- `POST /api/v1/sales/{saleId}/deliveries`
+- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/send`
 
-## Cuándo aplica
+## Create request
 
-- Venta por WhatsApp, Instagram u otro canal no-local.
-- Reenvío porque la clienta no contestó.
-- Cambio de agencia.
-- Reenvío por dirección incorrecta.
-- Entrega fallida que se intenta nuevamente.
+```json
+{
+  "code": "DEL-001",
+  "municipalityId": 1,
+  "deliveryAgencyId": 2,
+  "clientId": 15,
+  "shippingChargedToClient": 60.00,
+  "comments": "Llamar antes de llegar"
+}
+```
 
-## Tablas involucradas
+`clientId` is optional. When omitted, the sale client is used when available.
 
-- `sales`
-- `sale_deliveries`
-- `delivery_statuses`
-- `delivery_agencies`
-- `municipalities`
-- `clients`
+## Create flow
 
-## Flujo esperado
+1. Load the sale and validate that it is neither local, completed, nor cancelled.
+2. Verify that no active delivery exists for the sale.
+3. Validate the municipality and enabled delivery agency.
+4. Calculate the net amount already paid by the customer.
+5. Validate the agency collection capability and calculate `amount_to_collect`.
+6. Create a `Pending` delivery.
+7. Move the sale to `ReadyForDelivery`.
 
-1. Buscar la venta.
-2. Validar que la venta no esté cancelada.
-3. Validar datos de destinatario.
-4. Validar municipio.
-5. Validar agencia de envío y su capacidad de recaudo, si aplica.
-6. Si la agencia no recauda, validar que la venta esté pagada y que el monto a recolectar sea `0`.
-7. Crear registro en `sale_deliveries`.
-8. Asignar estado inicial, por ejemplo `Pending` o `Sent`.
-9. Guardar costos:
-   - monto cobrado al cliente por envío
-   - monto pagado a la agencia, si ya se conoce
-   - monto a recolectar, sólo si la agencia puede recaudar
-10. Si es reenvío, mantener el envío anterior con su estado histórico.
+## Send flow
 
-## Reglas de negocio
+The send endpoint verifies that the delivery belongs to the sale and remains active. It then changes the sale to `SentForDelivery`.
 
-- Una venta puede tener varios envíos.
-- El envío pertenece a `sale_deliveries`, no directamente a `sales`.
-- La agencia de envío pertenece al envío, no a la venta.
-- No se debe borrar un envío fallido. Debe quedar con estado histórico.
-- La ganancia por envío se calcula comparando lo cobrado al cliente versus lo pagado realmente.
-- Un monto a recolectar no cambia el estado de pago de la venta hasta que la agencia remita el dinero.
+## Collection semantics
 
-## Estados sugeridos
+`shippingChargedToClient` is the delivery price charged to the customer, whether it was paid before dispatch or is included in the amount to collect. The delivery agency only uses `amountToCollect` as its cash-on-delivery instruction.
 
-- `Pending`
-- `Sent`
-- `Delivered`
-- `Failed`
-- `Returned`
-- `Rescheduled`
-- `Cancelled`
+## Deferred fields
 
-## Errores esperados
-
-- Venta no existe.
-- Venta cancelada.
-- Municipio inexistente.
-- Agencia inexistente.
-- Datos de destinatario incompletos.
+The creation request does not accept `amountCollectedNio`, `amountCollectedUsd`, or `shippingPaidToAgency`. Those fields are recorded during a later reconciliation with the agency.

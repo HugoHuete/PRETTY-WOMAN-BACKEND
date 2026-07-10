@@ -1,0 +1,197 @@
+using Microsoft.EntityFrameworkCore;
+using PrettyWoman.Application.Common.Calculations;
+using PrettyWoman.Application.Common.Extensions;
+using PrettyWoman.Application.DTOs.Sales;
+using PrettyWoman.Application.Exceptions;
+using PrettyWoman.Application.Interfaces;
+using PrettyWoman.Domain.Entities;
+using PrettyWoman.Domain.Enums;
+
+namespace PrettyWoman.Application.Services;
+
+public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserService currentUserService) : ISaleDeliveryService
+{
+    private const string ActiveDeliveryConstraintName = "ux_sale_deliveries_sale_id_active";
+    private readonly IApplicationDbContext _context = context;
+    private readonly ICurrentUserService _currentUserService = currentUserService;
+
+    public async Task<int> CreateAsync(int saleId, CreateSaleDeliveryDTO deliveryRequest)
+    {
+        Normalize(deliveryRequest);
+        ValidateAmounts(deliveryRequest);
+
+        var sale = await _context.Sales
+            .Include(item => item.PaymentMovements)
+                .ThenInclude(payment => payment.ReversalMovements)
+            .FirstOrDefaultAsync(item => item.Id == saleId)
+            ?? throw new AppNotFoundException($"La venta con id {saleId} no existe.");
+
+        EnsureSaleCanHaveDelivery(sale);
+        await EnsureNoActiveDeliveryAsync(saleId);
+
+        var agency = await _context.DeliveryAgencies
+            .FirstOrDefaultAsync(item => item.Id == deliveryRequest.DeliveryAgencyId && item.Enabled)
+            ?? throw new AppNotFoundException($"La agencia de envio con id {deliveryRequest.DeliveryAgencyId} no existe o no esta habilitada.");
+
+        if (!await _context.Municipalities.AnyAsync(item => item.Id == deliveryRequest.MunicipalityId))
+        {
+            throw new AppNotFoundException($"El municipio con id {deliveryRequest.MunicipalityId} no existe.");
+        }
+
+        var clientId = deliveryRequest.ClientId ?? sale.ClientId;
+        if (clientId.HasValue && !await _context.Clients.AnyAsync(item => item.Id == clientId.Value && !item.IsBlocked))
+        {
+            throw new AppNotFoundException($"La clienta con id {clientId.Value} no existe.");
+        }
+
+        var paymentTotal = SalePaymentMovementRules.CalculateTotal(sale.PaymentMovements);
+        var amountToCollect = CalculateAmountToCollect(sale.Total, paymentTotal, deliveryRequest.ShippingChargedToClient, agency);
+
+        var delivery = new SaleDelivery
+        {
+            Code = deliveryRequest.Code,
+            SaleId = saleId,
+            MunicipalityId = deliveryRequest.MunicipalityId,
+            DeliveryAgencyId = agency.Id,
+            DeliveryStatusId = (int)DeliveryStatusCode.Pending,
+            ClientId = clientId,
+            AmountToCollect = amountToCollect,
+            ShippingChargedToClient = deliveryRequest.ShippingChargedToClient,
+            UserId = ResolveUserId(),
+            Comments = deliveryRequest.Comments
+        };
+
+        sale.SaleStatusId = (int)SaleStatusOption.ReadyForDelivery;
+        try
+        {
+            await _context.SaleDeliveries.AddAsync(delivery);
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (IsActiveDeliveryUniqueViolation(ex))
+        {
+            throw new AppBadRequestException("La venta ya tiene un envio activo.");
+        }
+
+        return delivery.Id;
+    }
+
+    public async Task MarkAsSentAsync(int saleId, int deliveryId)
+    {
+        var delivery = await _context.SaleDeliveries
+            .Include(item => item.Sale)
+            .FirstOrDefaultAsync(item => item.Id == deliveryId && item.SaleId == saleId)
+            ?? throw new AppNotFoundException($"El envio con id {deliveryId} no existe para la venta indicada.");
+
+        if (delivery.DeliveryStatusId is (int)DeliveryStatusCode.Completed or (int)DeliveryStatusCode.Cancelled)
+        {
+            throw new AppBadRequestException("No se puede enviar un envio completado o cancelado.");
+        }
+
+        var sale = delivery.Sale!;
+        EnsureSaleCanHaveDelivery(sale);
+        sale.SaleStatusId = (int)SaleStatusOption.SentForDelivery;
+
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task SyncActiveAmountToCollectAsync(int saleId, decimal saleTotal, decimal paymentTotal)
+    {
+        var delivery = await GetActiveDeliveryAsync(saleId);
+        if (delivery is null)
+        {
+            return;
+        }
+
+        delivery.AmountToCollect = CalculateAmountToCollect(
+            saleTotal,
+            paymentTotal,
+            delivery.ShippingChargedToClient,
+            delivery.DeliveryAgency!);
+    }
+
+    public async Task EnsureSaleChannelCanBeChangedAsync(int saleId, int saleChannelId)
+    {
+        if (saleChannelId != (int)SaleChannelOption.InStoreSale)
+        {
+            return;
+        }
+
+        if (await GetActiveDeliveryAsync(saleId) is not null)
+        {
+            throw new AppBadRequestException("Una venta con un envio activo no puede cambiarse a venta en local.");
+        }
+    }
+
+    private async Task<SaleDelivery?> GetActiveDeliveryAsync(int saleId)
+    {
+        return await _context.SaleDeliveries
+            .Include(item => item.DeliveryAgency)
+            .FirstOrDefaultAsync(item =>
+                item.SaleId == saleId &&
+                item.DeliveryStatusId != (int)DeliveryStatusCode.Completed &&
+                item.DeliveryStatusId != (int)DeliveryStatusCode.Cancelled);
+    }
+
+    private async Task EnsureNoActiveDeliveryAsync(int saleId)
+    {
+        if (await GetActiveDeliveryAsync(saleId) is not null)
+        {
+            throw new AppBadRequestException("La venta ya tiene un envio activo.");
+        }
+    }
+
+    private static bool IsActiveDeliveryUniqueViolation(DbUpdateException exception)
+    {
+        var innerException = exception.InnerException;
+        if (innerException is null || !string.Equals(innerException.GetType().Name, "PostgresException", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return innerException.Message.Contains(ActiveDeliveryConstraintName, StringComparison.Ordinal);
+    }
+
+    private static void EnsureSaleCanHaveDelivery(Sale sale)
+    {
+        if (sale.SaleChannelId == (int)SaleChannelOption.InStoreSale)
+        {
+            throw new AppBadRequestException("Las ventas en local no pueden tener envios.");
+        }
+
+        if (sale.SaleStatusId is (int)SaleStatusOption.Completed or (int)SaleStatusOption.Cancelled)
+        {
+            throw new AppBadRequestException("No se puede crear o enviar un envio para una venta completada o cancelada.");
+        }
+    }
+
+    private static decimal CalculateAmountToCollect(decimal saleTotal, decimal paymentTotal, decimal shippingChargedToClient, DeliveryAgency agency)
+    {
+        if (!agency.CanCollectCashOnDelivery)
+        {
+            if (paymentTotal < saleTotal)
+            {
+                throw new AppBadRequestException("La venta debe estar pagada completamente antes de enviarla con una agencia que no recauda efectivo.");
+            }
+
+            return 0;
+        }
+
+        return Math.Round(Math.Max(0, saleTotal - paymentTotal) + shippingChargedToClient, 2);
+    }
+
+    private static void Normalize(CreateSaleDeliveryDTO delivery)
+    {
+        delivery.Code = delivery.Code.NormalizeRequired("Codigo del envio");
+        delivery.Comments = delivery.Comments.NormalizeOptional();
+    }
+
+    private static void ValidateAmounts(CreateSaleDeliveryDTO delivery)
+    {
+        if (delivery.ShippingChargedToClient < 0)
+        {
+            throw new AppBadRequestException("El monto de envio cobrado a la clienta no puede ser negativo.");
+        }
+    }
+
+    private string ResolveUserId() => _currentUserService.UserId ?? "system";
+}

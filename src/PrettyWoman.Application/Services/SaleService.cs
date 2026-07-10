@@ -12,11 +12,13 @@ namespace PrettyWoman.Application.Services;
 public class SaleService(
     IApplicationDbContext context,
     ICurrentUserService currentUserService,
-    ISalePaymentMovementService paymentMovementService) : ISaleService
+    ISalePaymentMovementService paymentMovementService,
+    ISaleDeliveryService deliveryService) : ISaleService
 {
     private readonly IApplicationDbContext _context = context;
     private readonly ICurrentUserService _currentUserService = currentUserService;
     private readonly ISalePaymentMovementService _paymentMovementService = paymentMovementService;
+    private readonly ISaleDeliveryService _deliveryService = deliveryService;
 
     public async Task<IEnumerable<SaleDTO>> GetAllAsync()
     {
@@ -100,6 +102,7 @@ public class SaleService(
             await SyncInventoryMovementDatesAsync(sale);
         }
 
+        await _deliveryService.EnsureSaleChannelCanBeChangedAsync(sale.Id, saleChannelId);
         sale.SaleChannelId = saleChannelId;
         if (patchSaleHeaderDTO.HasClientId) sale.ClientId = patchSaleHeaderDTO.ClientId;
         if (patchSaleHeaderDTO.HasComments) sale.Comments = patchSaleHeaderDTO.Comments;
@@ -138,6 +141,7 @@ public class SaleService(
         sale.TotalDiscount = totals.TotalDiscount;
         sale.Total = totals.Total;
         sale.Products = saleProducts;
+        await _deliveryService.SyncActiveAmountToCollectAsync(sale.Id, sale.Total, paymentTotal);
 
         if (SaleAffectsInventory(sale.SaleStatusId))
         {
@@ -146,6 +150,12 @@ public class SaleService(
 
         await _context.SaveChangesAsync();
     }
+
+    public Task<int> CreateDeliveryAsync(int saleId, CreateSaleDeliveryDTO delivery)
+        => _deliveryService.CreateAsync(saleId, delivery);
+
+    public Task MarkDeliveryAsSentAsync(int saleId, int deliveryId)
+        => _deliveryService.MarkAsSentAsync(saleId, deliveryId);
 
     public Task<int> AddPaymentMovementAsync(int saleId, CreateSalePaymentMovementDTO paymentMovement)
         => _paymentMovementService.AddAsync(saleId, paymentMovement);
