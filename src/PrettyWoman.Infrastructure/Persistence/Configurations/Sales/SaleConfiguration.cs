@@ -10,10 +10,8 @@ public class SaleConfiguration : IEntityTypeConfiguration<Sale>
     public void Configure(EntityTypeBuilder<Sale> builder)
     {
         builder.Property(x => x.UserId).IsRequired();
-        builder.Property(x => x.SubtotalBeforeDiscount).HasPrecision(12, 2);
+        builder.Property(x => x.Subtotal).HasPrecision(12, 2);
         builder.Property(x => x.TotalDiscount).HasPrecision(12, 2);
-        builder.Property(x => x.SubTotal).HasPrecision(12, 2);
-        builder.Property(x => x.Comission).HasPrecision(12, 2);
         builder.Property(x => x.Total).HasPrecision(12, 2);
         builder.Property(x => x.Comments).HasMaxLength(500);
         builder.Property(x => x.SaleStatusId).HasDefaultValue((int) SaleStatusOption.Pending);
@@ -37,29 +35,20 @@ public class SaleConfiguration : IEntityTypeConfiguration<Sale>
         builder.ToTable(t =>
         {
             t.HasCheckConstraint(
-                "ck_sales_subtotal_before_discount_non_negative",
-                "subtotal_before_discount >= 0");
+                "ck_sales_subtotal_non_negative",
+                "subtotal >= 0");
             t.HasCheckConstraint(
                 "ck_sales_total_discount_non_negative",
                 "total_discount >= 0");
             t.HasCheckConstraint(
-                "ck_sales_subtotal_non_negative",
-                "sub_total >= 0");
-            t.HasCheckConstraint(
-                "ck_sales_comission_non_negative",
-                "comission >= 0");
-            t.HasCheckConstraint(
                 "ck_sales_total_non_negative",
                 "total >= 0");
             t.HasCheckConstraint(
-                "ck_sales_total_discount_not_greater_than_subtotal_before_discount",
-                "total_discount <= subtotal_before_discount");
-            t.HasCheckConstraint(
-                "ck_sales_subtotal_matches_components",
-                "sub_total = subtotal_before_discount - total_discount");
+                "ck_sales_total_discount_not_greater_than_subtotal",
+                "total_discount <= subtotal");
             t.HasCheckConstraint(
                 "ck_sales_total_matches_components",
-                "total = sub_total - comission");
+                "total = subtotal - total_discount");
         });
     }
 }

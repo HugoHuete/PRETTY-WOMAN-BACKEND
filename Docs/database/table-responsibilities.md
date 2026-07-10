@@ -141,7 +141,7 @@ Debe guardar totales congelados:
 
 - subtotal antes de descuento
 - descuento total
-- subtotal de productos
+- subtotal
 - costo de envío cobrado
 - total
 - ganancia bruta, si decides almacenarla
@@ -396,3 +396,4 @@ Ejemplos:
 - Campaign
 - Manual
 - None
+

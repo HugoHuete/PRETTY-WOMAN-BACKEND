@@ -122,16 +122,16 @@ Cada línea debe guardar:
 
 `sales` debe guardar resumen:
 
-- `subtotal_before_discount`
+- `subtotal`
 - `total_discount`
 - `subtotal`
 
 Donde:
 
 ```txt
-subtotal_before_discount = suma de precios originales * cantidad
+subtotal = suma de precios originales * cantidad
 total_discount = suma de descuentos por línea
-subtotal = subtotal_before_discount - total_discount
+total = subtotal - total_discount
 ```
 
 ## Regla: precio histórico
@@ -148,3 +148,4 @@ Para saber cuántos productos se vendieron con descuento:
 - o sumar unidades de esas líneas
 
 Esto funciona porque todo descuento global debe quedar prorrateado por línea.
+

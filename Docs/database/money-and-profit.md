@@ -21,7 +21,7 @@ No son lo mismo.
 Campos sugeridos:
 
 ```txt
-subtotal_before_discount
+subtotal
 total_discount
 subtotal_products
 shipping_cost
@@ -108,7 +108,7 @@ Se puede guardar en `sales.gross_profit`.
 Debe considerar:
 
 ```txt
-subtotal de productos después de descuento
+subtotal después de descuento
 - costo de productos vendidos
 + margen de envío
 ```
@@ -130,3 +130,4 @@ Préstamos recibidos no son ganancia.
 Pagos de préstamo no son gastos operativos normales.
 
 Deben analizarse separados para no distorsionar utilidad.
+

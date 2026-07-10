@@ -14,8 +14,7 @@ public class SaleProduct
     public decimal FinalUnitPrice { get; set; } // OriginalSalePrice - DiscountAmount
     public decimal LineTotal { get; set; } // FinalSalePrice * Quantity
     public decimal TotalCostAtSale { get; set; }
-    public decimal TotalPaymentComission { get; set; } = 0;
-    public decimal GrossProfit { get; set; } // LineTotal - TotalPaymentComission - TotalCostAtSale
+    public decimal GrossProfit { get; set; } // LineTotal - TotalCostAtSale
     public int SaleProductStatusId { get; set; }
 
 

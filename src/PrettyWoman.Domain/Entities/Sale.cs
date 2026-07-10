@@ -10,11 +10,9 @@ public class Sale : IAuditableEntity
     public int SaleStatusId { get; set; } = (int)SaleStatusOption.Pending;
     public int SalePaymentStatusId { get; set; } = (int)SalePaymentStatusOption.Unpaid;
     public required string UserId { get; set; }
-    public decimal SubtotalBeforeDiscount { get; set; }
+    public decimal Subtotal { get; set; }
     public decimal TotalDiscount { get; set; }
-    public decimal SubTotal { get; set; } // SubtotalBeforeDiscount - TotalDiscount
-    public decimal Comission { get; set; } // from card payments
-    public decimal Total { get; set; } // SubTotal - Comission
+    public decimal Total { get; set; } // Subtotal - TotalDiscount
     public string? Comments { get; set; }
     public int? ClientId { get; set; }
     public int? MunicipalityId { get; set; }

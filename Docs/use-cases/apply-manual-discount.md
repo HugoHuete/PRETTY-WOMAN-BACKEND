@@ -31,7 +31,7 @@ Registrar un descuento otorgado en el momento de la venta.
    - `discount_source_id = Manual`
    - `discount_reason`
 5. Actualizar en `sales`:
-   - `subtotal_before_discount`
+   - `subtotal`
    - `total_discount`
    - `subtotal_products`
    - `gross_profit`
@@ -66,3 +66,4 @@ Producto C: C$20
 - Línea sin precio.
 - Prorrateo no cuadra por redondeo.
 - Motivo requerido no enviado, si decides hacerlo obligatorio.
+

@@ -41,7 +41,7 @@ Registrar una venta con sus productos, descuentos aplicados, subtotal, total y e
    - `discount_campaign_id`, si aplica
    - `discount_reason`, si aplica
 7. Calcular en `sales`:
-   - `subtotal_before_discount`
+   - `subtotal`
    - `total_discount`
    - `subtotal_products`
    - `shipping_cost`, si aplica
@@ -86,3 +86,4 @@ Si solo se envian productos para seleccion de talla, usar `product_holds` y afec
 - Canal de venta inexistente.
 - Descuento inválido.
 - Total calculado no coincide con total enviado por el frontend.
+

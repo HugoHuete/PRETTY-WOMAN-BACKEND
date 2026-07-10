@@ -24,7 +24,7 @@ Registrar ventas, líneas vendidas, estados, descuentos aplicados, costos histó
 * estado de venta
 * subtotal antes de descuento
 * descuento total
-* subtotal final
+* total final
 * comentarios
 * usuario que registró la venta
 
@@ -215,7 +215,7 @@ La distribución permite calcular correctamente la ganancia de cada producto des
 
 ## Regla: totales de venta
 
-`sales.subtotal_before_discount` debe representar el total de productos antes de descuentos.
+`sales.subtotal` debe representar el total de productos antes de descuentos.
 
 `sales.total_discount` debe representar la suma de todos los descuentos aplicados en las líneas.
 
@@ -223,11 +223,11 @@ La distribución permite calcular correctamente la ganancia de cada producto des
 
 Debe cumplirse:
 
-`Subtotal = SubtotalBeforeDiscount - TotalDiscount`
+`Total = Subtotal - TotalDiscount`
 
 También debe cumplirse:
 
-`Subtotal = SUM(sale_details.line_total de las líneas correspondientes)`
+`Total = SUM(sale_details.line_total de las líneas correspondientes)`
 
 El envío al cliente y los pagos no deben mezclarse directamente con `sale_details`.
 
@@ -276,3 +276,5 @@ Cada pago debe generar el movimiento financiero correspondiente cuando represent
 * `Paid`: la suma de pagos es igual a `sales.total`.
 
 Este estado de pago no reemplaza a `sales.sale_status_id`; ambos campos deben vivir separados.
+
+

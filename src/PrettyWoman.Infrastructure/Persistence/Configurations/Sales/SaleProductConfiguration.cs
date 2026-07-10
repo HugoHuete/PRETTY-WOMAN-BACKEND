@@ -14,7 +14,6 @@ public class SaleProductConfiguration : IEntityTypeConfiguration<SaleProduct>
         builder.Property(x => x.DiscountAmount).HasPrecision(14, 2);
         builder.Property(x => x.FinalUnitPrice).HasPrecision(14, 2);
         builder.Property(x => x.LineTotal).HasPrecision(14, 2);
-        builder.Property(x => x.TotalPaymentComission).HasPrecision(14, 2);
         builder.Property(x => x.GrossProfit).HasPrecision(18, 6);
 
         builder.HasOne(x => x.Sale).WithMany(x => x.Products).HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Restrict);
@@ -58,10 +57,6 @@ public class SaleProductConfiguration : IEntityTypeConfiguration<SaleProduct>
                 "line_total >= 0");
 
             t.HasCheckConstraint(
-                "ck_sale_details_total_payment_comission_non_negative",
-                "total_payment_comission >= 0");
-
-            t.HasCheckConstraint(
                 "ck_sale_details_unit_cost_at_sale_non_negative",
                 "unit_cost_at_sale >= 0");
 
@@ -71,7 +66,7 @@ public class SaleProductConfiguration : IEntityTypeConfiguration<SaleProduct>
 
             t.HasCheckConstraint(
                 "ck_sale_details_gross_profit_matches_components",
-                "gross_profit = line_total - total_payment_comission - total_cost_at_sale");
+                "gross_profit = line_total - total_cost_at_sale");
         });
     }
 }
