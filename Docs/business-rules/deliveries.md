@@ -96,3 +96,13 @@ Si se envían varias tallas para que la clienta escoja una:
 La agencia de entrega debe estar en `sale_deliveries`, no en `sales`.
 
 Razón: una venta puede tener varios envíos, cada uno con agencia diferente.
+
+## Regla: capacidad de recaudo de la agencia
+
+`delivery_agencies.can_collect_cash_on_delivery` indica si la agencia puede cobrar efectivo al momento de entregar.
+
+- Si la agencia no puede recaudar, la venta debe estar pagada completamente y `sale_deliveries.amount_to_collect` debe ser `0`.
+- Si la agencia puede recaudar, `amount_to_collect` puede ser mayor que `0`.
+- El monto que la agencia recauda no representa un pago recibido por el negocio. El pago se registra cuando la agencia entrega o transfiere la remesa.
+
+La capacidad pertenece al catálogo de agencias, no se debe inferir desde el nombre de la agencia ni mantener una lista fija en código.

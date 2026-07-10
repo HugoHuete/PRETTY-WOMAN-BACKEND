@@ -6,6 +6,6 @@ public class DeliveryAgency
     public required string Name { get; set; }
     public required string PhoneNumber { get; set; }
     public bool Enabled { get; set; } = true;
-
+    public bool CanCollectCashOnDelivery { get; set; }
     public ICollection<SaleDelivery> SaleDeliveries { get; set; } = [];
 }

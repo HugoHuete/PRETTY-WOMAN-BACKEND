@@ -235,9 +235,11 @@ Catálogo de municipios y departamentos.
 
 Usado principalmente para envíos.
 
-## shipping_agencies
+## delivery_agencies
 
 Agencias usadas para entregar ventas a clientes.
+
+`can_collect_cash_on_delivery` indica si la agencia puede recaudar efectivo contra entrega.
 
 ## inventory_stock_buckets
 
@@ -396,4 +398,3 @@ Ejemplos:
 - Campaign
 - Manual
 - None
-

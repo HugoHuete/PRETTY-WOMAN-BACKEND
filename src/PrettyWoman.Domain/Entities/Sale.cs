@@ -15,8 +15,6 @@ public class Sale : IAuditableEntity
     public decimal Total { get; set; } // Subtotal - TotalDiscount
     public string? Comments { get; set; }
     public int? ClientId { get; set; }
-    public int? MunicipalityId { get; set; }
-
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
     public string? CreatedById { get; set; }
@@ -27,9 +25,7 @@ public class Sale : IAuditableEntity
     public SalePaymentStatus? SalePaymentStatus { get; set; }
     public SaleChannel? SaleChannel { get; set; }
     public Client? Client { get; set; }
-    public Municipality? Municipality { get; set; }
     public List<SaleProduct> Products { get; set; } = [];
     public List<SalePaymentMovement> PaymentMovements { get; set; } = [];
     public List<SaleDelivery> Deliveries { get; set; } = [];
 }
-

@@ -22,4 +22,3 @@ public class SaleDTO
     public List<SaleProductDTO> Products { get; set; } = [];
     public List<SalePaymentMovementDTO> PaymentMovements { get; set; } = [];
 }
-

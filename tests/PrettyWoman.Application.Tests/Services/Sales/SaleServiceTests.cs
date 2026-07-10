@@ -170,7 +170,6 @@ public class SaleServiceTests
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Pending,
             ClientId = 1,
-            MunicipalityId = 1,
             Comments = "Entregar por la tarde",
             Products =
             [
@@ -197,7 +196,6 @@ public class SaleServiceTests
         var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
 
         Assert.Null(sale.ClientId);
-        Assert.Null(sale.MunicipalityId);
         Assert.Null(sale.Comments);
     }
 

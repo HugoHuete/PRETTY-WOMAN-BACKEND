@@ -26,8 +26,7 @@ public class SaleService(
             .Include(sale => sale.SaleStatus)
             .Include(sale => sale.SalePaymentStatus)
             .Include(sale => sale.Client)
-            .Include(sale => sale.Municipality)
-            .OrderByDescending(sale => sale.SaleDate)
+.OrderByDescending(sale => sale.SaleDate)
             .ThenByDescending(sale => sale.Id)
             .ToListAsync();
 
@@ -64,7 +63,6 @@ public class SaleService(
             Total = totals.Total,
             Comments = createSaleDTO.Comments,
             ClientId = createSaleDTO.ClientId,
-            MunicipalityId = createSaleDTO.MunicipalityId,
             Products = saleProducts,
             PaymentMovements = payments
         };
@@ -104,7 +102,6 @@ public class SaleService(
 
         sale.SaleChannelId = saleChannelId;
         if (patchSaleHeaderDTO.HasClientId) sale.ClientId = patchSaleHeaderDTO.ClientId;
-        if (patchSaleHeaderDTO.HasMunicipalityId) sale.MunicipalityId = patchSaleHeaderDTO.MunicipalityId;
         if (patchSaleHeaderDTO.HasComments) sale.Comments = patchSaleHeaderDTO.Comments;
 
         await _context.SaveChangesAsync();
@@ -169,7 +166,6 @@ public class SaleService(
             .Include(sale => sale.SaleStatus)
             .Include(sale => sale.SalePaymentStatus)
             .Include(sale => sale.Client)
-            .Include(sale => sale.Municipality)
             .Include(sale => sale.Products).ThenInclude(saleProduct => saleProduct.Product)
             .Include(sale => sale.Products).ThenInclude(saleProduct => saleProduct.DiscountSource)
             .Include(sale => sale.Products).ThenInclude(saleProduct => saleProduct.SaleProductStatus)
@@ -189,7 +185,7 @@ public class SaleService(
         if (!await _context.SaleChannels.AnyAsync(channel => channel.Id == saleDTO.SaleChannelId))
             throw new AppNotFoundException($"El canal de venta con id {saleDTO.SaleChannelId} no existe.");
 
-        await ValidateOptionalReferencesAsync(saleDTO.ClientId, saleDTO.MunicipalityId);
+        await ValidateOptionalReferencesAsync(saleDTO.ClientId);
         await ValidateRequestedSaleStatusAsync(saleDTO.SaleStatusId);
         await ValidateProductRequestAsync(saleDTO.Products);
     }
@@ -203,18 +199,16 @@ public class SaleService(
         if (saleDTO.SaleChannelId.HasValue && !await _context.SaleChannels.AnyAsync(channel => channel.Id == saleDTO.SaleChannelId.Value))
             throw new AppNotFoundException($"El canal de venta con id {saleDTO.SaleChannelId.Value} no existe.");
 
-        await ValidateOptionalReferencesAsync(saleDTO.ClientId, saleDTO.MunicipalityId);
+        await ValidateOptionalReferencesAsync(saleDTO.ClientId);
     }
 
     private async Task ValidateSaleProductsReplacementAsync(ReplaceSaleProductsDTO saleDTO)
         => await ValidateProductRequestAsync(saleDTO.Products);
 
-    private async Task ValidateOptionalReferencesAsync(int? clientId, int? municipalityId)
+    private async Task ValidateOptionalReferencesAsync(int? clientId)
     {
         if (clientId.HasValue && !await _context.Clients.AnyAsync(client => client.Id == clientId.Value))
-            throw new AppNotFoundException($"La clienta con id {clientId.Value} no existe.");
-        if (municipalityId.HasValue && !await _context.Municipalities.AnyAsync(municipality => municipality.Id == municipalityId.Value))
-            throw new AppNotFoundException($"El municipio con id {municipalityId.Value} no existe.");
+            throw new AppNotFoundException($"La clienta con id '{clientId.Value}' no existe.");
     }
 
     private async Task ValidateRequestedSaleStatusAsync(int? saleStatusId)
@@ -386,8 +380,6 @@ public class SaleService(
             Comments = sale.Comments,
             ClientId = sale.ClientId,
             ClientName = sale.Client?.Name,
-            MunicipalityId = sale.MunicipalityId,
-            MunicipalityName = sale.Municipality?.Name,
             Products = sale.Products.Select(product => new SaleProductDTO
             {
                 Id = product.Id,

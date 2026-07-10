@@ -17,7 +17,7 @@ Registrar un intento de envío asociado a una venta.
 - `sales`
 - `sale_deliveries`
 - `delivery_statuses`
-- `shipping_agencies`
+- `delivery_agencies`
 - `municipalities`
 - `clients`
 
@@ -27,14 +27,15 @@ Registrar un intento de envío asociado a una venta.
 2. Validar que la venta no esté cancelada.
 3. Validar datos de destinatario.
 4. Validar municipio.
-5. Validar agencia de envío, si aplica.
-6. Crear registro en `sale_deliveries`.
-7. Asignar estado inicial, por ejemplo `Pending` o `Sent`.
-8. Guardar costos:
+5. Validar agencia de envío y su capacidad de recaudo, si aplica.
+6. Si la agencia no recauda, validar que la venta esté pagada y que el monto a recolectar sea `0`.
+7. Crear registro en `sale_deliveries`.
+8. Asignar estado inicial, por ejemplo `Pending` o `Sent`.
+9. Guardar costos:
    - monto cobrado al cliente por envío
    - monto pagado a la agencia, si ya se conoce
-   - monto a recolectar, si aplica
-9. Si es reenvío, mantener el envío anterior con su estado histórico.
+   - monto a recolectar, sólo si la agencia puede recaudar
+10. Si es reenvío, mantener el envío anterior con su estado histórico.
 
 ## Reglas de negocio
 
@@ -43,6 +44,7 @@ Registrar un intento de envío asociado a una venta.
 - La agencia de envío pertenece al envío, no a la venta.
 - No se debe borrar un envío fallido. Debe quedar con estado histórico.
 - La ganancia por envío se calcula comparando lo cobrado al cliente versus lo pagado realmente.
+- Un monto a recolectar no cambia el estado de pago de la venta hasta que la agencia remita el dinero.
 
 ## Estados sugeridos
 

@@ -14,6 +14,7 @@ public class DeliveryAgencyConfiguration : IEntityTypeConfiguration<DeliveryAgen
         builder.Property(x => x.PhoneNumber)
             .IsRequired()
             .HasMaxLength(20);
+        builder.Property(x => x.CanCollectCashOnDelivery).HasDefaultValue(false);
 
         builder.HasIndex(x => x.Name).IsUnique();
     }

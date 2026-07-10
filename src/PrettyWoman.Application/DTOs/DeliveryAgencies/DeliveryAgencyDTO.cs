@@ -13,4 +13,5 @@ public class DeliveryAgencyDTO
     public required string PhoneNumber { get; set; }
 
     public bool Enabled { get; set; }
+    public bool CanCollectCashOnDelivery { get; set; }
 }
