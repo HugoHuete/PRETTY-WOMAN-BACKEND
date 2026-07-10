@@ -12,6 +12,7 @@ public class ClientConfiguration : IEntityTypeConfiguration<Client>
         builder.Property(x => x.Name).IsRequired().HasMaxLength(100);
         builder.Property(x => x.PhoneNumber).HasMaxLength(20);
         builder.Property(x => x.InstagramUser).HasMaxLength(50);
+        builder.Property(x => x.MessengerUser).HasMaxLength(50);
         builder.Property(x => x.Address).HasMaxLength(350);
         builder.Property(x => x.BlockedReason).HasMaxLength(350);
         builder.Property(x => x.Comments).HasMaxLength(500);
@@ -22,5 +23,6 @@ public class ClientConfiguration : IEntityTypeConfiguration<Client>
         builder.HasIndex(x => x.IsBlocked);
         builder.HasIndex(x => x.PhoneNumber).IsUnique();
         builder.HasIndex(x => x.InstagramUser).IsUnique();
+        builder.HasIndex(x => x.MessengerUser).IsUnique();
     }
 }

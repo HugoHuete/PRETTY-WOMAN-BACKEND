@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.DTOs.Clients;
 using PrettyWoman.Application.Interfaces;
 
@@ -11,9 +12,9 @@ public class ClientsController(IClientService clientService) : ControllerBase
     private readonly IClientService _clientService = clientService;
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<ClientDTO>>> GetAll()
+    public async Task<ActionResult<PaginatedResult<ClientDTO>>> GetAll([FromQuery] ClientQueryDTO query)
     {
-        var clients = await _clientService.GetAllAsync();
+        var clients = await _clientService.GetAllAsync(query);
         return Ok(clients);
     }
 

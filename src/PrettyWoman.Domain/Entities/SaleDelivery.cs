@@ -13,8 +13,6 @@ public class SaleDelivery
     public decimal AmountToCollect { get; set; }
     public decimal AmountCollectedNio { get; set; } = 0;
     public decimal AmountCollectedUsd { get; set; } = 0;
-    public decimal AmountTransferredNio { get; set; } = 0;
-    public decimal AmountTransferredUsd { get; set; } = 0;
     public decimal ChangeAmount { get; set; } = 0; // Vuelto para cuando pague en Usd
     public decimal? ExchangeRate { get; set; }
     public decimal ShippingChargedToClient { get; set; }

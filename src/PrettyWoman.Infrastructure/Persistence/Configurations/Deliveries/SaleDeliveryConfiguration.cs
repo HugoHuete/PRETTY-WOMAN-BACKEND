@@ -15,8 +15,6 @@ public class SaleDeliveryConfiguration : IEntityTypeConfiguration<SaleDelivery>
         builder.Property(x => x.AmountToCollect).HasPrecision(12, 2);
         builder.Property(x => x.AmountCollectedNio).HasPrecision(12, 2);
         builder.Property(x => x.AmountCollectedUsd).HasPrecision(12, 2);
-        builder.Property(x => x.AmountTransferredNio).HasPrecision(12, 2);
-        builder.Property(x => x.AmountTransferredUsd).HasPrecision(12, 2);
         builder.Property(x => x.ShippingChargedToClient).HasPrecision(12, 2);
         builder.Property(x => x.ShippingPaidToAgency).HasPrecision(12, 2);
         builder.Property(x => x.ChangeAmount).HasPrecision(12, 2);

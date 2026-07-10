@@ -11,9 +11,9 @@ public class ClientDTO
 
     public string? PhoneNumber { get; set; }
     public string? InstagramUser { get; set; }
+    public string? MessengerUser { get; set; }
     public string? Address { get; set; }
     public DateTime CreatedAt { get; set; }
-    public DateTime? LastPurchaseDate { get; set; }
     public bool IsBlocked { get; set; }
     public bool IsFriend { get; set; }
     public string? BlockedReason { get; set; }
