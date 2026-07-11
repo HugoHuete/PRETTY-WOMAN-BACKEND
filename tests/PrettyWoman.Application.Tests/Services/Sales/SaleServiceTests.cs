@@ -643,12 +643,14 @@ public class SaleServiceTests
             Code = "DEL-001",
             MunicipalityId = 1,
             DeliveryAgencyId = 1,
-            ShippingChargedToClient = 50m
+            ShippingChargedToClient = 50m,
+            DeliveryAddress = "De la rotonda 2 cuadras al norte"
         });
 
         var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
         var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
         Assert.Equal(550m, delivery.AmountToCollect);
+        Assert.Equal("De la rotonda 2 cuadras al norte", delivery.DeliveryAddress);
         Assert.Equal((int)SaleStatusOption.ReadyForDelivery, sale.SaleStatusId);
 
         await service.MarkDeliveryAsSentAsync(saleId, deliveryId);
@@ -729,7 +731,8 @@ public class SaleServiceTests
             Code = "DEL-003",
             MunicipalityId = 1,
             DeliveryAgencyId = 1,
-            ShippingChargedToClient = 50m
+            ShippingChargedToClient = 50m,
+            DeliveryAddress = "De la rotonda 2 cuadras al norte"
         });
 
         await service.AddPaymentMovementAsync(saleId, new CreateSalePaymentMovementDTO

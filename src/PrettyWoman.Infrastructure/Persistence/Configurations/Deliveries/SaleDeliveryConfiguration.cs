@@ -20,6 +20,7 @@ public class SaleDeliveryConfiguration : IEntityTypeConfiguration<SaleDelivery>
         builder.Property(x => x.ShippingPaidToAgency).HasPrecision(12, 2);
         builder.Property(x => x.ChangeAmount).HasPrecision(12, 2);
         builder.Property(x => x.ExchangeRate).HasPrecision(10, 4);
+        builder.Property(x => x.DeliveryAddress).HasMaxLength(350);
         builder.Property(x => x.Comments).HasMaxLength(500);
 
         builder.HasOne(x => x.Sale).WithMany(x => x.Deliveries).HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Restrict);

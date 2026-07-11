@@ -11,5 +11,6 @@ public class CreateSaleDeliveryDTO
     public int DeliveryAgencyId { get; set; }
     public int? ClientId { get; set; }
     public decimal ShippingChargedToClient { get; set; }
+    public string? DeliveryAddress { get; set; }
     public string? Comments { get; set; }
 }

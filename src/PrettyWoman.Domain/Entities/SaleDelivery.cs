@@ -17,6 +17,7 @@ public class SaleDelivery
     public decimal? ExchangeRate { get; set; }
     public decimal ShippingChargedToClient { get; set; }
     public decimal ShippingPaidToAgency { get; set; }
+    public string? DeliveryAddress { get; set; }
     public required string UserId { get; set; }
     public string? Comments { get; set; }
 

@@ -39,6 +39,8 @@ The amount collected by the agency is not a sale payment until the business rece
 
 ## Creation input
 
-Creating a delivery accepts only its operational data: code, municipality, agency, optional client, shipping charged to the client, and comments. `shipping_charged_to_client` is not a separate cash-on-delivery instruction; the agency only follows `amount_to_collect`.
+Creating a delivery accepts only its operational data: code, municipality, agency, optional client, historical delivery address, shipping charged to the client, and comments. `shipping_charged_to_client` is not a separate cash-on-delivery instruction; the agency only follows `amount_to_collect`.
+
+`delivery_address` is copied from the request or, when omitted, from the associated client address. It is historical and must not change if the client updates their profile later.
 
 `amount_collected_nio`, `amount_collected_usd`, and `shipping_paid_to_agency` are not received here. They belong to the later agency reconciliation process.

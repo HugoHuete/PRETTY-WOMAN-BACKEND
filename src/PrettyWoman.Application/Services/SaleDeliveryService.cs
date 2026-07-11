@@ -39,9 +39,19 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         }
 
         var clientId = deliveryRequest.ClientId ?? sale.ClientId;
-        if (clientId.HasValue && !await _context.Clients.AnyAsync(item => item.Id == clientId.Value && !item.IsBlocked))
+        string? clientAddress = null;
+        if (clientId.HasValue)
         {
-            throw new AppNotFoundException($"La clienta con id {clientId.Value} no existe.");
+            var client = await _context.Clients
+                .Where(item => item.Id == clientId.Value && !item.IsBlocked)
+                .Select(item => new { item.Address })
+                .FirstOrDefaultAsync();
+            if (client is null)
+            {
+                throw new AppNotFoundException($"La clienta con id {clientId.Value} no existe.");
+            }
+
+            clientAddress = client.Address;
         }
 
         var paymentTotal = SalePaymentMovementRules.CalculateTotal(sale.PaymentMovements);
@@ -57,6 +67,7 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
             ClientId = clientId,
             AmountToCollect = amountToCollect,
             ShippingChargedToClient = deliveryRequest.ShippingChargedToClient,
+            DeliveryAddress = deliveryRequest.DeliveryAddress ?? clientAddress,
             UserId = ResolveUserId(),
             Comments = deliveryRequest.Comments
         };
@@ -182,6 +193,7 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
     private static void Normalize(CreateSaleDeliveryDTO delivery)
     {
         delivery.Code = delivery.Code.NormalizeRequired("Codigo del envio");
+        delivery.DeliveryAddress = delivery.DeliveryAddress.NormalizeOptional();
         delivery.Comments = delivery.Comments.NormalizeOptional();
     }
 

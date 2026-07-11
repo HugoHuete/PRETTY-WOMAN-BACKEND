@@ -14,11 +14,12 @@
   "deliveryAgencyId": 2,
   "clientId": 15,
   "shippingChargedToClient": 60.00,
+  "deliveryAddress": "De la rotonda 2 cuadras al norte",
   "comments": "Llamar antes de llegar"
 }
 ```
 
-`clientId` is optional. When omitted, the sale client is used when available.
+`clientId` is optional. When omitted, the sale client is used when available. `deliveryAddress` is optional; when omitted, the current address of the resolved client is copied into the delivery as historical data.
 
 ## Create flow
 
