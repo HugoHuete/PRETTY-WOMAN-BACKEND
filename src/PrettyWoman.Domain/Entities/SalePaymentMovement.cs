@@ -12,6 +12,9 @@ public class SalePaymentMovement : IAuditableEntity
     public int? PaymentTerminalId { get; set; }
     public int? ReversedSalePaymentMovementId { get; set; }
     public decimal GrossAmount { get; set; }
+    public decimal ProductAmount { get; set; }
+    public decimal ShippingAmount { get; set; }
+    public int? SaleDeliveryId { get; set; }
     public decimal CommissionPercentage { get; set; }
     public decimal CommissionAmount { get; set; }
     public decimal IncomeTaxPercentage { get; set; }
@@ -25,6 +28,7 @@ public class SalePaymentMovement : IAuditableEntity
     public string? UpdatedById { get; set; }
 
     public Sale? Sale { get; set; }
+    public SaleDelivery? SaleDelivery { get; set; }
     public MovementDirection? MovementDirection { get; set; }
     public PaymentMethod? PaymentMethod { get; set; }
     public PaymentTerminal? PaymentTerminal { get; set; }

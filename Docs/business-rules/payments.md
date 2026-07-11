@@ -1,101 +1,57 @@
 # Payments Business Rules
 
-## Objetivo
+## Scope
 
-Registrar pagos reales recibidos por ventas, permitiendo pagos parciales, pagos mixtos y comisiones de POS.
+`SalePaymentMovement` records a customer payment and separates what it pays for from the money actually received.
 
-## Tablas principales
+- `product_amount` applies to the products in the sale.
+- `shipping_amount` applies to one `sale_delivery`.
+- `gross_amount` is the sum of both amounts and is the base for card commissions and the direct financial movement.
 
-- `sale_payments`
-- `payment_methods`
-- `payment_terminals`
-- `sales`
-- `financial_movements`
+## Allocation rules
 
-## Regla: una venta puede tener varios pagos
-
-No se debe asumir que una venta tiene un único método de pago.
-
-Ejemplo:
-
-- Venta total: C$1,000.
-- C$500 efectivo.
-- C$500 tarjeta.
-
-Esto debe generar dos registros en `sale_payments`.
-
-## Regla: `sale_payments` representa dinero recibido
-
-Cada registro en `sale_payments` representa un pago real recibido o registrado.
-
-Debe guardar:
-
-- venta asociada
-- fecha del pago
-- método de pago
-- terminal de pago si aplica
-- monto cobrado
-- comisión
-- neto recibido
-- usuario que registró el pago
-
-## Regla: pagos con tarjeta y POS
-
-Cuando el método de pago sea tarjeta, debe indicarse el POS/terminal utilizado si aplica.
-
-Cada terminal puede tener una comisión distinta.
-
-Ejemplo:
-
-- POS A: 4.5%
-- POS B: 5.5%
-
-El pago debe guardar la comisión y el neto recibido al momento del pago.
-
-## Regla: congelar comisión histórica
-
-Aunque el porcentaje del POS cambie en el futuro, los pagos históricos no deben recalcularse.
-
-Por eso se guardan:
-
-- `commission_amount`
-- `net_received_amount`
-
-Recomendación adicional: guardar también el porcentaje aplicado al momento del pago si se quiere trazabilidad completa.
-
-## Regla: cálculo de neto recibido
-
-Para efectivo o transferencia sin comisión:
-
-```txt
-net_received_amount = amount
-commission_amount = 0
+```text
+gross_amount = product_amount + shipping_amount
 ```
 
-Para tarjeta:
+- Amounts cannot be negative and their sum must be greater than zero.
+- A payment with `shipping_amount > 0` must reference `sale_delivery_id`.
+- A payment with no shipping allocation must not reference a delivery.
+- The referenced delivery must belong to the same sale.
+- Payments applied to shipping cannot exceed `shipping_charged_to_client` for that delivery.
+- In-store sales cannot have a shipping allocation.
 
-```txt
-commission_amount = amount * commission_percentage / 100
-net_received_amount = amount - commission_amount
+Every create request must explicitly provide the amount applied to products and/or shipping. `gross_amount` is calculated and persisted by the service; it is not a request field.
+
+## Sale payment status
+
+Only `product_amount` is used to calculate `sales.sale_payment_status_id`.
+
+- Zero: `Unpaid`.
+- Less than `sales.total`: `PartiallyPaid`.
+- Equal to `sales.total`: `Paid`.
+- Greater after a product change: `RefundPending`.
+
+A shipping payment does not make a product sale look overpaid.
+
+## Delivery collection
+
+For a COD agency:
+
+```text
+amount_to_collect =
+  max(0, sale.total - paid_products)
+  + max(0, shipping_charged_to_client - paid_shipping_for_delivery)
 ```
 
-## Regla: movimiento financiero desde pagos
+For an agency that cannot collect cash on delivery, products must be paid before creating the delivery. Products and shipping must both be paid before it can be sent to the agency.
 
-El movimiento financiero relacionado a una venta debe originarse desde `sale_payments`, no desde `sales`.
+## Direct payments and financial movements
 
-Razón:
+A direct cash, transfer, or card payment creates one financial movement for its `net_received_amount`. The financial movement represents the entire payment; the product/shipping columns explain its business allocation.
 
-- La venta representa la transacción comercial.
-- El pago representa el ingreso real de dinero.
+Payments collected by an agency will be handled during delivery reconciliation. They will settle the sale without creating their own direct financial movement; the reconciliation will record the actual net remittance.
 
-Si una venta se paga en dos fechas, deben existir dos movimientos financieros, cada uno relacionado al pago correspondiente.
+## Refunds
 
-## Regla: estado de pago de venta
-
-El estado de la venta puede derivarse de la suma de pagos:
-
-- Si suma de pagos es 0: pendiente.
-- Si suma de pagos es menor que total: parcialmente pagada.
-- Si suma de pagos cubre total: pagada.
-
-Se puede guardar el estado para facilitar consultas, pero debe actualizarse de forma controlada desde el servicio de ventas/pagos.
+Refunds preserve the product and shipping allocation of the refunded amount. A partial refund of a payment that includes shipping must state the amount refunded for each component. Card payments remain full reversals only.

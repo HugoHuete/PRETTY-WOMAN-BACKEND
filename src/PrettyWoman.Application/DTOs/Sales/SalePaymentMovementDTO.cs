@@ -11,6 +11,9 @@ public class SalePaymentMovementDTO
     public string? PaymentTerminalName { get; set; }
     public int? ReversedSalePaymentMovementId { get; set; }
     public decimal GrossAmount { get; set; }
+    public decimal ProductAmount { get; set; }
+    public decimal ShippingAmount { get; set; }
+    public int? SaleDeliveryId { get; set;}
     public decimal CommissionPercentage { get; set; }
     public decimal CommissionAmount { get; set; }
     public decimal IncomeTaxPercentage { get; set; }

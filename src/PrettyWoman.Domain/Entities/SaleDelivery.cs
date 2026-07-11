@@ -27,5 +27,6 @@ public class SaleDelivery
     public DeliveryStatus? DeliveryStatus { get; set; }
     public DeliveryAgency? DeliveryAgency { get; set; }
     public Client? Client { get; set; }
+    public List<SalePaymentMovement> PaymentMovements { get; set; } = [];
 
 }

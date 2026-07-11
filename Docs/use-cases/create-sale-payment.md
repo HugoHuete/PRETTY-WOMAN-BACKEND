@@ -1,89 +1,41 @@
 # Crear pago de venta
 
-## Objetivo
+## Endpoint
 
-Registrar un pago total o parcial asociado a una venta.
+`POST /api/v1/sales/{saleId}/payment-movements`
 
-## Cuándo aplica
+## Request
 
-- La clienta paga toda la venta.
-- La clienta paga una parte.
-- La venta se paga con varios métodos.
-- La venta se paga con efectivo y tarjeta.
-- La venta usa un POS con comisión.
-
-## Tablas involucradas
-
-- `sale_payments`
-- `sales`
-- `payment_methods`
-- `payment_terminals`
-- `financial_movements`
-- `financial_movement_types`
-- `financial_movement_directions`
-
-## Flujo esperado
-
-1. Buscar la venta.
-2. Validar que la venta no esté cancelada.
-3. Validar el método de pago.
-4. Si el método requiere terminal POS:
-   - validar `payment_terminal_id`
-   - obtener porcentaje de comisión
-5. Calcular:
-   - `amount`
-   - `commission_amount`
-   - `net_received_amount`
-6. Crear registro en `sale_payments`.
-7. Crear movimiento financiero de ingreso asociado al `sale_payment`.
-8. Recalcular y actualizar `sales.sale_payment_status_id`:
-   - `Unpaid`
-   - `PartiallyPaid`
-   - `Paid`
-
-## Reglas de negocio
-
-- El pago representa entrada real de dinero.
-- La venta no debe usarse como movimiento financiero directo.
-- El pago no cambia automáticamente `sales.sale_status_id`; ese campo representa la etapa operativa de la venta.
-- `financial_movements` debe referenciar `sale_payment_id`, no solo `sale_id`.
-- El neto recibido puede ser menor que el monto cobrado si hay comisión POS.
-- Las comisiones deben quedar congeladas al momento del pago.
-
-## Ejemplo
-
-Venta total:
-
-```txt
-C$1,000
+```json
+{
+  "movementDate": "2026-07-11T14:00:00Z",
+  "paymentMethodId": 2,
+  "productAmount": 500.00,
+  "shippingAmount": 90.00,
+  "saleDeliveryId": 25
+}
 ```
 
-Pagos:
+`grossAmount` is calculated as `productAmount + shippingAmount` and is not accepted in the request. A product-only payment sends `shippingAmount: 0`.
 
-```txt
-C$500 efectivo
-C$500 tarjeta POS 4.5%
+## Flow
+
+1. Load the sale and verify it is not cancelled.
+2. Validate the payment method and terminal when needed.
+3. Validate the product/shipping allocation and its referenced delivery.
+4. Create one payment movement and, for direct payments, one financial movement for its net amount.
+5. Recalculate the product payment status and the active delivery amount to collect.
+
+## Examples
+
+A C$590 transfer that pays C$500 of products and C$90 of shipping creates one payment and one financial movement for C$590. The sale is paid, the shipping is paid, and the delivery amount to collect becomes zero.
+
+A C$500 product-only payment is explicit:
+
+```json
+{
+  "paymentMethodId": 1,
+  "productAmount": 500.00,
+  "shippingAmount": 0
+}
 ```
-
-Resultado:
-
-```txt
-Pago 1:
-amount = 500
-commission_amount = 0
-net_received_amount = 500
-
-Pago 2:
-amount = 500
-commission_amount = 22.50
-net_received_amount = 477.50
-```
-
-## Errores esperados
-
-- Venta no existe.
-- Venta cancelada.
-- Monto inválido.
-- Método de pago inexistente.
-- Terminal POS requerido pero no enviado.
-- Pago excede saldo pendiente, si decides bloquear sobrepagos.

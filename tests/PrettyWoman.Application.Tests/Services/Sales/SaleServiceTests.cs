@@ -40,14 +40,14 @@ public class SaleServiceTests
                 {
                     MovementDate = new DateTime(2026, 7, 10, 10, 1, 0, DateTimeKind.Utc),
                     PaymentMethodId = 1,
-                    GrossAmount = 500m
+                    ProductAmount = 500m
                 },
                 new CreateSalePaymentMovementDTO
                 {
                     MovementDate = new DateTime(2026, 7, 10, 10, 2, 0, DateTimeKind.Utc),
                     PaymentMethodId = (int)PaymentMethodOption.Card,
                     PaymentTerminalId = 1,
-                    GrossAmount = 500m
+                    ProductAmount = 500m
                 }
             ]
         });
@@ -94,7 +94,7 @@ public class SaleServiceTests
                 new CreateSalePaymentMovementDTO
                 {
                     PaymentMethodId = 1,
-                    GrossAmount = 500m
+                    ProductAmount = 500m
                 }
             ]
         }));
@@ -279,7 +279,7 @@ public class SaleServiceTests
                 new CreateSalePaymentMovementDTO
                 {
                     PaymentMethodId = 1,
-                    GrossAmount = 500m
+                    ProductAmount = 500m
                 }
             ]
         });
@@ -350,7 +350,7 @@ public class SaleServiceTests
         {
             MovementDate = new DateTime(2026, 7, 10, 11, 0, 0, DateTimeKind.Utc),
             PaymentMethodId = (int)PaymentMethodOption.Cash,
-            GrossAmount = 200m
+            ProductAmount = 200m
         });
 
         var sale = await context.Sales.Include(item => item.PaymentMovements).SingleAsync(item => item.Id == saleId);
@@ -389,7 +389,7 @@ public class SaleServiceTests
                 new CreateSalePaymentMovementDTO
                 {
                     PaymentMethodId = (int)PaymentMethodOption.Cash,
-                    GrossAmount = 200m
+                    ProductAmount = 200m
                 }
             ]
         });
@@ -402,7 +402,7 @@ public class SaleServiceTests
         {
             MovementDate = new DateTime(2026, 7, 10, 12, 0, 0, DateTimeKind.Utc),
             PaymentMethodId = (int)PaymentMethodOption.Transfer,
-            GrossAmount = 500m
+            ProductAmount = 500m
         });
 
         var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
@@ -442,7 +442,7 @@ public class SaleServiceTests
                 new CreateSalePaymentMovementDTO
                 {
                     PaymentMethodId = (int)PaymentMethodOption.Cash,
-                    GrossAmount = 500m
+                    ProductAmount = 500m
                 }
             ]
         });
@@ -454,7 +454,7 @@ public class SaleServiceTests
         var refundId = await service.RefundPaymentMovementAsync(saleId, paymentId, new RefundSalePaymentMovementDTO
         {
             PaymentMethodId = (int)PaymentMethodOption.Transfer,
-            GrossAmount = 200m
+            ProductAmount = 200m
         });
 
         var sale = await context.Sales.Include(item => item.PaymentMovements).SingleAsync(item => item.Id == saleId);
@@ -496,7 +496,7 @@ public class SaleServiceTests
                 {
                     PaymentMethodId = (int)PaymentMethodOption.Card,
                     PaymentTerminalId = 1,
-                    GrossAmount = 500m
+                    ProductAmount = 500m
                 }
             ]
         });
@@ -507,7 +507,7 @@ public class SaleServiceTests
 
         await Assert.ThrowsAsync<AppBadRequestException>(() => service.RefundPaymentMovementAsync(saleId, paymentId, new RefundSalePaymentMovementDTO
         {
-            GrossAmount = 200m
+            ProductAmount = 200m
         }));
 
         var refundId = await service.RefundPaymentMovementAsync(saleId, paymentId, new RefundSalePaymentMovementDTO());
@@ -544,13 +544,13 @@ public class SaleServiceTests
                 {
                     MovementDate = new DateTime(2026, 7, 10, 10, 0, 0, DateTimeKind.Utc),
                     PaymentMethodId = (int)PaymentMethodOption.Cash,
-                    GrossAmount = 200m
+                    ProductAmount = 200m
                 }
             ]
         });
         var paymentId = await context.SalePaymentMovements.Where(item => item.SaleId == saleId).Select(item => item.Id).SingleAsync();
 
-        await service.UpdatePaymentMovementAsync(saleId, paymentId, new UpdateSalePaymentMovementDTO { GrossAmount = 250m });
+        await service.UpdatePaymentMovementAsync(saleId, paymentId, new UpdateSalePaymentMovementDTO { ProductAmount = 250m });
 
         var payment = await context.SalePaymentMovements.SingleAsync(item => item.Id == paymentId);
         Assert.Equal((int)PaymentMethodOption.Cash, payment.PaymentMethodId);
@@ -575,7 +575,7 @@ public class SaleServiceTests
             ],
             PaymentMovements =
             [
-                new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Card, GrossAmount = 500m }
+                new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Card, ProductAmount = 500m }
             ]
         }));
     }
@@ -598,7 +598,7 @@ public class SaleServiceTests
             ],
             PaymentMovements =
             [
-                new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Cash, GrossAmount = 500m }
+                new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Cash, ProductAmount = 500m }
             ]
         });
         var cashPaymentId = await context.SalePaymentMovements.Where(item => item.SaleId == saleId).Select(item => item.Id).SingleAsync();
@@ -607,11 +607,11 @@ public class SaleServiceTests
         {
             PaymentMovements =
             [
-                new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Card, PaymentTerminalId = 1, GrossAmount = 500m }
+                new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Card, PaymentTerminalId = 1, ProductAmount = 500m }
             ],
             Refunds =
             [
-                new CreateSalePaymentRefundDTO { PaymentMovementId = cashPaymentId, GrossAmount = 500m }
+                new CreateSalePaymentRefundDTO { PaymentMovementId = cashPaymentId, ProductAmount = 500m }
             ]
         });
 
@@ -696,7 +696,7 @@ public class SaleServiceTests
         await service.AddPaymentMovementAsync(saleId, new CreateSalePaymentMovementDTO
         {
             PaymentMethodId = (int)PaymentMethodOption.Cash,
-            GrossAmount = 500m
+            ProductAmount = 500m
         });
         var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
         {
@@ -738,7 +738,7 @@ public class SaleServiceTests
         await service.AddPaymentMovementAsync(saleId, new CreateSalePaymentMovementDTO
         {
             PaymentMethodId = (int)PaymentMethodOption.Cash,
-            GrossAmount = 200m
+            ProductAmount = 200m
         });
 
         var delivery = await context.SaleDeliveries.SingleAsync(item => item.SaleId == saleId);
@@ -822,6 +822,124 @@ public class SaleServiceTests
         Assert.Contains("pagada completamente", exception.Message, StringComparison.OrdinalIgnoreCase);
         var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
         Assert.Equal(1, delivery.DeliveryAgencyId);
+    }
+    [Fact]
+    public async Task AddPaymentMovementAsync_AppliesPaymentToProductsAndShippingAndClearsAmountToCollect()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        await context.SaveChangesAsync();
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+        var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "DEL-ALLOC-001",
+            MunicipalityId = 1,
+            DeliveryAgencyId = 1,
+            ShippingChargedToClient = 90m
+        });
+
+        var paymentId = await service.AddPaymentMovementAsync(saleId, new CreateSalePaymentMovementDTO
+        {
+            PaymentMethodId = (int)PaymentMethodOption.Transfer,
+            ProductAmount = 500m,
+            ShippingAmount = 90m,
+            SaleDeliveryId = deliveryId
+        });
+
+        var payment = await context.SalePaymentMovements.SingleAsync(item => item.Id == paymentId);
+        var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
+        var financialMovement = await context.FinancialMovements.SingleAsync(item => item.SalePaymentMovementId == paymentId);
+
+        Assert.Equal(590m, payment.GrossAmount);
+        Assert.Equal(500m, payment.ProductAmount);
+        Assert.Equal(90m, payment.ShippingAmount);
+        Assert.Equal(deliveryId, payment.SaleDeliveryId);
+        Assert.Equal((int)SalePaymentStatusOption.Paid, sale.SalePaymentStatusId);
+        Assert.Equal(0m, delivery.AmountToCollect);
+        Assert.Equal(590m, financialMovement.Amount);
+    }
+
+    [Fact]
+    public async Task AddPaymentMovementAsync_RejectsShippingPaymentGreaterThanShippingCharge()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        await context.SaveChangesAsync();
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+        var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "DEL-ALLOC-002",
+            MunicipalityId = 1,
+            DeliveryAgencyId = 1,
+            ShippingChargedToClient = 90m
+        });
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.AddPaymentMovementAsync(saleId, new CreateSalePaymentMovementDTO
+        {
+            PaymentMethodId = (int)PaymentMethodOption.Transfer,
+            ProductAmount = 500m,
+            ShippingAmount = 100m,
+            SaleDeliveryId = deliveryId
+        }));
+
+        Assert.Contains("envio", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+    [Fact]
+    public async Task MarkDeliveryAsSentAsync_RequiresShippingPaymentForAgencyWithoutCashCollection()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        context.DeliveryAgencies.Add(new DeliveryAgency { Id = 2, Name = "Agencia prepago", PhoneNumber = "88881111", CanCollectCashOnDelivery = false });
+        await context.SaveChangesAsync();
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Transfer, ProductAmount = 500m }]
+        });
+        var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "DEL-NONCOD-SEND",
+            MunicipalityId = 1,
+            DeliveryAgencyId = 2,
+            ShippingChargedToClient = 90m
+        });
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.MarkDeliveryAsSentAsync(saleId, deliveryId));
+        Assert.Contains("envio deben estar pagados", exception.Message, StringComparison.OrdinalIgnoreCase);
+
+        await service.AddPaymentMovementAsync(saleId, new CreateSalePaymentMovementDTO
+        {
+            PaymentMethodId = (int)PaymentMethodOption.Transfer,
+            ProductAmount = 0,
+            ShippingAmount = 90m,
+            SaleDeliveryId = deliveryId
+        });
+
+        await service.MarkDeliveryAsSentAsync(saleId, deliveryId);
+        var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        Assert.Equal((int)SaleStatusOption.SentForDelivery, sale.SaleStatusId);
     }
     private static SaleService CreateService(ApplicationDbContext context)
     {

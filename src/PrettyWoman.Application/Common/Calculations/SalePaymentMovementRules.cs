@@ -6,24 +6,32 @@ namespace PrettyWoman.Application.Common.Calculations;
 
 public static class SalePaymentMovementRules
 {
-    public static decimal CalculateTotal(IEnumerable<SalePaymentMovement> payments) => payments.Sum(payment => payment.MovementDirectionId == (int)MovementDirectionOptions.Out ? -payment.GrossAmount : payment.GrossAmount);
+    public static decimal CalculateProductTotal(IEnumerable<SalePaymentMovement> payments)
+        => payments.Sum(payment => SignedAmount(payment, payment.ProductAmount));
 
-    public static int ResolveStatus(decimal amountToCharge, decimal paymentTotal)
+    public static decimal CalculateShippingTotal(IEnumerable<SalePaymentMovement> payments, int saleDeliveryId)
+        => payments.Where(payment => payment.SaleDeliveryId == saleDeliveryId)
+            .Sum(payment => SignedAmount(payment, payment.ShippingAmount));
+
+    public static int ResolveStatus(decimal amountToCharge, decimal productPaymentTotal)
     {
-        if (paymentTotal == 0) return (int)SalePaymentStatusOption.Unpaid;
-        if (paymentTotal < amountToCharge) return (int)SalePaymentStatusOption.PartiallyPaid;
-        if (paymentTotal > amountToCharge) return (int)SalePaymentStatusOption.RefundPending;
+        if (productPaymentTotal == 0) return (int)SalePaymentStatusOption.Unpaid;
+        if (productPaymentTotal < amountToCharge) return (int)SalePaymentStatusOption.PartiallyPaid;
+        if (productPaymentTotal > amountToCharge) return (int)SalePaymentStatusOption.RefundPending;
         return (int)SalePaymentStatusOption.Paid;
     }
 
-    // AllowOverpayment is used for cases where the sale is being refunded, so the total of payments can exceed the amount to charge.
-    public static void EnsureAllowedTotal(int saleChannelId, decimal amountToCharge, decimal paymentTotal, bool allowOverpayment = false)
+    // AllowOverpayment is used when replacing products after payments were already received.
+    public static void EnsureAllowedProductTotal(int saleChannelId, decimal amountToCharge, decimal productPaymentTotal, bool allowOverpayment = false)
     {
-        if (!allowOverpayment && paymentTotal > amountToCharge)
-            throw new AppBadRequestException("La suma de pagos no puede exceder el total de la venta.");
-        if (saleChannelId == (int)SaleChannelOption.InStoreSale && !allowOverpayment && paymentTotal != amountToCharge)
+        if (!allowOverpayment && productPaymentTotal > amountToCharge)
+            throw new AppBadRequestException("La suma de pagos aplicados a productos no puede exceder el total de la venta.");
+        if (saleChannelId == (int)SaleChannelOption.InStoreSale && !allowOverpayment && productPaymentTotal != amountToCharge)
             throw new AppBadRequestException("Las ventas en local deben quedar pagadas completamente al momento de registrarse.");
-        if (saleChannelId == (int)SaleChannelOption.InStoreSale && allowOverpayment && paymentTotal < amountToCharge)
+        if (saleChannelId == (int)SaleChannelOption.InStoreSale && allowOverpayment && productPaymentTotal < amountToCharge)
             throw new AppBadRequestException("Las ventas en local deben quedar pagadas completamente al momento de registrarse.");
     }
+
+    private static decimal SignedAmount(SalePaymentMovement payment, decimal amount)
+        => payment.MovementDirectionId == (int)MovementDirectionOptions.Out ? -amount : amount;
 }

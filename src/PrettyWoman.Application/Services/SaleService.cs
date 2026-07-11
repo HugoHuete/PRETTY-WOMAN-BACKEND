@@ -46,12 +46,14 @@ public class SaleService(
         NormalizeSaleFields(createSaleDTO);
         await ValidateSaleRequestAsync(createSaleDTO);
 
+        // Se congelan precios, costos y descuentos antes de persistir la venta.
         var products = await LoadSaleProductsAsync(createSaleDTO.Products);
         var saleProducts = CreateSaleProducts(createSaleDTO.Products, products);
         var payments = await _paymentMovementService.CreateInitialAsync(createSaleDTO.PaymentMovements);
+        // Los nuevos totales se validan contra pagos ya aplicados; un exceso queda como reembolso pendiente.
         var totals = CalculateSaleTotals(saleProducts);
-        var paymentTotal = SalePaymentMovementRules.CalculateTotal(payments);
-        SalePaymentMovementRules.EnsureAllowedTotal(createSaleDTO.SaleChannelId, totals.Total, paymentTotal);
+        var paymentTotal = SalePaymentMovementRules.CalculateProductTotal(payments);
+        SalePaymentMovementRules.EnsureAllowedProductTotal(createSaleDTO.SaleChannelId, totals.Total, paymentTotal);
 
         var sale = new Sale
         {
@@ -69,6 +71,7 @@ public class SaleService(
             PaymentMovements = payments
         };
 
+        // El inventario sale solo para estados que ya comprometen existencias.
         if (SaleAffectsInventory(sale.SaleStatusId))
         {
             ApplyInventoryOutput(sale);
@@ -86,15 +89,24 @@ public class SaleService(
         NormalizeSaleFields(patchSaleHeaderDTO);
         await ValidateSaleHeaderPatchAsync(patchSaleHeaderDTO);
 
+        // Esta ruta cambia solo cabecera; productos, pagos y envios conservan su historial.
         var sale = await GetSaleWithDetailsAsync(id, asNoTracking: false);
         EnsureSaleHeaderCanBePatched(sale);
 
-        var saleChannelId = patchSaleHeaderDTO.HasSaleChannelId ? patchSaleHeaderDTO.SaleChannelId!.Value : sale.SaleChannelId;
-        SalePaymentMovementRules.EnsureAllowedTotal(
-            saleChannelId,
-            sale.Total,
-            SalePaymentMovementRules.CalculateTotal(sale.PaymentMovements),
-            allowOverpayment: true);
+        if (patchSaleHeaderDTO.HasSaleChannelId)
+        {
+            SalePaymentMovementRules.EnsureAllowedProductTotal(
+                patchSaleHeaderDTO.SaleChannelId!.Value,
+                sale.Total,
+                SalePaymentMovementRules.CalculateProductTotal(sale.PaymentMovements),
+                allowOverpayment: true);
+
+            await _deliveryService.EnsureSaleChannelCanBeChangedAsync(
+                sale.Id,
+                patchSaleHeaderDTO.SaleChannelId.Value);
+
+            sale.SaleChannelId = patchSaleHeaderDTO.SaleChannelId.Value;
+        }
 
         if (patchSaleHeaderDTO.HasSaleDate)
         {
@@ -102,8 +114,6 @@ public class SaleService(
             await SyncInventoryMovementDatesAsync(sale);
         }
 
-        await _deliveryService.EnsureSaleChannelCanBeChangedAsync(sale.Id, saleChannelId);
-        sale.SaleChannelId = saleChannelId;
         if (patchSaleHeaderDTO.HasClientId) sale.ClientId = patchSaleHeaderDTO.ClientId;
         if (patchSaleHeaderDTO.HasComments) sale.Comments = patchSaleHeaderDTO.Comments;
 
@@ -115,9 +125,11 @@ public class SaleService(
         NormalizeSaleFields(replaceSaleProductsDTO);
         await ValidateSaleProductsReplacementAsync(replaceSaleProductsDTO);
 
+        // Reemplazar lineas rehace sus totales e inventario, pero conserva pagos y envios existentes.
         var sale = await GetSaleWithDetailsAsync(id, asNoTracking: false);
         EnsureSaleProductsCanBeReplaced(sale);
 
+        // Se revierte la salida anterior antes de reemplazar lineas para no duplicar movimientos.
         if (SaleAffectsInventory(sale.SaleStatusId))
         {
             RevertInventoryOutput(sale);
@@ -132,17 +144,19 @@ public class SaleService(
 
         var products = await LoadSaleProductsAsync(replaceSaleProductsDTO.Products);
         var saleProducts = CreateSaleProducts(replaceSaleProductsDTO.Products, products);
+        // Los nuevos totales se validan contra pagos ya aplicados; un exceso queda como reembolso pendiente.
         var totals = CalculateSaleTotals(saleProducts);
-        var paymentTotal = SalePaymentMovementRules.CalculateTotal(sale.PaymentMovements);
-        SalePaymentMovementRules.EnsureAllowedTotal(sale.SaleChannelId, totals.Total, paymentTotal, allowOverpayment: true);
+        var paymentTotal = SalePaymentMovementRules.CalculateProductTotal(sale.PaymentMovements);
+        SalePaymentMovementRules.EnsureAllowedProductTotal(sale.SaleChannelId, totals.Total, paymentTotal, allowOverpayment: true);
 
         sale.SalePaymentStatusId = SalePaymentMovementRules.ResolveStatus(totals.Total, paymentTotal);
         sale.Subtotal = totals.Subtotal;
         sale.TotalDiscount = totals.TotalDiscount;
         sale.Total = totals.Total;
         sale.Products = saleProducts;
-        await _deliveryService.SyncActiveAmountToCollectAsync(sale.Id, sale.Total, paymentTotal);
+        await _deliveryService.SyncActiveAmountToCollectAsync(sale.Id, sale.Total, sale.PaymentMovements);
 
+        // El inventario sale solo para estados que ya comprometen existencias.
         if (SaleAffectsInventory(sale.SaleStatusId))
         {
             ApplyInventoryOutput(sale);
@@ -422,6 +436,9 @@ public class SaleService(
                 PaymentTerminalName = payment.PaymentTerminal?.Name,
                 ReversedSalePaymentMovementId = payment.ReversedSalePaymentMovementId,
                 GrossAmount = payment.GrossAmount,
+                ProductAmount = payment.ProductAmount,
+                ShippingAmount = payment.ShippingAmount,
+                SaleDeliveryId = payment.SaleDeliveryId,
                 CommissionPercentage = payment.CommissionPercentage,
                 CommissionAmount = payment.CommissionAmount,
                 IncomeTaxPercentage = payment.IncomeTaxPercentage,

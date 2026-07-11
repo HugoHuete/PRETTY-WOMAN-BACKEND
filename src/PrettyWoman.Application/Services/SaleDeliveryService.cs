@@ -22,10 +22,10 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
 
         var sale = await _context.Sales
             .Include(item => item.PaymentMovements)
-                .ThenInclude(payment => payment.ReversalMovements)
             .FirstOrDefaultAsync(item => item.Id == saleId)
             ?? throw new AppNotFoundException($"La venta con id {saleId} no existe.");
 
+        // La restriccion de un envio activo se respalda tambien con un indice unico en base de datos.
         EnsureSaleCanHaveDelivery(sale);
         await EnsureNoActiveDeliveryAsync(saleId);
 
@@ -45,17 +45,13 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
             var client = await _context.Clients
                 .Where(item => item.Id == clientId.Value && !item.IsBlocked)
                 .Select(item => new { item.Address })
-                .FirstOrDefaultAsync();
-            if (client is null)
-            {
-                throw new AppNotFoundException($"La clienta con id {clientId.Value} no existe.");
-            }
-
+                .FirstOrDefaultAsync() ?? throw new AppNotFoundException($"La clienta con id {clientId.Value} no existe.");
             clientAddress = client.Address;
         }
 
-        var paymentTotal = SalePaymentMovementRules.CalculateTotal(sale.PaymentMovements);
-        var amountToCollect = CalculateAmountToCollect(sale.Total, paymentTotal, deliveryRequest.ShippingChargedToClient, agency);
+        // Productos y envio se cobran por separado; el envio nuevo inicia sin pagos aplicados.
+        var productPaymentTotal = SalePaymentMovementRules.CalculateProductTotal(sale.PaymentMovements);
+        var amountToCollect = CalculateAmountToCollect(sale.Total, productPaymentTotal, deliveryRequest.ShippingChargedToClient, 0, agency);
 
         var delivery = new SaleDelivery
         {
@@ -90,6 +86,8 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
     {
         var delivery = await _context.SaleDeliveries
             .Include(item => item.Sale)
+                .ThenInclude(sale => sale!.PaymentMovements)
+            .Include(item => item.DeliveryAgency)
             .FirstOrDefaultAsync(item => item.Id == deliveryId && item.SaleId == saleId)
             ?? throw new AppNotFoundException($"El envio con id {deliveryId} no existe para la venta indicada.");
 
@@ -99,7 +97,8 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         }
 
         var sale = delivery.Sale!;
-        EnsureSaleCanHaveDelivery(sale);
+        // Una agencia sin COD solo recibe pedidos con productos y envio ya cubiertos.
+        EnsureDeliveryCanBeSent(delivery);
         sale.SaleStatusId = (int)SaleStatusOption.SentForDelivery;
 
         await _context.SaveChangesAsync();
@@ -113,7 +112,6 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         var delivery = await _context.SaleDeliveries
             .Include(item => item.Sale)
                 .ThenInclude(sale => sale!.PaymentMovements)
-                    .ThenInclude(payment => payment.ReversalMovements)
             .Include(item => item.DeliveryAgency)
             .FirstOrDefaultAsync(item => item.Id == deliveryId && item.SaleId == saleId)
             ?? throw new AppNotFoundException($"El envio con id {deliveryId} no existe para la venta indicada.");
@@ -143,8 +141,12 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         var shippingChargedToClient = deliveryRequest.HasShippingChargedToClient
             ? deliveryRequest.ShippingChargedToClient!.Value
             : delivery.ShippingChargedToClient;
-        var paymentTotal = SalePaymentMovementRules.CalculateTotal(delivery.Sale!.PaymentMovements);
-        var amountToCollect = CalculateAmountToCollect(delivery.Sale.Total, paymentTotal, shippingChargedToClient, agency);
+        // No se permite reducir el cobro de envio por debajo de lo ya pagado por la clienta.
+        var productPaymentTotal = SalePaymentMovementRules.CalculateProductTotal(delivery.Sale!.PaymentMovements);
+        var shippingPaymentTotal = SalePaymentMovementRules.CalculateShippingTotal(delivery.Sale.PaymentMovements, delivery.Id);
+        if (shippingChargedToClient < shippingPaymentTotal)
+            throw new AppBadRequestException("El monto de envio cobrado a la clienta no puede ser menor que lo ya pagado por envio.");
+        var amountToCollect = CalculateAmountToCollect(delivery.Sale.Total, productPaymentTotal, shippingChargedToClient, shippingPaymentTotal, agency);
 
         if (deliveryRequest.HasClientId) delivery.ClientId = deliveryRequest.ClientId;
         if (deliveryRequest.HasDeliveryAddress) delivery.DeliveryAddress = deliveryRequest.DeliveryAddress;
@@ -157,7 +159,7 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         await _context.SaveChangesAsync();
     }
 
-    public async Task SyncActiveAmountToCollectAsync(int saleId, decimal saleTotal, decimal paymentTotal)
+    public async Task SyncActiveAmountToCollectAsync(int saleId, decimal saleTotal, IEnumerable<SalePaymentMovement> paymentMovements)
     {
         var delivery = await GetActiveDeliveryAsync(saleId);
         if (delivery is null)
@@ -165,10 +167,13 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
             return;
         }
 
+        // El pago de productos afecta toda la venta; el de envio solo afecta este envio activo.
+        var payments = paymentMovements.ToList();
         delivery.AmountToCollect = CalculateAmountToCollect(
             saleTotal,
-            paymentTotal,
+            SalePaymentMovementRules.CalculateProductTotal(payments),
             delivery.ShippingChargedToClient,
+            SalePaymentMovementRules.CalculateShippingTotal(payments, delivery.Id),
             delivery.DeliveryAgency!);
     }
 
@@ -235,6 +240,7 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         }
 
         var sale = delivery.Sale!;
+        // Un envio ya entregado a la agencia no cambia datos operativos ni de cobro.
         EnsureSaleCanHaveDelivery(sale);
         if (sale.SaleStatusId == (int)SaleStatusOption.SentForDelivery)
         {
@@ -242,19 +248,29 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         }
     }
 
-    private static decimal CalculateAmountToCollect(decimal saleTotal, decimal paymentTotal, decimal shippingChargedToClient, DeliveryAgency agency)
+    private static void EnsureDeliveryCanBeSent(SaleDelivery delivery)
+    {
+        if (delivery.DeliveryAgency!.CanCollectCashOnDelivery)
+            return;
+
+        var payments = delivery.Sale!.PaymentMovements;
+        var productPaymentTotal = SalePaymentMovementRules.CalculateProductTotal(payments);
+        var shippingPaymentTotal = SalePaymentMovementRules.CalculateShippingTotal(payments, delivery.Id);
+        if (productPaymentTotal < delivery.Sale.Total || shippingPaymentTotal < delivery.ShippingChargedToClient)
+            throw new AppBadRequestException("La venta y el envio deben estar pagados completamente antes de enviarla con una agencia que no recauda efectivo.");
+    }
+
+    private static decimal CalculateAmountToCollect(decimal saleTotal, decimal productPaymentTotal, decimal shippingChargedToClient, decimal shippingPaymentTotal, DeliveryAgency agency)
     {
         if (!agency.CanCollectCashOnDelivery)
         {
-            if (paymentTotal < saleTotal)
-            {
-                throw new AppBadRequestException("La venta debe estar pagada completamente antes de enviarla con una agencia que no recauda efectivo.");
-            }
+            if (productPaymentTotal < saleTotal)
+                throw new AppBadRequestException("La venta debe estar pagada completamente antes de crear un envio con una agencia que no recauda efectivo.");
 
             return 0;
         }
 
-        return Math.Round(Math.Max(0, saleTotal - paymentTotal) + shippingChargedToClient, 2);
+        return Math.Round(Math.Max(0, saleTotal - productPaymentTotal) + Math.Max(0, shippingChargedToClient - shippingPaymentTotal), 2);
     }
 
     private static void Normalize(CreateSaleDeliveryDTO delivery)

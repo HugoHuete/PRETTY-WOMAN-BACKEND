@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using PrettyWoman.Domain.Entities;
 using PrettyWoman.Domain.Enums;
@@ -11,6 +11,8 @@ public class SalePaymentMovementConfiguration : IEntityTypeConfiguration<SalePay
     {
         builder.Property(x => x.UserId).IsRequired();
         builder.Property(x => x.GrossAmount).HasPrecision(12, 2);
+        builder.Property(x => x.ProductAmount).HasPrecision(12, 2);
+        builder.Property(x => x.ShippingAmount).HasPrecision(12, 2);
         builder.Property(x => x.CommissionPercentage).HasPrecision(5, 2);
         builder.Property(x => x.CommissionAmount).HasPrecision(12, 2);
         builder.Property(x => x.IncomeTaxPercentage).HasPrecision(5, 2);
@@ -20,6 +22,7 @@ public class SalePaymentMovementConfiguration : IEntityTypeConfiguration<SalePay
         builder.Property(x => x.UpdatedAt).IsConcurrencyToken();
 
         builder.HasOne(x => x.Sale).WithMany(x => x.PaymentMovements).HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.SaleDelivery).WithMany(x => x.PaymentMovements).HasForeignKey(x => x.SaleDeliveryId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.MovementDirection).WithMany().HasForeignKey(x => x.MovementDirectionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.PaymentMethod).WithMany().HasForeignKey(x => x.PaymentMethodId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.PaymentTerminal).WithMany().HasForeignKey(x => x.PaymentTerminalId).OnDelete(DeleteBehavior.Restrict);
@@ -31,6 +34,7 @@ public class SalePaymentMovementConfiguration : IEntityTypeConfiguration<SalePay
         builder.HasIndex(x => new { x.SaleId, x.MovementDate });
         builder.HasIndex(x => x.PaymentMethodId);
         builder.HasIndex(x => x.PaymentTerminalId);
+        builder.HasIndex(x => x.SaleDeliveryId);
         builder.HasIndex(x => x.ReversedSalePaymentMovementId);
         builder.HasIndex(x => x.ReversedSalePaymentMovementId)
             .IsUnique()
@@ -40,6 +44,10 @@ public class SalePaymentMovementConfiguration : IEntityTypeConfiguration<SalePay
         builder.ToTable("sale_payment_movements", t =>
         {
             t.HasCheckConstraint("ck_sale_payment_movements_gross_amount_positive", "gross_amount > 0");
+            t.HasCheckConstraint("ck_sale_payment_movements_product_amount_non_negative", "product_amount >= 0");
+            t.HasCheckConstraint("ck_sale_payment_movements_shipping_amount_non_negative", "shipping_amount >= 0");
+            t.HasCheckConstraint("ck_sale_payment_movements_amount_matches_allocations", "gross_amount = product_amount + shipping_amount");
+            t.HasCheckConstraint("ck_sale_payment_movements_shipping_requires_delivery", "(shipping_amount = 0 AND sale_delivery_id IS NULL) OR (shipping_amount > 0 AND sale_delivery_id IS NOT NULL)");
             t.HasCheckConstraint("ck_sale_payment_movements_commission_percentage_non_negative", "commission_percentage >= 0");
             t.HasCheckConstraint("ck_sale_payment_movements_commission_amount_non_negative", "commission_amount >= 0");
             t.HasCheckConstraint("ck_sale_payment_movements_income_tax_percentage_non_negative", "income_tax_percentage >= 0");
