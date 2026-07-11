@@ -288,7 +288,7 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
             Description = $"Pago de envío bodega a Nicaragua por orden #{order.Id}.",
             MovementDate = date,
             MovementDirectionId = (int)MovementDirectionOptions.Out,
-            FinancialMovementTypeId = (int)FinancialMovementTypeOption.Expense,
+            FinancialMovementTypeId = (int)FinancialMovementTypeOption.WarehouseShippingPayment,
             OrderId = order.Id,
             Amount = amountNio,
             ExchangeRate = order.ExchangeRate,

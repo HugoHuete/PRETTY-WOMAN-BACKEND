@@ -76,7 +76,7 @@ Al crear el préstamo se debe registrar un movimiento:
 
 - Un préstamo recibido es entrada de dinero, pero no es ganancia.
 - Los pagos de préstamo son egresos, pero no gastos operativos normales.
-- El interés pagado se guarda en `loan_payments` y se refleja en `financial_movements` como `LoanInterest`.
+- El interes pagado se guarda en `loan_payments`; el movimiento `LoanPayment` refleja el total desembolsado, capital mas interes.
 - El responsable del préstamo debe existir y estar habilitado.
 
 ## Errores esperados

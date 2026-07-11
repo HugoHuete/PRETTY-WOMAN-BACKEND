@@ -60,27 +60,16 @@ Cada pago crea un registro en `loan_payments`:
 - `exchange_rate`: tasa guardada en el préstamo
 - `comments`: comentario del pago
 
-## Movimiento financiero de capital
+## Movimiento financiero
 
-Al registrar el pago se debe crear un movimiento:
+Al registrar el pago se crea un unico movimiento:
 
 - `financial_movement_type`: `LoanPayment`
 - `movement_direction`: `Out`
-- `loan_id`: préstamo pagado
+- `loan_id`: prestamo pagado
 - `loan_payment_id`: pago creado
-- `amount`: monto pagado a capital en córdobas
-- `exchange_rate`: tasa guardada en el préstamo
-
-## Movimiento financiero de interés
-
-Si `interestAmount` es mayor que cero, se debe crear otro movimiento:
-
-- `financial_movement_type`: `LoanInterest`
-- `movement_direction`: `Out`
-- `loan_id`: préstamo pagado
-- `loan_payment_id`: pago creado
-- `amount`: monto pagado de interés en córdobas
-- `exchange_rate`: tasa guardada en el préstamo
+- `amount`: `principal_amount + interest_amount` en cordobas
+- `exchange_rate`: tasa guardada en el prestamo
 
 ## Saldo pendiente
 
@@ -90,14 +79,12 @@ Si `interestAmount` es mayor que cero, se debe crear otro movimiento:
 Balance = loans.initial_amount - SUM(loan_payments.principal_amount)
 ```
 
-El interés no disminuye el saldo; solo queda registrado en `loan_payments.interest_amount` y en `financial_movements` como `LoanInterest`.
+El interes no disminuye el saldo; queda registrado en `loan_payments.interest_amount`, mientras que el movimiento financiero refleja el total pagado.
 
 ## Edición de pagos
 
 - El `paymentId` corresponde al id de `loan_payments`.
-- Al editar un pago se actualiza `loan_payments` y sus movimientos financieros asociados.
-- Si `interestAmount` cambia, se actualiza el movimiento `LoanInterest` relacionado.
-- Si `interestAmount` queda en `0`, se elimina el movimiento `LoanInterest` relacionado.
+- Al editar un pago se actualiza `loan_payments` y su unico movimiento financiero asociado, cuyo monto es `amount + interestAmount`.
 - Después de editar, `closed_at` se recalcula con base en el saldo resultante.
 
 ## Reglas de negocio

@@ -47,7 +47,7 @@ public class OrderReceiptServiceTests
         var receiptDetail = await context.ProductReceiptDetails.SingleAsync();
         var inventoryMovement = await context.InventoryMovements.SingleAsync();
         var warehouseShippingMovement = await context.FinancialMovements
-            .SingleAsync(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.Expense);
+            .SingleAsync(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.WarehouseShippingPayment);
 
         Assert.Equal(productReceipt.Id, receipt.Id);
         Assert.Equal(orderId, receipt.OrderId);
@@ -100,7 +100,7 @@ public class OrderReceiptServiceTests
         var productReceipt = await context.ProductReceipts.SingleAsync();
         var inventoryMovement = await context.InventoryMovements.SingleAsync();
         var warehouseShippingMovement = await context.FinancialMovements
-            .SingleAsync(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.Expense);
+            .SingleAsync(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.WarehouseShippingPayment);
 
         Assert.Equal(DateTimeKind.Utc, productReceipt.ReceivedDate.Kind);
         Assert.Equal(expectedDate, productReceipt.ReceivedDate);
@@ -377,7 +377,7 @@ public class OrderReceiptServiceTests
             new InventoryStockBucket { Id = (int)InventoryStockBucketOption.Available, Name = "Available" });
         context.FinancialMovementTypes.AddRange(
             new FinancialMovementType { Id = (int)FinancialMovementTypeOption.SupplierPayment, Name = "SupplierPayment" },
-            new FinancialMovementType { Id = (int)FinancialMovementTypeOption.Expense, Name = "Expense" });
+            new FinancialMovementType { Id = (int)FinancialMovementTypeOption.WarehouseShippingPayment, Name = "WarehouseShippingPayment" });
         context.DollarExchangeRates.Add(new DollarExchangeRate
         {
             Id = 1,

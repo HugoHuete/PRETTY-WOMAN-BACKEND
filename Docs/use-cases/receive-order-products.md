@@ -114,7 +114,7 @@ Cuando la orden no tiene tracking numbers, el costo de envío bodega -> Nicaragu
 - Cada recepción crea un `ProductReceipt`.
 - Cada producto recibido crea un `ProductReceiptDetail`.
 - Cada producto recibido crea un `InventoryMovement` de tipo `PurchaseReceived` con dirección `In`.
-- Cada pago de envío mayor que cero crea un `FinancialMovement` de tipo `Expense` con dirección `Out`.
+- Cada pago de envío mayor que cero crea un `FinancialMovement` de tipo `WarehouseShippingPayment` con dirección `Out`.
 - `received_quantity` no debe superar `quantity` comprada.
 - El inventario disponible aumenta solamente por la cantidad recibida.
 - Una orden cancelada no permite recepciones.

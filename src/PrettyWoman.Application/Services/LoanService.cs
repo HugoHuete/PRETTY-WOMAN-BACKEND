@@ -170,25 +170,11 @@ public class LoanService(IApplicationDbContext context) : ILoanService
             payment,
             FinancialMovementTypeOption.LoanPayment,
             MovementDirectionOptions.Out,
-            payLoanDTO.Amount,
+            payLoanDTO.Amount + payLoanDTO.InterestAmount,
             loan.ExchangeRate,
             paymentDate,
             "Pago de prestamo",
             comments));
-
-        if (payLoanDTO.InterestAmount > 0)
-        {
-            await _context.FinancialMovements.AddAsync(CreateLoanMovement(
-                loan,
-                payment,
-                FinancialMovementTypeOption.LoanInterest,
-                MovementDirectionOptions.Out,
-                payLoanDTO.InterestAmount,
-                loan.ExchangeRate,
-                paymentDate,
-                "Interes de prestamo",
-                comments));
-        }
 
         UpdateClosedAt(loan, balance - payLoanDTO.Amount);
         await _context.SaveChangesAsync();
@@ -221,49 +207,10 @@ public class LoanService(IApplicationDbContext context) : ILoanService
         payment.InterestAmount = updatePaymentDTO.InterestAmount;
         payment.Comments = comments;
 
-        var principalMovement = GetPaymentMovement(payment, FinancialMovementTypeOption.LoanPayment);
-        principalMovement.MovementDate = paymentDate;
-        principalMovement.Amount = updatePaymentDTO.Amount;
-        principalMovement.Comments = comments;
-
-        var interestMovement = payment.FinancialMovements
-            .FirstOrDefault(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanInterest);
-
-        if (updatePaymentDTO.InterestAmount > 0)
-        {
-            if (interestMovement is null)
-            {
-                interestMovement = CreateLoanMovement(
-                    loan,
-                    payment,
-                    FinancialMovementTypeOption.LoanInterest,
-                    MovementDirectionOptions.Out,
-                    updatePaymentDTO.InterestAmount,
-                    loan.ExchangeRate,
-                    paymentDate,
-                    "Interes de prestamo",
-                    comments);
-                await _context.FinancialMovements.AddAsync(interestMovement);
-            }
-            else
-            {
-                interestMovement.MovementDate = paymentDate;
-                interestMovement.Amount = updatePaymentDTO.InterestAmount;
-                interestMovement.Comments = comments;
-            }
-        }
-        else if (interestMovement is not null)
-        {
-            _context.FinancialMovements.Remove(interestMovement);
-        }
-
-        var duplicatedInterestMovements = payment.FinancialMovements
-            .Where(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanInterest && movement != interestMovement)
-            .ToList();
-        if (duplicatedInterestMovements.Count > 0)
-        {
-            _context.FinancialMovements.RemoveRange(duplicatedInterestMovements);
-        }
+        var paymentMovement = GetPaymentMovement(payment, FinancialMovementTypeOption.LoanPayment);
+        paymentMovement.MovementDate = paymentDate;
+        paymentMovement.Amount = updatePaymentDTO.Amount + updatePaymentDTO.InterestAmount;
+        paymentMovement.Comments = comments;
 
         UpdateClosedAt(loan, availableBalance - updatePaymentDTO.Amount);
         await _context.SaveChangesAsync();

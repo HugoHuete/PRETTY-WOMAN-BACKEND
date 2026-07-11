@@ -44,7 +44,7 @@ public class LoanServiceTests
     }
 
     [Fact]
-    public async Task PayAsync_CreatesLoanPaymentAndOutcomeMovements()
+    public async Task PayAsync_CreatesOneFinancialMovementForTheTotalPayment()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -83,14 +83,8 @@ public class LoanServiceTests
         Assert.Equal((int)MovementDirectionOptions.Out, paymentMovement.MovementDirectionId);
         Assert.Equal(loan.Id, paymentMovement.LoanId);
         Assert.Equal(payment.Id, paymentMovement.LoanPaymentId);
-        Assert.Equal(400m, paymentMovement.Amount);
-
-        var interestMovement = await context.FinancialMovements
-            .SingleAsync(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanInterest);
-        Assert.Equal((int)MovementDirectionOptions.Out, interestMovement.MovementDirectionId);
-        Assert.Equal(loan.Id, interestMovement.LoanId);
-        Assert.Equal(payment.Id, interestMovement.LoanPaymentId);
-        Assert.Equal(50m, interestMovement.Amount);
+        Assert.Equal(450m, paymentMovement.Amount);
+        Assert.Equal(2, await context.FinancialMovements.CountAsync());
     }
 
     [Fact]
@@ -161,7 +155,7 @@ public class LoanServiceTests
     }
 
     [Fact]
-    public async Task UpdatePaymentAsync_UpdatesLoanPaymentMovementsAndCalculatedBalance()
+    public async Task UpdatePaymentAsync_UpdatesTheSingleFinancialMovementAndCalculatedBalance()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -208,18 +202,13 @@ public class LoanServiceTests
         var paymentMovement = await context.FinancialMovements
             .SingleAsync(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanPayment);
         Assert.Equal(paymentId, paymentMovement.LoanPaymentId);
-        Assert.Equal(250m, paymentMovement.Amount);
+        Assert.Equal(280m, paymentMovement.Amount);
         Assert.Equal(secondDate, paymentMovement.MovementDate);
-
-        var interestMovement = await context.FinancialMovements
-            .SingleAsync(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanInterest);
-        Assert.Equal(paymentId, interestMovement.LoanPaymentId);
-        Assert.Equal(30m, interestMovement.Amount);
-        Assert.Equal(secondDate, interestMovement.MovementDate);
+        Assert.Equal(2, await context.FinancialMovements.CountAsync());
     }
 
     [Fact]
-    public async Task UpdatePaymentAsync_RemovesInterestMovementWhenInterestIsZero()
+    public async Task UpdatePaymentAsync_KeepsOneFinancialMovementWhenInterestIsRemoved()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -244,12 +233,14 @@ public class LoanServiceTests
 
         Assert.Equal(0m, updatedLoan.InterestPaidAmount);
         Assert.Equal(0m, (await context.LoanPayments.SingleAsync()).InterestAmount);
-        Assert.False(await context.FinancialMovements.AnyAsync(movement =>
-            movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanInterest));
+        var paymentMovement = await context.FinancialMovements
+            .SingleAsync(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanPayment);
+        Assert.Equal(400m, paymentMovement.Amount);
+        Assert.Equal(2, await context.FinancialMovements.CountAsync());
     }
 
     [Fact]
-    public async Task UpdatePaymentAsync_CreatesInterestMovementWhenPaymentOriginallyHadNoInterest()
+    public async Task UpdatePaymentAsync_UpdatesTheSingleMovementWhenInterestIsAdded()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -276,13 +267,13 @@ public class LoanServiceTests
         });
 
         Assert.Equal(25m, updatedLoan.InterestPaidAmount);
-
-        var interestMovement = await context.FinancialMovements
-            .SingleAsync(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanInterest);
-        Assert.Equal(paymentId, interestMovement.LoanPaymentId);
-        Assert.Equal(25m, interestMovement.Amount);
-        Assert.Equal(paymentDate, interestMovement.MovementDate);
-        Assert.Equal("Agrega interes", interestMovement.Comments);
+        var paymentMovement = await context.FinancialMovements
+            .SingleAsync(movement => movement.FinancialMovementTypeId == (int)FinancialMovementTypeOption.LoanPayment);
+        Assert.Equal(paymentId, paymentMovement.LoanPaymentId);
+        Assert.Equal(425m, paymentMovement.Amount);
+        Assert.Equal(paymentDate, paymentMovement.MovementDate);
+        Assert.Equal("Agrega interes", paymentMovement.Comments);
+        Assert.Equal(2, await context.FinancialMovements.CountAsync());
     }
 
     [Fact]
@@ -382,7 +373,7 @@ public class LoanServiceTests
         context.FinancialMovementTypes.AddRange(
             new FinancialMovementType { Id = (int)FinancialMovementTypeOption.LoanReceived, Name = "LoanReceived" },
             new FinancialMovementType { Id = (int)FinancialMovementTypeOption.LoanPayment, Name = "LoanPayment" },
-            new FinancialMovementType { Id = (int)FinancialMovementTypeOption.LoanInterest, Name = "LoanInterest" });
+            new FinancialMovementType { Id = (int)FinancialMovementTypeOption.WarehouseShippingPayment, Name = "WarehouseShippingPayment" });
         context.LoanOwners.AddRange(
             new LoanOwner { Id = 1, Name = "Duenio", Enabled = true },
             new LoanOwner { Id = 2, Name = "Banco", Enabled = true });
