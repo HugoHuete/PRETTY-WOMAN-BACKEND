@@ -31,6 +31,16 @@ public class DeliveryStatusConfiguration : IEntityTypeConfiguration<DeliveryStat
             {
                 Id = (int)DeliveryStatusCode.Cancelled,
                 Name = nameof(DeliveryStatusCode.Cancelled)
+            },
+            new DeliveryStatus
+            {
+                Id = (int)DeliveryStatusCode.Sent,
+                Name = nameof(DeliveryStatusCode.Sent)
+            },
+            new DeliveryStatus
+            {
+                Id = (int)DeliveryStatusCode.Failed,
+                Name = nameof(DeliveryStatusCode.Failed)
             }
         );
     }

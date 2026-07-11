@@ -4,5 +4,7 @@ public enum DeliveryStatusCode
 {
     Pending = 1,
     Completed = 2,
-    Cancelled = 3
+    Cancelled = 3,
+    Sent = 4,
+    Failed = 5
 }

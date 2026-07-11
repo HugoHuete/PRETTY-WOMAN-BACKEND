@@ -37,7 +37,7 @@ public class SaleDeliveryConfiguration : IEntityTypeConfiguration<SaleDelivery>
         builder.HasIndex(x => x.SaleId)
             .IsUnique()
             .HasDatabaseName("ux_sale_deliveries_sale_id_active")
-            .HasFilter($"delivery_status_id <> {(int)DeliveryStatusCode.Completed} AND delivery_status_id <> {(int)DeliveryStatusCode.Cancelled}");
+            .HasFilter($"delivery_status_id <> {(int)DeliveryStatusCode.Completed} AND delivery_status_id <> {(int)DeliveryStatusCode.Cancelled} AND delivery_status_id <> {(int)DeliveryStatusCode.Failed}");
 
         builder.ToTable(t =>
         {

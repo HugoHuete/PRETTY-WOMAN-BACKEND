@@ -225,9 +225,9 @@ Ejemplos:
 
 - Pending
 - Sent
-- Delivered
+- Completed
 - Failed
-- Returned
+- Cancelled
 
 ## municipalities
 

@@ -174,6 +174,15 @@ public class SaleService(
     public Task MarkDeliveryAsSentAsync(int saleId, int deliveryId)
         => _deliveryService.MarkAsSentAsync(saleId, deliveryId);
 
+    public Task MarkDeliveryAsCompletedAsync(int saleId, int deliveryId)
+        => _deliveryService.MarkAsCompletedAsync(saleId, deliveryId);
+
+    public Task MarkDeliveryAsFailedAsync(int saleId, int deliveryId)
+        => _deliveryService.MarkAsFailedAsync(saleId, deliveryId);
+
+    public Task CancelDeliveryAsync(int saleId, int deliveryId)
+        => _deliveryService.CancelAsync(saleId, deliveryId);
+
     public Task<int> AddPaymentMovementAsync(int saleId, CreateSalePaymentMovementDTO paymentMovement)
         => _paymentMovementService.AddAsync(saleId, paymentMovement);
 

@@ -91,16 +91,47 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
             .FirstOrDefaultAsync(item => item.Id == deliveryId && item.SaleId == saleId)
             ?? throw new AppNotFoundException($"El envio con id {deliveryId} no existe para la venta indicada.");
 
-        if (delivery.DeliveryStatusId is (int)DeliveryStatusCode.Completed or (int)DeliveryStatusCode.Cancelled)
-        {
-            throw new AppBadRequestException("No se puede enviar un envio completado o cancelado.");
-        }
+        if (delivery.DeliveryStatusId != (int)DeliveryStatusCode.Pending)
+            throw new AppBadRequestException("Solo se puede enviar un envio pendiente.");
 
         var sale = delivery.Sale!;
         // Una agencia sin COD solo recibe pedidos con productos y envio ya cubiertos.
         EnsureDeliveryCanBeSent(delivery);
+        delivery.DeliveryStatusId = (int)DeliveryStatusCode.Sent;
         sale.SaleStatusId = (int)SaleStatusOption.SentForDelivery;
 
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task MarkAsCompletedAsync(int saleId, int deliveryId)
+    {
+        var delivery = await GetDeliveryWithSaleAsync(saleId, deliveryId);
+        EnsureDeliveryIsSent(delivery, "completar");
+
+        delivery.DeliveryStatusId = (int)DeliveryStatusCode.Completed;
+        delivery.Sale!.SaleStatusId = (int)SaleStatusOption.Completed;
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task MarkAsFailedAsync(int saleId, int deliveryId)
+    {
+        var delivery = await GetDeliveryWithSaleAsync(saleId, deliveryId);
+        EnsureDeliveryIsSent(delivery, "marcar como fallido");
+
+        // Un intento fallido libera la venta para que se pueda crear un nuevo envio.
+        delivery.DeliveryStatusId = (int)DeliveryStatusCode.Failed;
+        delivery.Sale!.SaleStatusId = (int)SaleStatusOption.ReadyForDelivery;
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task CancelAsync(int saleId, int deliveryId)
+    {
+        var delivery = await GetDeliveryWithSaleAsync(saleId, deliveryId);
+        if (delivery.DeliveryStatusId != (int)DeliveryStatusCode.Pending && delivery.DeliveryStatusId != (int)DeliveryStatusCode.Sent)
+            throw new AppBadRequestException("No se puede cancelar un envio que no este completado o cancelado.");
+
+        delivery.DeliveryStatusId = (int)DeliveryStatusCode.Cancelled;
+        delivery.Sale!.SaleStatusId = (int)SaleStatusOption.ReadyForDelivery;
         await _context.SaveChangesAsync();
     }
 
@@ -190,6 +221,14 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         }
     }
 
+    private async Task<SaleDelivery> GetDeliveryWithSaleAsync(int saleId, int deliveryId)
+    {
+        return await _context.SaleDeliveries
+            .Include(item => item.Sale)
+            .FirstOrDefaultAsync(item => item.Id == deliveryId && item.SaleId == saleId)
+            ?? throw new AppNotFoundException($"El envio con id {deliveryId} no existe para la venta indicada.");
+    }
+
     private async Task<SaleDelivery?> GetActiveDeliveryAsync(int saleId)
     {
         return await _context.SaleDeliveries
@@ -197,7 +236,8 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
             .FirstOrDefaultAsync(item =>
                 item.SaleId == saleId &&
                 item.DeliveryStatusId != (int)DeliveryStatusCode.Completed &&
-                item.DeliveryStatusId != (int)DeliveryStatusCode.Cancelled);
+                item.DeliveryStatusId != (int)DeliveryStatusCode.Cancelled &&
+                item.DeliveryStatusId != (int)DeliveryStatusCode.Failed);
     }
 
     private async Task EnsureNoActiveDeliveryAsync(int saleId)
@@ -234,10 +274,8 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
 
     private static void EnsureDeliveryCanBeUpdated(SaleDelivery delivery)
     {
-        if (delivery.DeliveryStatusId is (int)DeliveryStatusCode.Completed or (int)DeliveryStatusCode.Cancelled)
-        {
-            throw new AppBadRequestException("No se puede modificar un envio completado o cancelado.");
-        }
+        if (delivery.DeliveryStatusId != (int)DeliveryStatusCode.Pending)
+            throw new AppBadRequestException("Solo se puede modificar un envio pendiente.");
 
         var sale = delivery.Sale!;
         // Un envio ya entregado a la agencia no cambia datos operativos ni de cobro.
@@ -246,6 +284,12 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         {
             throw new AppBadRequestException("No se puede modificar un envio despues de haber sido enviado a la agencia.");
         }
+    }
+
+    private static void EnsureDeliveryIsSent(SaleDelivery delivery, string action)
+    {
+        if (delivery.DeliveryStatusId != (int)DeliveryStatusCode.Sent)
+            throw new AppBadRequestException($"Solo se puede {action} un envio enviado a la agencia.");
     }
 
     private static void EnsureDeliveryCanBeSent(SaleDelivery delivery)

@@ -6,10 +6,10 @@ A delivery belongs to a sale and records one delivery attempt. A sale can have h
 
 ## Active delivery
 
-A delivery is active while its status is neither `Completed` nor `Cancelled`.
+A delivery is active while its status is neither `Completed`, `Cancelled`, nor `Failed`.
 
 - A sale cannot create a second active delivery.
-- A new delivery is allowed only after every previous delivery is `Completed` or `Cancelled`.
+- A new delivery is allowed only after every previous delivery is `Completed`, `Cancelled`, or `Failed`.
 - Completed and cancelled sales cannot create or send a delivery.
 - A local sale (`InStoreSale`) cannot have a delivery.
 - A sale cannot be changed to `InStoreSale` while it has an active delivery.
@@ -19,10 +19,12 @@ A delivery is active while its status is neither `Completed` nor `Cancelled`.
 - Creating a delivery sets the sale to `ReadyForDelivery`.
 - `PATCH /api/v1/sales/{saleId}/deliveries/{deliveryId}` may update the client, historical address, agency, municipality, code, and shipping charge while the delivery is pending.
 - The update recalculates `amount_to_collect` and applies the selected agency collection rule.
-- A delivery cannot be edited after it has been sent to the agency, completed, or cancelled.
-- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/send` sets the sale to `SentForDelivery`.
-- The delivery remains `Pending` until a later operational process marks it `Completed` or `Cancelled`.
-- A completed or cancelled sale must not retain an active delivery. The current API does not expose those sale transitions; any future endpoint for them must first require that all deliveries are terminal.
+- A delivery can be edited only while it is `Pending`.
+- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/send` transitions a delivery from `Pending` to `Sent` and sets the sale to `SentForDelivery`.
+- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/complete` transitions a sent delivery to `Completed` and completes the sale.
+- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/fail` transitions a sent delivery to `Failed` and returns the sale to `ReadyForDelivery` for a new attempt.
+- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/cancel` transitions a pending delivery to `Cancelled` and returns the sale to `ReadyForDelivery`.
+- A completed or cancelled sale must not retain an active delivery.
 
 ## Collection amount
 

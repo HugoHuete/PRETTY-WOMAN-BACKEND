@@ -5,6 +5,9 @@
 - `POST /api/v1/sales/{saleId}/deliveries`
 - `PATCH /api/v1/sales/{saleId}/deliveries/{deliveryId}`
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/send`
+- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/complete`
+- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/fail`
+- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/cancel`
 
 ## Create request
 
@@ -34,7 +37,9 @@
 
 ## Send flow
 
-The send endpoint verifies that the delivery belongs to the sale and remains active. It then changes the sale to `SentForDelivery`.
+The send endpoint only accepts a `Pending` delivery. It verifies that the delivery belongs to the sale, validates the selected agency payment rule, changes the delivery to `Sent`, and changes the sale to `SentForDelivery`.
+
+A sent delivery can then be completed or failed. Completion marks the sale as `Completed`; failure returns it to `ReadyForDelivery` so a new delivery can be created. Cancellation is only available while the delivery is pending and also returns the sale to `ReadyForDelivery`.
 
 ## Collection semantics
 
@@ -58,4 +63,4 @@ The creation request does not accept `amountCollectedNio`, `amountCollectedUsd`,
 }
 ```
 
-The endpoint validates the updated municipality, client, and enabled agency. It recalculates `amountToCollect`, including the rule that a non-COD agency requires the sale to be fully paid. A delivery cannot be updated after it has been sent to the agency, completed, or cancelled.
+The endpoint validates the updated municipality, client, and enabled agency. It recalculates `amountToCollect`, including the rule that a non-COD agency requires the sale to be fully paid. A delivery can only be updated while it is pending.

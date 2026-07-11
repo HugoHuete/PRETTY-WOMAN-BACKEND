@@ -16,4 +16,7 @@ public interface ISaleService
     Task<int> CreateDeliveryAsync(int saleId, CreateSaleDeliveryDTO delivery);
     Task UpdateDeliveryAsync(int saleId, int deliveryId, PatchSaleDeliveryDTO delivery);
     Task MarkDeliveryAsSentAsync(int saleId, int deliveryId);
+    Task MarkDeliveryAsCompletedAsync(int saleId, int deliveryId);
+    Task MarkDeliveryAsFailedAsync(int saleId, int deliveryId);
+    Task CancelDeliveryAsync(int saleId, int deliveryId);
 }

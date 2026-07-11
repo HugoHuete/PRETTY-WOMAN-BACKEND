@@ -93,4 +93,25 @@ public class SalesController(ISaleService saleService) : ControllerBase
         await _saleService.MarkDeliveryAsSentAsync(id, deliveryId);
         return NoContent();
     }
+
+    [HttpPost("{id:int}/deliveries/{deliveryId:int}/complete")]
+    public async Task<IActionResult> MarkDeliveryAsCompleted(int id, int deliveryId)
+    {
+        await _saleService.MarkDeliveryAsCompletedAsync(id, deliveryId);
+        return NoContent();
+    }
+
+    [HttpPost("{id:int}/deliveries/{deliveryId:int}/fail")]
+    public async Task<IActionResult> MarkDeliveryAsFailed(int id, int deliveryId)
+    {
+        await _saleService.MarkDeliveryAsFailedAsync(id, deliveryId);
+        return NoContent();
+    }
+
+    [HttpPost("{id:int}/deliveries/{deliveryId:int}/cancel")]
+    public async Task<IActionResult> CancelDelivery(int id, int deliveryId)
+    {
+        await _saleService.CancelDeliveryAsync(id, deliveryId);
+        return NoContent();
+    }
 }

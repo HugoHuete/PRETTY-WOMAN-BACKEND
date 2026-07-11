@@ -655,7 +655,9 @@ public class SaleServiceTests
 
         await service.MarkDeliveryAsSentAsync(saleId, deliveryId);
 
+        delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
         sale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        Assert.Equal((int)DeliveryStatusCode.Sent, delivery.DeliveryStatusId);
         Assert.Equal((int)SaleStatusOption.SentForDelivery, sale.SaleStatusId);
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
@@ -667,6 +669,60 @@ public class SaleServiceTests
         Assert.Contains("envio activo", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+
+    [Fact]
+    public async Task DeliveryTransitions_CancelFailAndCompleteFollowTheirExpectedFlow()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        await context.SaveChangesAsync();
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+
+        var pendingDeliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "DEL-CANCELLED",
+            MunicipalityId = 1,
+            DeliveryAgencyId = 1
+        });
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.MarkDeliveryAsCompletedAsync(saleId, pendingDeliveryId));
+        await service.CancelDeliveryAsync(saleId, pendingDeliveryId);
+
+        var failedDeliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "DEL-FAILED",
+            MunicipalityId = 1,
+            DeliveryAgencyId = 1
+        });
+        await service.MarkDeliveryAsSentAsync(saleId, failedDeliveryId);
+        await service.MarkDeliveryAsFailedAsync(saleId, failedDeliveryId);
+
+        var failedDelivery = await context.SaleDeliveries.SingleAsync(item => item.Id == failedDeliveryId);
+        var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        Assert.Equal((int)DeliveryStatusCode.Failed, failedDelivery.DeliveryStatusId);
+        Assert.Equal((int)SaleStatusOption.ReadyForDelivery, sale.SaleStatusId);
+
+        var completedDeliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "DEL-COMPLETED",
+            MunicipalityId = 1,
+            DeliveryAgencyId = 1
+        });
+        await service.MarkDeliveryAsSentAsync(saleId, completedDeliveryId);
+        await service.MarkDeliveryAsCompletedAsync(saleId, completedDeliveryId);
+
+        var completedDelivery = await context.SaleDeliveries.SingleAsync(item => item.Id == completedDeliveryId);
+        sale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        Assert.Equal((int)DeliveryStatusCode.Completed, completedDelivery.DeliveryStatusId);
+        Assert.Equal((int)SaleStatusOption.Completed, sale.SaleStatusId);
+    }
     [Fact]
     public async Task CreateDeliveryAsync_RequiresFullPaymentWhenAgencyCannotCollectCash()
     {
@@ -977,7 +1033,10 @@ var currentUser = new TestCurrentUserService();
         context.SaleStatuses.AddRange(
             new SaleStatus { Id = (int)SaleStatusOption.Pending, Name = nameof(SaleStatusOption.Pending) },
             new SaleStatus { Id = (int)SaleStatusOption.Reserved, Name = nameof(SaleStatusOption.Reserved) },
-            new SaleStatus { Id = (int)SaleStatusOption.ReadyForDelivery, Name = nameof(SaleStatusOption.ReadyForDelivery) });
+            new SaleStatus { Id = (int)SaleStatusOption.ReadyForDelivery, Name = nameof(SaleStatusOption.ReadyForDelivery) },
+            new SaleStatus { Id = (int)SaleStatusOption.SentForDelivery, Name = nameof(SaleStatusOption.SentForDelivery) },
+            new SaleStatus { Id = (int)SaleStatusOption.Completed, Name = nameof(SaleStatusOption.Completed) },
+            new SaleStatus { Id = (int)SaleStatusOption.Cancelled, Name = nameof(SaleStatusOption.Cancelled) });
         context.SalePaymentStatuses.AddRange(
             new SalePaymentStatus { Id = (int)SalePaymentStatusOption.Unpaid, Name = nameof(SalePaymentStatusOption.Unpaid) },
             new SalePaymentStatus { Id = (int)SalePaymentStatusOption.PartiallyPaid, Name = nameof(SalePaymentStatusOption.PartiallyPaid) },
@@ -986,6 +1045,12 @@ var currentUser = new TestCurrentUserService();
         context.SaleProductStatuses.AddRange(
             new SaleProductStatus { Id = (int)SaleProductStatusOption.Pending, Name = nameof(SaleProductStatusOption.Pending) },
             new SaleProductStatus { Id = (int)SaleProductStatusOption.Completed, Name = nameof(SaleProductStatusOption.Completed) });
+        context.DeliveryStatuses.AddRange(
+            new DeliveryStatus { Id = (int)DeliveryStatusCode.Pending, Name = nameof(DeliveryStatusCode.Pending) },
+            new DeliveryStatus { Id = (int)DeliveryStatusCode.Completed, Name = nameof(DeliveryStatusCode.Completed) },
+            new DeliveryStatus { Id = (int)DeliveryStatusCode.Cancelled, Name = nameof(DeliveryStatusCode.Cancelled) },
+            new DeliveryStatus { Id = (int)DeliveryStatusCode.Sent, Name = nameof(DeliveryStatusCode.Sent) },
+            new DeliveryStatus { Id = (int)DeliveryStatusCode.Failed, Name = nameof(DeliveryStatusCode.Failed) });
         context.DiscountSources.Add(new DiscountSource { Id = (int)DiscountSourceOption.None, Name = nameof(DiscountSourceOption.None) });
         context.PaymentMethods.AddRange(
             new PaymentMethod { Id = (int)PaymentMethodOption.Cash, Name = "Efectivo" },

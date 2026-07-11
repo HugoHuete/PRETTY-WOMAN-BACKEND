@@ -52,10 +52,8 @@ Una venta completa puede seguir activa aunque una linea se haya cambiado o reemb
 ```txt
 Pending
 Sent
-Delivered
+Completed
 Failed
-Returned
-Rescheduled
 Cancelled
 ```
 

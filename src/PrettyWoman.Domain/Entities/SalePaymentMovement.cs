@@ -11,6 +11,7 @@ public class SalePaymentMovement : IAuditableEntity
     public int PaymentMethodId { get; set; }
     public int? PaymentTerminalId { get; set; }
     public int? ReversedSalePaymentMovementId { get; set; }
+    // GrossAmount = ProductAmount + ShippingAmount
     public decimal GrossAmount { get; set; }
     public decimal ProductAmount { get; set; }
     public decimal ShippingAmount { get; set; }
