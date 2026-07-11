@@ -3,6 +3,7 @@
 ## Endpoints
 
 - `POST /api/v1/sales/{saleId}/deliveries`
+- `PATCH /api/v1/sales/{saleId}/deliveries/{deliveryId}`
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/send`
 
 ## Create request
@@ -42,3 +43,19 @@ The send endpoint verifies that the delivery belongs to the sale and remains act
 ## Deferred fields
 
 The creation request does not accept `amountCollectedNio`, `amountCollectedUsd`, or `shippingPaidToAgency`. Those fields are recorded during a later reconciliation with the agency.
+## Update request
+
+`PATCH /api/v1/sales/{saleId}/deliveries/{deliveryId}` accepts any combination of these fields:
+
+```json
+{
+  "clientId": 16,
+  "deliveryAddress": "Nueva direccion",
+  "deliveryAgencyId": 3,
+  "municipalityId": 2,
+  "code": "DEL-001-A",
+  "shippingChargedToClient": 75.00
+}
+```
+
+The endpoint validates the updated municipality, client, and enabled agency. It recalculates `amountToCollect`, including the rule that a non-COD agency requires the sale to be fully paid. A delivery cannot be updated after it has been sent to the agency, completed, or cancelled.

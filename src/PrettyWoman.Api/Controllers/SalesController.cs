@@ -72,11 +72,19 @@ public class SalesController(ISaleService saleService) : ControllerBase
         var refundPaymentMovementId = await _saleService.RefundPaymentMovementAsync(id, paymentMovementId, refund);
         return CreatedAtAction(nameof(GetById), new { id }, refundPaymentMovementId);
     }
+
     [HttpPost("{id:int}/deliveries")]
     public async Task<ActionResult<int>> CreateDelivery(int id, [FromBody] CreateSaleDeliveryDTO delivery)
     {
         var deliveryId = await _saleService.CreateDeliveryAsync(id, delivery);
         return CreatedAtAction(nameof(GetById), new { id }, deliveryId);
+    }
+
+    [HttpPatch("{id:int}/deliveries/{deliveryId:int}")]
+    public async Task<IActionResult> UpdateDelivery(int id, int deliveryId, [FromBody] PatchSaleDeliveryDTO delivery)
+    {
+        await _saleService.UpdateDeliveryAsync(id, deliveryId, delivery);
+        return NoContent();
     }
 
     [HttpPost("{id:int}/deliveries/{deliveryId:int}/send")]

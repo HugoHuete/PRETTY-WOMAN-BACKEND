@@ -154,6 +154,9 @@ public class SaleService(
     public Task<int> CreateDeliveryAsync(int saleId, CreateSaleDeliveryDTO delivery)
         => _deliveryService.CreateAsync(saleId, delivery);
 
+    public Task UpdateDeliveryAsync(int saleId, int deliveryId, PatchSaleDeliveryDTO delivery)
+        => _deliveryService.PatchAsync(saleId, deliveryId, delivery);
+
     public Task MarkDeliveryAsSentAsync(int saleId, int deliveryId)
         => _deliveryService.MarkAsSentAsync(saleId, deliveryId);
 

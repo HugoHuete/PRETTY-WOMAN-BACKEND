@@ -17,6 +17,9 @@ A delivery is active while its status is neither `Completed` nor `Cancelled`.
 ## Sale states
 
 - Creating a delivery sets the sale to `ReadyForDelivery`.
+- `PATCH /api/v1/sales/{saleId}/deliveries/{deliveryId}` may update the client, historical address, agency, municipality, code, and shipping charge while the delivery is pending.
+- The update recalculates `amount_to_collect` and applies the selected agency collection rule.
+- A delivery cannot be edited after it has been sent to the agency, completed, or cancelled.
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/send` sets the sale to `SentForDelivery`.
 - The delivery remains `Pending` until a later operational process marks it `Completed` or `Cancelled`.
 - A completed or cancelled sale must not retain an active delivery. The current API does not expose those sale transitions; any future endpoint for them must first require that all deliveries are terminal.

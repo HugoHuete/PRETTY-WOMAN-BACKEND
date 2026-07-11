@@ -744,6 +744,85 @@ public class SaleServiceTests
         var delivery = await context.SaleDeliveries.SingleAsync(item => item.SaleId == saleId);
         Assert.Equal(350m, delivery.AmountToCollect);
     }
+    [Fact]
+    public async Task UpdateDeliveryAsync_UpdatesAllowedFieldsAndRecalculatesAmountToCollect()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.AddRange(
+            new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 },
+            new Municipality { Id = 2, Name = "Tipitapa", DepartmentId = 1 });
+        context.Clients.Add(new Client { Id = 1, Name = "Cliente original" });
+        context.Clients.Add(new Client { Id = 2, Name = "Cliente actualizado" });
+        await context.SaveChangesAsync();
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+        var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "DEL-005",
+            MunicipalityId = 1,
+            DeliveryAgencyId = 1,
+            ClientId = 1,
+            ShippingChargedToClient = 50m,
+            DeliveryAddress = "Direccion original"
+        });
+
+        await service.UpdateDeliveryAsync(saleId, deliveryId, new PatchSaleDeliveryDTO
+        {
+            Code = " DEL-005-UPDATED ",
+            MunicipalityId = 2,
+            ClientId = 2,
+            DeliveryAddress = " Nueva direccion ",
+            ShippingChargedToClient = 75m
+        });
+
+        var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
+        Assert.Equal("DEL-005-UPDATED", delivery.Code);
+        Assert.Equal(2, delivery.MunicipalityId);
+        Assert.Equal(2, delivery.ClientId);
+        Assert.Equal("Nueva direccion", delivery.DeliveryAddress);
+        Assert.Equal(75m, delivery.ShippingChargedToClient);
+        Assert.Equal(575m, delivery.AmountToCollect);
+    }
+
+    [Fact]
+    public async Task UpdateDeliveryAsync_RejectsAgencyWithoutCashCollectionWhenSaleIsNotFullyPaid()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        context.DeliveryAgencies.Add(new DeliveryAgency { Id = 2, Name = "Agencia prepago", PhoneNumber = "88881111", CanCollectCashOnDelivery = false });
+        await context.SaveChangesAsync();
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+        var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "DEL-006",
+            MunicipalityId = 1,
+            DeliveryAgencyId = 1
+        });
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.UpdateDeliveryAsync(saleId, deliveryId, new PatchSaleDeliveryDTO
+        {
+            DeliveryAgencyId = 2
+        }));
+
+        Assert.Contains("pagada completamente", exception.Message, StringComparison.OrdinalIgnoreCase);
+        var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
+        Assert.Equal(1, delivery.DeliveryAgencyId);
+    }
     private static SaleService CreateService(ApplicationDbContext context)
     {
 var currentUser = new TestCurrentUserService();

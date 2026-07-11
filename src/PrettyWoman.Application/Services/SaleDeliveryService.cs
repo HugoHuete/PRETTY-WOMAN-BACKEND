@@ -105,6 +105,58 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         await _context.SaveChangesAsync();
     }
 
+    public async Task PatchAsync(int saleId, int deliveryId, PatchSaleDeliveryDTO deliveryRequest)
+    {
+        Normalize(deliveryRequest);
+        ValidateAmounts(deliveryRequest);
+
+        var delivery = await _context.SaleDeliveries
+            .Include(item => item.Sale)
+                .ThenInclude(sale => sale!.PaymentMovements)
+                    .ThenInclude(payment => payment.ReversalMovements)
+            .Include(item => item.DeliveryAgency)
+            .FirstOrDefaultAsync(item => item.Id == deliveryId && item.SaleId == saleId)
+            ?? throw new AppNotFoundException($"El envio con id {deliveryId} no existe para la venta indicada.");
+
+        EnsureDeliveryCanBeUpdated(delivery);
+
+        var agency = delivery.DeliveryAgency!;
+        if (deliveryRequest.HasDeliveryAgencyId)
+        {
+            agency = await _context.DeliveryAgencies
+                .FirstOrDefaultAsync(item => item.Id == deliveryRequest.DeliveryAgencyId && item.Enabled)
+                ?? throw new AppNotFoundException($"La agencia de envio con id {deliveryRequest.DeliveryAgencyId} no existe o no esta habilitada.");
+        }
+
+        if (deliveryRequest.HasMunicipalityId &&
+            !await _context.Municipalities.AnyAsync(item => item.Id == deliveryRequest.MunicipalityId))
+        {
+            throw new AppNotFoundException($"El municipio con id {deliveryRequest.MunicipalityId} no existe.");
+        }
+
+        if (deliveryRequest.HasClientId && deliveryRequest.ClientId.HasValue &&
+            !await _context.Clients.AnyAsync(item => item.Id == deliveryRequest.ClientId.Value && !item.IsBlocked))
+        {
+            throw new AppNotFoundException($"La clienta con id {deliveryRequest.ClientId.Value} no existe.");
+        }
+
+        var shippingChargedToClient = deliveryRequest.HasShippingChargedToClient
+            ? deliveryRequest.ShippingChargedToClient!.Value
+            : delivery.ShippingChargedToClient;
+        var paymentTotal = SalePaymentMovementRules.CalculateTotal(delivery.Sale!.PaymentMovements);
+        var amountToCollect = CalculateAmountToCollect(delivery.Sale.Total, paymentTotal, shippingChargedToClient, agency);
+
+        if (deliveryRequest.HasClientId) delivery.ClientId = deliveryRequest.ClientId;
+        if (deliveryRequest.HasDeliveryAddress) delivery.DeliveryAddress = deliveryRequest.DeliveryAddress;
+        if (deliveryRequest.HasDeliveryAgencyId) delivery.DeliveryAgencyId = agency.Id;
+        if (deliveryRequest.HasMunicipalityId) delivery.MunicipalityId = deliveryRequest.MunicipalityId!.Value;
+        if (deliveryRequest.HasCode) delivery.Code = deliveryRequest.Code!;
+        if (deliveryRequest.HasShippingChargedToClient) delivery.ShippingChargedToClient = shippingChargedToClient;
+        delivery.AmountToCollect = amountToCollect;
+
+        await _context.SaveChangesAsync();
+    }
+
     public async Task SyncActiveAmountToCollectAsync(int saleId, decimal saleTotal, decimal paymentTotal)
     {
         var delivery = await GetActiveDeliveryAsync(saleId);
@@ -175,6 +227,21 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         }
     }
 
+    private static void EnsureDeliveryCanBeUpdated(SaleDelivery delivery)
+    {
+        if (delivery.DeliveryStatusId is (int)DeliveryStatusCode.Completed or (int)DeliveryStatusCode.Cancelled)
+        {
+            throw new AppBadRequestException("No se puede modificar un envio completado o cancelado.");
+        }
+
+        var sale = delivery.Sale!;
+        EnsureSaleCanHaveDelivery(sale);
+        if (sale.SaleStatusId == (int)SaleStatusOption.SentForDelivery)
+        {
+            throw new AppBadRequestException("No se puede modificar un envio despues de haber sido enviado a la agencia.");
+        }
+    }
+
     private static decimal CalculateAmountToCollect(decimal saleTotal, decimal paymentTotal, decimal shippingChargedToClient, DeliveryAgency agency)
     {
         if (!agency.CanCollectCashOnDelivery)
@@ -197,6 +264,12 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         delivery.Comments = delivery.Comments.NormalizeOptional();
     }
 
+    private static void Normalize(PatchSaleDeliveryDTO delivery)
+    {
+        if (delivery.HasCode) delivery.Code = delivery.Code.NormalizeRequired("Codigo del envio");
+        if (delivery.HasDeliveryAddress) delivery.DeliveryAddress = delivery.DeliveryAddress.NormalizeOptional();
+    }
+
     private static void ValidateAmounts(CreateSaleDeliveryDTO delivery)
     {
         if (delivery.ShippingChargedToClient < 0)
@@ -205,5 +278,14 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         }
     }
 
+    private static void ValidateAmounts(PatchSaleDeliveryDTO delivery)
+    {
+        if (delivery.HasDeliveryAgencyId && !delivery.DeliveryAgencyId.HasValue)
+            throw new AppBadRequestException("La agencia de envio no puede ser nula.");
+        if (delivery.HasMunicipalityId && !delivery.MunicipalityId.HasValue)
+            throw new AppBadRequestException("El municipio no puede ser nulo.");
+        if (delivery.HasShippingChargedToClient && (!delivery.ShippingChargedToClient.HasValue || delivery.ShippingChargedToClient.Value < 0))
+            throw new AppBadRequestException("El monto de envio cobrado a la clienta no puede ser negativo.");
+    }
     private string ResolveUserId() => _currentUserService.UserId ?? "system";
 }
