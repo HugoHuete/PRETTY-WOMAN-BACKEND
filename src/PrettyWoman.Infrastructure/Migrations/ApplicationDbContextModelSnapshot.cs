@@ -721,6 +721,10 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("order_id");
 
+                    b.Property<int?>("ProductReceiptId")
+                        .HasColumnType("integer")
+                        .HasColumnName("product_receipt_id");
+
                     b.Property<int?>("SalePaymentMovementId")
                         .HasColumnType("integer")
                         .HasColumnName("sale_payment_movement_id");
@@ -759,6 +763,9 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     b.HasIndex("OrderId")
                         .HasDatabaseName("ix_financial_movements_order_id");
+
+                    b.HasIndex("ProductReceiptId")
+                        .HasDatabaseName("ix_financial_movements_product_receipt_id");
 
                     b.HasIndex("SalePaymentMovementId")
                         .IsUnique()
@@ -3357,6 +3364,12 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_financial_movements_orders_order_id");
 
+                    b.HasOne("PrettyWoman.Domain.Entities.ProductReceipt", "ProductReceipt")
+                        .WithMany("FinancialMovements")
+                        .HasForeignKey("ProductReceiptId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_financial_movements_product_receipts_product_receipt_id");
+
                     b.HasOne("PrettyWoman.Domain.Entities.SalePaymentMovement", "SalePaymentMovement")
                         .WithMany()
                         .HasForeignKey("SalePaymentMovementId")
@@ -3374,6 +3387,8 @@ namespace PrettyWoman.Infrastructure.Migrations
                     b.Navigation("MovementDirection");
 
                     b.Navigation("Order");
+
+                    b.Navigation("ProductReceipt");
 
                     b.Navigation("SalePaymentMovement");
                 });
@@ -3956,6 +3971,8 @@ namespace PrettyWoman.Infrastructure.Migrations
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.ProductReceipt", b =>
                 {
+                    b.Navigation("FinancialMovements");
+
                     b.Navigation("OrderTrackingNumbers");
 
                     b.Navigation("ProductReceiptDetails");

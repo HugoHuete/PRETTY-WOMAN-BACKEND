@@ -29,6 +29,12 @@ test:
 migrate:
 	$(EF) database update --project $(INFRA_PROJECT) --startup-project $(STARTUP_PROJECT)
 
+migrate-to:
+ifndef name
+	$(error Debes enviar el nombre: make migration name=NombreDeLaMigracion)
+endif
+	$(EF) database update ${name} --project $(INFRA_PROJECT) --startup-project $(STARTUP_PROJECT)
+
 pending-model-changes:
 	$(EF) migrations has-pending-model-changes --project $(INFRA_PROJECT) --startup-project $(STARTUP_PROJECT)
 

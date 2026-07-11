@@ -68,6 +68,8 @@ public class OrderReceiptServiceTests
         Assert.Equal((int)InventoryStockBucketOption.Available, inventoryMovement.ToStockBucketId);
         Assert.Equal(2, inventoryMovement.Quantity);
         Assert.Equal(365m, warehouseShippingMovement.Amount);
+        Assert.Equal(productReceipt.Id, warehouseShippingMovement.ProductReceiptId);
+        Assert.Equal(orderId, warehouseShippingMovement.OrderId);
     }
 
 

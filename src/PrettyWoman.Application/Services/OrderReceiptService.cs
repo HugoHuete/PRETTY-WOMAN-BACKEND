@@ -82,7 +82,7 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
 
         if (warehouseShippingCostNio > 0)
         {
-            await _context.FinancialMovements.AddAsync(CreateWarehouseShippingMovement(order, warehouseShippingCostNio, receiveOrderDTO.Comments, receiptDate));
+            await _context.FinancialMovements.AddAsync(CreateWarehouseShippingMovement(order, receipt, warehouseShippingCostNio, receiveOrderDTO.Comments, receiptDate));
         }
 
         await _context.SaveChangesAsync();
@@ -281,7 +281,7 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
                 : product.MerchandiseTotalCostNio * product.ReceivedQuantity / product.Quantity), 2);
     }
 
-    private static FinancialMovement CreateWarehouseShippingMovement(Order order, decimal amountNio, string? comments, DateTime date)
+    private static FinancialMovement CreateWarehouseShippingMovement(Order order, ProductReceipt receipt, decimal amountNio, string? comments, DateTime date)
     {
         return new FinancialMovement
         {
@@ -290,6 +290,7 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
             MovementDirectionId = (int)MovementDirectionOptions.Out,
             FinancialMovementTypeId = (int)FinancialMovementTypeOption.WarehouseShippingPayment,
             OrderId = order.Id,
+            ProductReceipt = receipt,
             Amount = amountNio,
             ExchangeRate = order.ExchangeRate,
             Comments = comments

@@ -9,6 +9,7 @@ public class FinancialMovement : IAuditableEntity
     public int FinancialMovementTypeId { get; set; }
     public int? ExpenseCategoryId { get; set; }
     public int? OrderId { get; set; }
+    public int? ProductReceiptId { get; set; }
     public int? SalePaymentMovementId { get; set; }
     public int? LoanId { get; set; }
     public int? LoanPaymentId { get; set; }
@@ -25,6 +26,7 @@ public class FinancialMovement : IAuditableEntity
     public FinancialMovementType? FinancialMovementType { get; set; }
     public ExpenseCategory? ExpenseCategory { get; set; }
     public Order? Order { get; set; }
+    public ProductReceipt? ProductReceipt { get; set; }
     public SalePaymentMovement? SalePaymentMovement { get; set; }
     public Loan? Loan { get; set; }
     public LoanPayment? LoanPayment { get; set; }

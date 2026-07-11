@@ -11,6 +11,7 @@ public class ProductReceipt : IAuditableEntity
     public string? UpdatedById { get; set; }
 
     public Order? Order { get; set; }
+    public ICollection<FinancialMovement> FinancialMovements = [];
     public ICollection<OrderTrackingNumber> OrderTrackingNumbers = [];
     public ICollection<ProductReceiptDetail> ProductReceiptDetails = [];
 }
