@@ -127,8 +127,8 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
     public async Task CancelAsync(int saleId, int deliveryId)
     {
         var delivery = await GetDeliveryWithSaleAsync(saleId, deliveryId);
-        if (delivery.DeliveryStatusId != (int)DeliveryStatusCode.Pending && delivery.DeliveryStatusId != (int)DeliveryStatusCode.Sent)
-            throw new AppBadRequestException("No se puede cancelar un envio que no este completado o cancelado.");
+        if (delivery.DeliveryStatusId != (int)DeliveryStatusCode.Pending)
+            throw new AppBadRequestException("Solo se puede cancelar un envio pendiente.");
 
         delivery.DeliveryStatusId = (int)DeliveryStatusCode.Cancelled;
         delivery.Sale!.SaleStatusId = (int)SaleStatusOption.ReadyForDelivery;
