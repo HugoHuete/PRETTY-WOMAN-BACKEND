@@ -6,10 +6,12 @@ namespace PrettyWoman.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-public class SalesController(ISaleService saleService) : ControllerBase
+public class SalesController(ISaleService saleService, ISaleExchangeService saleExchangeService) : ControllerBase
 {
     private readonly ISaleService _saleService = saleService;
+    private readonly ISaleExchangeService _saleExchangeService = saleExchangeService;
 
+    /// <summary>Consulta todas las ventas para listados, búsquedas o administración.</summary>
     [HttpGet]
     public async Task<ActionResult<IEnumerable<SaleDTO>>> GetAll()
     {
@@ -17,6 +19,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return Ok(sales);
     }
 
+    /// <summary>Obtiene el detalle de una venta cuando se necesita consultar o gestionar una venta específica.</summary>
     [HttpGet("{id:int}")]
     public async Task<ActionResult<SaleDTO>> GetById(int id)
     {
@@ -24,6 +27,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return Ok(sale);
     }
 
+    /// <summary>Registra una nueva venta al confirmar una compra del cliente.</summary>
     [HttpPost]
     public async Task<ActionResult<int>> Create([FromBody] CreateSaleDTO createSaleDTO)
     {
@@ -31,6 +35,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id }, id);
     }
 
+    /// <summary>Actualiza los datos generales de una venta mientras aún requiera correcciones.</summary>
     [HttpPatch("{id:int}")]
     public async Task<IActionResult> PatchHeader(int id, [FromBody] PatchSaleHeaderDTO patchSaleHeaderDTO)
     {
@@ -38,6 +43,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Reemplaza los productos de una venta para corregir su contenido antes de finalizarla.</summary>
     [HttpPut("{id:int}/products")]
     public async Task<IActionResult> ReplaceProducts(int id, [FromBody] ReplaceSaleProductsDTO replaceSaleProductsDTO)
     {
@@ -45,6 +51,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Agrega productos entregados en selección para registrar los que el cliente decidirá conservar.</summary>
     [HttpPost("{id:int}/selection-holds")]
     public async Task<IActionResult> AddSelectionHolds(int id, [FromBody] List<CreateSaleSelectionProductDTO> selectionProducts)
     {
@@ -52,6 +59,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Resuelve un producto en selección cuando el cliente confirma si lo conserva o lo devuelve.</summary>
     [HttpPost("{id:int}/selection-holds/{holdId:int}/resolve")]
     public async Task<IActionResult> ResolveSelectionHold(int id, int holdId, [FromBody] ResolveSelectionHoldDTO resolution)
     {
@@ -59,6 +67,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Marca como devuelto un producto en selección cuando regresa sin ser comprado.</summary>
     [HttpPost("{id:int}/selection-holds/{holdId:int}/return")]
     public async Task<IActionResult> MarkSelectionHoldAsReturned(int id, int holdId)
     {
@@ -66,6 +75,44 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Consulta los intercambios asociados a una venta para revisar su historial y estado.</summary>
+    [HttpGet("{id:int}/exchanges")]
+    public async Task<ActionResult<IEnumerable<SaleExchangeDTO>>> GetExchanges(int id)
+        => Ok(await _saleExchangeService.GetBySaleIdAsync(id));
+
+    /// <summary>Registra un intercambio cuando el cliente devuelve productos y recibe otros a cambio.</summary>
+    [HttpPost("{id:int}/exchanges")]
+    public async Task<ActionResult<int>> CreateExchange(int id, [FromBody] CreateSaleExchangeDTO exchange)
+    {
+        var exchangeId = await _saleExchangeService.CreateAsync(id, exchange);
+        return CreatedAtAction(nameof(GetExchanges), new { id }, exchangeId);
+    }
+
+    /// <summary>Registra el intercambio físico: la agencia entrega las prendas nuevas y recibe las retornadas en el mismo acto.</summary>
+    [HttpPost("{id:int}/exchanges/{exchangeId:int}/handover")]
+    public async Task<IActionResult> CompleteExchangeHandover(int id, int exchangeId)
+    {
+        await _saleExchangeService.CompleteHandoverAsync(id, exchangeId);
+        return NoContent();
+    }
+
+    /// <summary>Confirma la recepción de un artículo devuelto para reincorporarlo al proceso de inventario.</summary>
+    [HttpPost("{id:int}/exchanges/{exchangeId:int}/return-items/{returnItemId:int}/received")]
+    public async Task<IActionResult> MarkExchangeReturnReceived(int id, int exchangeId, int returnItemId)
+    {
+        await _saleExchangeService.MarkReturnReceivedAsync(id, exchangeId, returnItemId);
+        return NoContent();
+    }
+
+    /// <summary>Cancela un intercambio cuando ya no debe continuar su procesamiento.</summary>
+    [HttpPost("{id:int}/exchanges/{exchangeId:int}/cancel")]
+    public async Task<IActionResult> CancelExchange(int id, int exchangeId)
+    {
+        await _saleExchangeService.CancelAsync(id, exchangeId);
+        return NoContent();
+    }
+
+    /// <summary>Registra un abono, pago o ajuste de cobro aplicado a una venta.</summary>
     [HttpPost("{id:int}/payment-movements")]
     public async Task<ActionResult<int>> AddPaymentMovement(int id, [FromBody] CreateSalePaymentMovementDTO paymentMovement)
     {
@@ -73,6 +120,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id }, paymentMovementId);
     }
 
+    /// <summary>Corrige los datos de un movimiento de pago cuando fue registrado con información incorrecta.</summary>
     [HttpPatch("{id:int}/payment-movements/{paymentMovementId:int}")]
     public async Task<IActionResult> UpdatePaymentMovement(int id, int paymentMovementId, [FromBody] UpdateSalePaymentMovementDTO paymentMovement)
     {
@@ -80,6 +128,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Redistribuye o ajusta movimientos de pago para cuadrar el saldo de la venta.</summary>
     [HttpPost("{id:int}/payment-movements/adjustments")]
     public async Task<IActionResult> AdjustPaymentMovements(int id, [FromBody] AdjustSalePaymentMovementsDTO adjustment)
     {
@@ -87,6 +136,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Registra el reembolso de un movimiento de pago cuando se devuelve dinero al cliente.</summary>
     [HttpPost("{id:int}/payment-movements/{paymentMovementId:int}/refunds")]
     public async Task<ActionResult<int>> RefundPaymentMovement(int id, int paymentMovementId, [FromBody] RefundSalePaymentMovementDTO refund)
     {
@@ -94,6 +144,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id }, refundPaymentMovementId);
     }
 
+    /// <summary>Crea el envío de una venta cuando sus productos deben entregarse a domicilio o por agencia.</summary>
     [HttpPost("{id:int}/deliveries")]
     public async Task<ActionResult<int>> CreateDelivery(int id, [FromBody] CreateSaleDeliveryDTO delivery)
     {
@@ -101,6 +152,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id }, deliveryId);
     }
 
+    /// <summary>Actualiza la información logística de un envío antes de que sea cerrado.</summary>
     [HttpPatch("{id:int}/deliveries/{deliveryId:int}")]
     public async Task<IActionResult> UpdateDelivery(int id, int deliveryId, [FromBody] PatchSaleDeliveryDTO delivery)
     {
@@ -108,6 +160,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Marca el envío como despachado cuando los productos salen hacia el cliente o la agencia.</summary>
     [HttpPost("{id:int}/deliveries/{deliveryId:int}/send")]
     public async Task<IActionResult> MarkDeliveryAsSent(int id, int deliveryId)
     {
@@ -115,6 +168,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Indica que el envío fue entregado pero quedan productos en selección por resolver.</summary>
     [HttpPost("{id:int}/deliveries/{deliveryId:int}/delivered-pending-selection")]
     public async Task<IActionResult> MarkDeliveryAsDeliveredPendingSelection(int id, int deliveryId)
     {
@@ -122,6 +176,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Finaliza un envío cuando la entrega y cualquier selección pendiente se completaron.</summary>
     [HttpPost("{id:int}/deliveries/{deliveryId:int}/complete")]
     public async Task<IActionResult> MarkDeliveryAsCompleted(int id, int deliveryId)
     {
@@ -129,6 +184,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Marca el envío como fallido cuando no pudo ser entregado.</summary>
     [HttpPost("{id:int}/deliveries/{deliveryId:int}/fail")]
     public async Task<IActionResult> MarkDeliveryAsFailed(int id, int deliveryId)
     {
@@ -136,6 +192,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Cancela un envío cuando deja de ser necesario o no debe continuar.</summary>
     [HttpPost("{id:int}/deliveries/{deliveryId:int}/cancel")]
     public async Task<IActionResult> CancelDelivery(int id, int deliveryId)
     {
@@ -143,6 +200,7 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return NoContent();
     }
 
+    /// <summary>Cancela una venta cuando debe anularse por completo.</summary>
     [HttpPost("{id:int}/cancel")]
     public async Task<IActionResult> Cancel(int id)
     {

@@ -97,6 +97,9 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public DbSet<SaleProductStatus> SaleProductStatuses { get; set; }
     public DbSet<Sale> Sales { get; set; }
     public DbSet<SaleProduct> SaleProducts { get; set; }
+    public DbSet<SaleExchange> SaleExchanges { get; set; }
+    public DbSet<ExchangeReturnItem> ExchangeReturnItems { get; set; }
+    public DbSet<ExchangeOutboundItem> ExchangeOutboundItems { get; set; }
 
     // Payments
     public DbSet<PaymentMethod> PaymentMethods { get; set; }

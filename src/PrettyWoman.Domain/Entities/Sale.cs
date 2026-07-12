@@ -29,4 +29,5 @@ public class Sale : IAuditableEntity
     public List<ProductHold> ProductHolds { get; set; } = [];
     public List<SalePaymentMovement> PaymentMovements { get; set; } = [];
     public List<SaleDelivery> Deliveries { get; set; } = [];
+    public List<SaleExchange> Exchanges { get; set; } = [];
 }

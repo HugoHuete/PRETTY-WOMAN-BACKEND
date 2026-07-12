@@ -33,7 +33,12 @@ public class InventoryMovementTypeConfiguration : IEntityTypeConfiguration<Inven
             new InventoryMovementType { Id = (int)InventoryMovementTypeOption.AdjustmentDecrease, Name = nameof(InventoryMovementTypeOption.AdjustmentDecrease) },
             new InventoryMovementType { Id = (int)InventoryMovementTypeOption.SelectionSent, Name = nameof(InventoryMovementTypeOption.SelectionSent) },
             new InventoryMovementType { Id = (int)InventoryMovementTypeOption.SelectionConvertedToSale, Name = nameof(InventoryMovementTypeOption.SelectionConvertedToSale) },
-            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.SelectionReturned, Name = nameof(InventoryMovementTypeOption.SelectionReturned) }
+            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.SelectionReturned, Name = nameof(InventoryMovementTypeOption.SelectionReturned) },
+            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.ExchangeReplacementReserved, Name = nameof(InventoryMovementTypeOption.ExchangeReplacementReserved) },
+            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.ExchangeReplacementDelivered, Name = nameof(InventoryMovementTypeOption.ExchangeReplacementDelivered) },
+            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.ExchangeReplacementReservationReleased, Name = nameof(InventoryMovementTypeOption.ExchangeReplacementReservationReleased) },
+            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.ExchangeReturnReceivedByAgency, Name = nameof(InventoryMovementTypeOption.ExchangeReturnReceivedByAgency) },
+            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.ExchangeReturnMissing, Name = nameof(InventoryMovementTypeOption.ExchangeReturnMissing) }
         );
     }
 }

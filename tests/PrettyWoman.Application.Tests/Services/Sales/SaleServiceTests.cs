@@ -1299,6 +1299,109 @@ public class SaleServiceTests
         Assert.Contains("al menos un envio", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task SaleExchange_CompletesHandoverAndReceivesReturnedItem()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var originalProduct = await AddProductAsync(context, availableQuantity: 1, salePrice: 1000m, unitCostNio: 400m);
+        var replacementProduct = await AddProductAsync(context, availableQuantity: 2, salePrice: 1300m, unitCostNio: 700m);
+        var saleService = CreateService(context);
+        var saleId = await saleService.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.Reserved,
+            Products = [new CreateSaleProductDTO { ProductId = originalProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+        var originalSale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        originalSale.SaleStatusId = (int)SaleStatusOption.SentForDelivery;
+        await context.SaveChangesAsync();
+        var originalLineId = await context.SaleProducts.Where(item => item.SaleId == saleId).Select(item => item.Id).SingleAsync();
+        var service = new SaleExchangeService(context);
+
+        var exchangeId = await service.CreateAsync(saleId, new CreateSaleExchangeDTO
+        {
+            ReturnItems = [new CreateExchangeReturnItemDTO { OriginalSaleProductId = originalLineId, Quantity = 1, RecognizedUnitAmount = 1000m }],
+            OutboundItems = [new CreateExchangeOutboundItemDTO { ProductId = replacementProduct.Id, Quantity = 1, ItemTypeId = (int)ExchangeOutboundItemTypeOption.Replacement }]
+        });
+
+        var exchange = await context.SaleExchanges.Include(item => item.ReturnItems).SingleAsync(item => item.Id == exchangeId);
+        await service.CompleteHandoverAsync(saleId, exchangeId);
+        await service.MarkReturnReceivedAsync(saleId, exchangeId, exchange.ReturnItems.Single().Id);
+
+        Assert.Equal((int)SaleExchangeStatusOption.Completed, exchange.StatusId);
+
+        Assert.Equal(300m, exchange.BalanceToCollect);
+        Assert.Equal(1, (await context.Products.SingleAsync(item => item.Id == originalProduct.Id)).AvailableQuantity);
+        var updatedReplacement = await context.Products.SingleAsync(item => item.Id == replacementProduct.Id);
+        Assert.Equal(1, updatedReplacement.AvailableQuantity);
+        Assert.Equal(0, updatedReplacement.ReservedQuantity);
+        Assert.Single(await context.SaleProducts.Where(item => item.SaleId == saleId).ToListAsync());
+    }
+
+    [Fact]
+    public async Task SaleExchange_RejectsHandoverAfterCancellationWithoutChangingInventory()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var original = await AddProductAsync(context, 1, 1000m, 400m);
+        var replacement = await AddProductAsync(context, 1, 900m, 300m);
+        var saleId = await CreateSaleWithProductAsync(context, original.Id, SaleStatusOption.SentForDelivery);
+        var originalLineId = await context.SaleProducts.Where(item => item.SaleId == saleId).Select(item => item.Id).SingleAsync();
+        var service = new SaleExchangeService(context);
+        var exchangeId = await service.CreateAsync(saleId, new CreateSaleExchangeDTO
+        {
+            ReturnItems = [new CreateExchangeReturnItemDTO { OriginalSaleProductId = originalLineId, Quantity = 1, RecognizedUnitAmount = 1000m }],
+            OutboundItems = [new CreateExchangeOutboundItemDTO { ProductId = replacement.Id, Quantity = 1, ItemTypeId = (int)ExchangeOutboundItemTypeOption.Replacement }]
+        });
+        await service.CancelAsync(saleId, exchangeId);
+
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.CompleteHandoverAsync(saleId, exchangeId));
+
+        Assert.Equal(0, (await context.Products.SingleAsync(item => item.Id == original.Id)).AvailableQuantity);
+        Assert.Equal(1, (await context.Products.SingleAsync(item => item.Id == replacement.Id)).AvailableQuantity);
+    }
+
+    [Fact]
+    public async Task SaleExchange_RejectsSaleThatCanStillBeCancelled()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var original = await AddProductAsync(context, 1, 1000m, 400m);
+        var replacement = await AddProductAsync(context, 1, 900m, 300m);
+        var saleId = await CreateSaleWithProductAsync(context, original.Id, SaleStatusOption.Reserved);
+        var originalLineId = await context.SaleProducts.Where(item => item.SaleId == saleId).Select(item => item.Id).SingleAsync();
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => new SaleExchangeService(context).CreateAsync(saleId, new CreateSaleExchangeDTO
+        {
+            ReturnItems = [new CreateExchangeReturnItemDTO { OriginalSaleProductId = originalLineId, Quantity = 1, RecognizedUnitAmount = 1000m }],
+            OutboundItems = [new CreateExchangeOutboundItemDTO { ProductId = replacement.Id, Quantity = 1, ItemTypeId = (int)ExchangeOutboundItemTypeOption.Replacement }]
+        }));
+
+        Assert.Contains("no puede cancelarse", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, (await context.Products.SingleAsync(item => item.Id == replacement.Id)).AvailableQuantity);
+    }
+
+    private static async Task<int> CreateSaleWithProductAsync(ApplicationDbContext context, int productId, SaleStatusOption status)
+    {
+        var initialStatus = status == SaleStatusOption.SentForDelivery ? SaleStatusOption.Reserved : status;
+        var saleId = await CreateService(context).CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)initialStatus,
+            Products = [new CreateSaleProductDTO { ProductId = productId, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+
+        if (initialStatus != status)
+        {
+            var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
+            sale.SaleStatusId = (int)status;
+            await context.SaveChangesAsync();
+        }
+
+        return saleId;
+    }
+
     private static SaleService CreateService(ApplicationDbContext context)
     {
 var currentUser = new TestCurrentUserService();

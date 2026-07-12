@@ -41,6 +41,9 @@ public interface IApplicationDbContext
     DbSet<SaleProductStatus> SaleProductStatuses { get; }
     DbSet<Sale> Sales { get; }
     DbSet<SaleProduct> SaleProducts { get; }
+    DbSet<SaleExchange> SaleExchanges { get; }
+    DbSet<ExchangeReturnItem> ExchangeReturnItems { get; }
+    DbSet<ExchangeOutboundItem> ExchangeOutboundItems { get; }
 
     // Payments
     DbSet<PaymentMethod> PaymentMethods { get; }
