@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.Common.Calculations;
 using PrettyWoman.Application.Common.Extensions;
+using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.DTOs.Sales;
 using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Interfaces;
@@ -20,19 +21,33 @@ public class SaleService(
     private readonly ISalePaymentMovementService _paymentMovementService = paymentMovementService;
     private readonly ISaleDeliveryService _deliveryService = deliveryService;
 
-    public async Task<IEnumerable<SaleDTO>> GetAllAsync()
+    public async Task<PaginatedResult<SaleDTO>> GetAllAsync(SaleQueryDTO query)
     {
-        var sales = await _context.Sales
+        NormalizePagination(query);
+
+        var salesQuery = ApplySaleFilters(_context.Sales
             .AsNoTracking()
+            .AsQueryable(), query);
+
+        var totalCount = await salesQuery.CountAsync();
+        var sales = await salesQuery
             .Include(sale => sale.SaleChannel)
             .Include(sale => sale.SaleStatus)
             .Include(sale => sale.SalePaymentStatus)
             .Include(sale => sale.Client)
-.OrderByDescending(sale => sale.SaleDate)
+            .OrderByDescending(sale => sale.SaleDate)
             .ThenByDescending(sale => sale.Id)
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
             .ToListAsync();
 
-        return sales.Select(MapSaleDTO).ToList();
+        return new PaginatedResult<SaleDTO>
+        {
+            Items = sales.Select(MapSaleDTO).ToList(),
+            Page = query.Page,
+            PageSize = query.PageSize,
+            TotalCount = totalCount
+        };
     }
 
     public async Task<SaleDTO> GetByIdAsync(int id)
@@ -717,6 +732,30 @@ public class SaleService(
         saleDTO.Products ??= [];
         saleDTO.SelectionProducts ??= [];
         saleDTO.PaymentMovements ??= [];
+    }
+
+    private static IQueryable<Sale> ApplySaleFilters(IQueryable<Sale> salesQuery, SaleQueryDTO query)
+    {
+        if (query.SaleStatusId.HasValue)
+            salesQuery = salesQuery.Where(sale => sale.SaleStatusId == query.SaleStatusId.Value);
+        if (query.SalePaymentStatusId.HasValue)
+            salesQuery = salesQuery.Where(sale => sale.SalePaymentStatusId == query.SalePaymentStatusId.Value);
+        if (query.SaleChannelId.HasValue)
+            salesQuery = salesQuery.Where(sale => sale.SaleChannelId == query.SaleChannelId.Value);
+        if (query.ClientId.HasValue)
+            salesQuery = salesQuery.Where(sale => sale.ClientId == query.ClientId.Value);
+        if (query.StartDate.HasValue)
+            salesQuery = salesQuery.Where(sale => sale.SaleDate >= query.StartDate.Value);
+        if (query.EndDate.HasValue)
+            salesQuery = salesQuery.Where(sale => sale.SaleDate <= query.EndDate.Value);
+
+        return salesQuery;
+    }
+
+    private static void NormalizePagination(SaleQueryDTO query)
+    {
+        query.Page = Math.Max(query.Page, 1);
+        query.PageSize = Math.Clamp(query.PageSize, 1, 100);
     }
 
     private static void NormalizeSaleFields(PatchSaleHeaderDTO saleDTO)

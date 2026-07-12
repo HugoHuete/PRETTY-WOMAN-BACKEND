@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.DTOs.Sales;
 using PrettyWoman.Application.Interfaces;
 
@@ -11,11 +12,11 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     private readonly ISaleService _saleService = saleService;
     private readonly ISaleExchangeService _saleExchangeService = saleExchangeService;
 
-    /// <summary>Consulta todas las ventas para listados, búsquedas o administración.</summary>
+    /// <summary>Consulta ventas paginadas y permite filtrar por estado, pago, canal, clienta y fechas.</summary>
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<SaleDTO>>> GetAll()
+    public async Task<ActionResult<PaginatedResult<SaleDTO>>> GetAll([FromQuery] SaleQueryDTO query)
     {
-        var sales = await _saleService.GetAllAsync();
+        var sales = await _saleService.GetAllAsync(query);
         return Ok(sales);
     }
 

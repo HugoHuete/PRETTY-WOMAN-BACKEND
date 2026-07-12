@@ -1,10 +1,11 @@
+using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.DTOs.Sales;
 
 namespace PrettyWoman.Application.Interfaces;
 
 public interface ISaleService
 {
-    Task<IEnumerable<SaleDTO>> GetAllAsync();
+    Task<PaginatedResult<SaleDTO>> GetAllAsync(SaleQueryDTO query);
     Task<SaleDTO> GetByIdAsync(int id);
     Task<int> CreateAsync(CreateSaleDTO createSaleDTO);
     Task PatchHeaderAsync(int id, PatchSaleHeaderDTO patchSaleHeaderDTO);

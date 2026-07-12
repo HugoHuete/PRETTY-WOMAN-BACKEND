@@ -14,6 +14,33 @@ namespace PrettyWoman.Application.Tests.Services.Sales;
 public class SaleServiceTests
 {
     [Fact]
+    public async Task GetAllAsync_PaginatesAndFiltersSales()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Sales.AddRange(
+            new Sale { SaleDate = new DateTime(2026, 7, 10, 0, 0, 0, DateTimeKind.Utc), SaleChannelId = (int)SaleChannelOption.Whatsapp, SaleStatusId = (int)SaleStatusOption.Pending, SalePaymentStatusId = (int)SalePaymentStatusOption.Unpaid, UserId = "seller", Subtotal = 100m, Total = 100m },
+            new Sale { SaleDate = new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc), SaleChannelId = (int)SaleChannelOption.Whatsapp, SaleStatusId = (int)SaleStatusOption.Reserved, SalePaymentStatusId = (int)SalePaymentStatusOption.PartiallyPaid, UserId = "seller", Subtotal = 200m, Total = 200m },
+            new Sale { SaleDate = new DateTime(2026, 7, 12, 0, 0, 0, DateTimeKind.Utc), SaleChannelId = (int)SaleChannelOption.InStoreSale, SaleStatusId = (int)SaleStatusOption.Completed, SalePaymentStatusId = (int)SalePaymentStatusOption.Paid, UserId = "seller", Subtotal = 300m, Total = 300m });
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context);
+        var filtered = await service.GetAllAsync(new SaleQueryDTO
+        {
+            SaleStatusId = (int)SaleStatusOption.Completed,
+            SalePaymentStatusId = (int)SalePaymentStatusOption.Paid,
+            SaleChannelId = (int)SaleChannelOption.InStoreSale
+        });
+        var paged = await service.GetAllAsync(new SaleQueryDTO { Page = 2, PageSize = 1 });
+
+        Assert.Single(filtered.Items);
+        Assert.Equal(300m, filtered.Items.Single().Total);
+        Assert.Equal(3, paged.TotalCount);
+        Assert.Single(paged.Items);
+        Assert.Equal(200m, paged.Items.Single().Total);
+    }
+
+    [Fact]
     public async Task CreateAsync_CreatesInStoreSaleWithMultipleFullPayments()
     {
         await using var context = CreateContext();
