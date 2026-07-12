@@ -13,7 +13,6 @@ public class DeliveryAgencyReconciliationConfiguration : IEntityTypeConfiguratio
         builder.Property(x => x.AmountReceivedNio).HasPrecision(12, 2);
         builder.Property(x => x.AmountReceivedUsd).HasPrecision(12, 2);
         builder.Property(x => x.AmountPaidToAgencyNio).HasPrecision(12, 2);
-        builder.Property(x => x.AmountPaidToAgencyUsd).HasPrecision(12, 2);
         builder.Property(x => x.Comments).HasMaxLength(500);
 
         builder.HasOne(x => x.DeliveryAgency)
@@ -30,7 +29,6 @@ public class DeliveryAgencyReconciliationConfiguration : IEntityTypeConfiguratio
             table.HasCheckConstraint("ck_delivery_agency_reconciliations_amount_received_nio_non_negative", "amount_received_nio >= 0");
             table.HasCheckConstraint("ck_delivery_agency_reconciliations_amount_received_usd_non_negative", "amount_received_usd >= 0");
             table.HasCheckConstraint("ck_delivery_agency_reconciliations_amount_paid_nio_non_negative", "amount_paid_to_agency_nio >= 0");
-            table.HasCheckConstraint("ck_delivery_agency_reconciliations_amount_paid_usd_non_negative", "amount_paid_to_agency_usd >= 0");
         });
     }
 }

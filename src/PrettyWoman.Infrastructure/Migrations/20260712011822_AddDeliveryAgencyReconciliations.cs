@@ -12,13 +12,10 @@ namespace PrettyWoman.Infrastructure.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropCheckConstraint(
-                name: "ck_sale_deliveries_change_amount_non_negative",
-                table: "sale_deliveries");
-
-            migrationBuilder.DropCheckConstraint(
-                name: "ck_sale_deliveries_exchange_rate_required_for_usd",
-                table: "sale_deliveries");
+            // Algunas bases creadas antes de endurecer las reglas no tienen estas restricciones.
+            // IF EXISTS permite aplicar la migración tanto sobre esos esquemas como sobre el esquema esperado.
+            migrationBuilder.Sql("ALTER TABLE sale_deliveries DROP CONSTRAINT IF EXISTS ck_sale_deliveries_change_amount_non_negative;");
+            migrationBuilder.Sql("ALTER TABLE sale_deliveries DROP CONSTRAINT IF EXISTS ck_sale_deliveries_exchange_rate_required_for_usd;");
 
             migrationBuilder.RenameColumn(
                 name: "exchange_rate",

@@ -245,7 +245,7 @@ Agencias usadas para entregar ventas a clientes.
 
 Representa una liquidacion con una sola agencia de envios.
 
-Guarda los montos reales recibidos y pagados en NIO/USD, junto con la tasa aplicada para valorar la liquidacion. Los envios conciliados se relacionan directamente con esta tabla.
+Guarda los montos calculados de la liquidacion: remesas recibidas en NIO/USD y pagos a la agencia en NIO, junto con la tasa aplicada para valorar la remesa en USD. Los envios conciliados se relacionan directamente con esta tabla.
 
 ## inventory_stock_buckets
 

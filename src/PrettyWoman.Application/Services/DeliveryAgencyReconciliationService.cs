@@ -83,10 +83,9 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             DeliveryAgencyId = agency.Id,
             ReconciliationDate = request.ReconciliationDate ?? DateTime.UtcNow,
             SettlementExchangeRate = request.SettlementExchangeRate,
-            AmountReceivedNio = request.AmountReceivedNio,
-            AmountReceivedUsd = request.AmountReceivedUsd,
-            AmountPaidToAgencyNio = request.AmountPaidToAgencyNio,
-            AmountPaidToAgencyUsd = request.AmountPaidToAgencyUsd,
+            AmountReceivedNio = Math.Round(request.Deliveries.Sum(item => item.AmountCollectedNio), 2),
+            AmountReceivedUsd = Math.Round(request.Deliveries.Sum(item => item.AmountCollectedUsd), 2),
+            AmountPaidToAgencyNio = Math.Round(request.Deliveries.Sum(item => item.ChangeGivenNio + item.ShippingPaidToAgency), 2),
             Comments = request.Comments
         };
 
@@ -140,7 +139,7 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             reconciliation.AmountReceivedNio + reconciliation.AmountReceivedUsd * reconciliation.SettlementExchangeRate,
             2);
         var amountPaidNio = Math.Round(
-            reconciliation.AmountPaidToAgencyNio + reconciliation.AmountPaidToAgencyUsd * reconciliation.SettlementExchangeRate,
+            reconciliation.AmountPaidToAgencyNio,
             2);
 
         if (amountReceivedNio > 0)
@@ -254,11 +253,6 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             throw new AppBadRequestException("Debe indicar al menos un envio para conciliar.");
         if (request.SettlementExchangeRate <= 0)
             throw new AppBadRequestException("La tasa de cambio usada para la liquidacion debe ser mayor que cero.");
-        if (request.AmountReceivedNio < 0 || request.AmountReceivedUsd < 0 ||
-            request.AmountPaidToAgencyNio < 0 || request.AmountPaidToAgencyUsd < 0)
-        {
-            throw new AppBadRequestException("Los montos recibidos y pagados a la agencia no pueden ser negativos.");
-        }
     }
 
     private static void EnsureDistinctDeliveryIds(IEnumerable<ReconcileSaleDeliveryDTO> deliveries)

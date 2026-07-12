@@ -58,13 +58,13 @@ net_customer_collection =
 - Completed deliveries can collect from zero up to `amount_to_collect`.
 - Failed deliveries cannot record a customer collection, but can record `shipping_paid_to_agency`.
 - USD collections require `collection_exchange_rate`, the actual rate applied by the agency for that delivery.
-- The reconciliation stores its own `settlement_exchange_rate` to value the remittance received or paid in USD. It is historical input, not a rate inferred from the rate catalog.
+- The reconciliation stores its own `settlement_exchange_rate` to value the USD remittance received. It is historical input, not a rate inferred from the rate catalog.
 - A collection payment is created for the amount actually collected. It settles products first and then the delivery charge, and does not create a direct financial movement.
 
-The reconciliation records the actual NIO/USD amounts received from and paid to the agency. It creates up to two financial movements of type `DeliveryAgencyReconciliation`:
+The reconciliation calculates its financial amounts from the delivery details. It creates up to two financial movements of type `DeliveryAgencyReconciliation`:
 
 - An `In` movement for the NIO-equivalent value received from the agency.
-- An `Out` movement for the NIO-equivalent value paid to the agency, including change reimbursements and shipping costs.
+- An `Out` movement for the NIO amount paid to the agency, including change reimbursements and shipping costs.
 
 These are cash-flow movements, not operational expenses. Shipping margin remains `shipping_charged_to_client - shipping_paid_to_agency`.
 

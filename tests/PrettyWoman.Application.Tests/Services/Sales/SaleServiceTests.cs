@@ -1154,8 +1154,6 @@ public class SaleServiceTests
         {
             DeliveryAgencyId = 1,
             SettlementExchangeRate = 36m,
-            AmountReceivedUsd = 20m,
-            AmountPaidToAgencyNio = 250m,
             Deliveries =
             [
                 new ReconcileSaleDeliveryDTO
@@ -1170,6 +1168,7 @@ public class SaleServiceTests
         });
 
         var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
+        var reconciliation = await context.DeliveryAgencyReconciliations.SingleAsync(item => item.Id == reconciliationId);
         var sale = await context.Sales.Include(item => item.PaymentMovements).SingleAsync(item => item.Id == saleId);
         var financialMovements = await context.FinancialMovements
             .Where(item => item.DeliveryAgencyReconciliationId == reconciliationId)
@@ -1181,6 +1180,9 @@ public class SaleServiceTests
         Assert.Equal(170m, delivery.ChangeGivenNio);
         Assert.Equal(36m, delivery.CollectionExchangeRate);
         Assert.Equal(80m, delivery.ShippingPaidToAgency);
+        Assert.Equal(0m, reconciliation.AmountReceivedNio);
+        Assert.Equal(20m, reconciliation.AmountReceivedUsd);
+        Assert.Equal(250m, reconciliation.AmountPaidToAgencyNio);
         Assert.Equal((int)SalePaymentStatusOption.Paid, sale.SalePaymentStatusId);
         Assert.Contains(sale.PaymentMovements, item =>
             item.DeliveryAgencyReconciliationId == reconciliationId &&

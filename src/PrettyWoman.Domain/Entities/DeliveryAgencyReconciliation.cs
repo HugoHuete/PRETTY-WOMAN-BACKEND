@@ -9,7 +9,6 @@ public class DeliveryAgencyReconciliation : IAuditableEntity
     public decimal AmountReceivedNio { get; set; }
     public decimal AmountReceivedUsd { get; set; }
     public decimal AmountPaidToAgencyNio { get; set; }
-    public decimal AmountPaidToAgencyUsd { get; set; }
     public string? Comments { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

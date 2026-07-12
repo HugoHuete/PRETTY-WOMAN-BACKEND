@@ -11,10 +11,6 @@
   "deliveryAgencyId": 1,
   "reconciliationDate": "2026-07-12T18:00:00Z",
   "settlementExchangeRate": 36.00,
-  "amountReceivedNio": 0.00,
-  "amountReceivedUsd": 20.00,
-  "amountPaidToAgencyNio": 420.00,
-  "amountPaidToAgencyUsd": 0.00,
   "comments": "Liquidacion diaria",
   "deliveries": [
     {
@@ -38,8 +34,9 @@ In this example, the customer owed C$400. The agency collected $20, applied C$36
 3. Record the customer collection, USD collection rate, NIO change, and shipping cost on each delivery.
 4. For completed deliveries, create an agency-sourced cash payment for the amount actually collected. The payment applies to product debt first and then shipping debt.
 5. Update the sale payment status without creating a financial movement for that payment.
-6. Create the reconciliation and link every delivery, payment, and financial movement to it.
-7. Create an incoming financial movement for the NIO-equivalent remittance received and an outgoing movement for the NIO-equivalent amount paid to the agency, when their amounts are greater than zero.
+6. Calculate the settlement amounts from the delivery details: collected NIO/USD are remittances received; NIO change plus shipping paid are the amount paid to the agency.
+7. Create the reconciliation and link every delivery, payment, and financial movement to it.
+8. Create an incoming financial movement for the NIO-equivalent remittance received and an outgoing movement for the NIO amount paid to the agency, when their amounts are greater than zero.
 
 ## Validation
 
