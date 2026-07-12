@@ -1064,6 +1064,67 @@ public class SaleServiceTests
     }
 
     [Fact]
+    public async Task GetPendingDeliveriesAsync_ReturnsOnlyUnreconciledCompletedOrFailedDeliveriesAndFiltersByAgency()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.DeliveryAgencies.Add(new DeliveryAgency { Id = 2, Name = "Agencia dos", PhoneNumber = "88882222", CanCollectCashOnDelivery = true });
+        context.Clients.Add(new Client { Id = 1, Name = "Ana Perez" });
+        context.Sales.Add(new Sale
+        {
+            SaleDate = new DateTime(2026, 7, 11, 10, 0, 0, DateTimeKind.Utc),
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.ReadyForDelivery,
+            Total = 500m,
+            UserId = "test-user"
+        });
+        await context.SaveChangesAsync();
+        var saleId = await context.Sales.Select(item => item.Id).SingleAsync();
+        context.SaleDeliveries.AddRange(
+            new SaleDelivery
+            {
+                Code = "DEL-PENDING-COMPLETE", SaleId = saleId, ClientId = 1, DeliveryAgencyId = 1,
+                DeliveryStatusId = (int)DeliveryStatusCode.Completed, MunicipalityId = 1, AmountToCollect = 550m,
+                ShippingChargedToClient = 50m, DeliveryAddress = "Managua", UserId = "test-user"
+            },
+            new SaleDelivery
+            {
+                Code = "DEL-PENDING-FAILED", SaleId = saleId, DeliveryAgencyId = 1,
+                DeliveryStatusId = (int)DeliveryStatusCode.Failed, MunicipalityId = 1, UserId = "test-user"
+            },
+            new SaleDelivery
+            {
+                Code = "DEL-NOT-FINAL", SaleId = saleId, DeliveryAgencyId = 1,
+                DeliveryStatusId = (int)DeliveryStatusCode.Pending, MunicipalityId = 1, UserId = "test-user"
+            },
+            new SaleDelivery
+            {
+                Code = "DEL-OTHER-AGENCY", SaleId = saleId, DeliveryAgencyId = 2,
+                DeliveryStatusId = (int)DeliveryStatusCode.Completed, MunicipalityId = 1, UserId = "test-user"
+            },
+            new SaleDelivery
+            {
+                Code = "DEL-RECONCILED", SaleId = saleId, DeliveryAgencyId = 1,
+                DeliveryStatusId = (int)DeliveryStatusCode.Completed, MunicipalityId = 1,
+                DeliveryAgencyReconciliationId = 1, UserId = "test-user"
+            });
+        await context.SaveChangesAsync();
+        var service = new DeliveryAgencyReconciliationService(context, new TestCurrentUserService());
+
+        var allPending = (await service.GetPendingDeliveriesAsync()).ToList();
+        var agencyOnePending = (await service.GetPendingDeliveriesAsync(1)).ToList();
+
+        Assert.Equal(3, allPending.Count);
+        Assert.Equal(2, agencyOnePending.Count);
+        Assert.All(agencyOnePending, item => Assert.Equal(1, item.DeliveryAgencyId));
+        var completedDelivery = Assert.Single(agencyOnePending, item => item.Code == "DEL-PENDING-COMPLETE");
+        Assert.Equal("Agencia COD", completedDelivery.DeliveryAgencyName);
+        Assert.Equal("Ana Perez", completedDelivery.ClientName);
+        Assert.Equal(500m, completedDelivery.SaleTotal);
+        Assert.Equal(550m, completedDelivery.AmountToCollect);
+    }
+
+    [Fact]
     public async Task CreateAgencyReconciliationAsync_RecordsUsdCollectionChangeAndSettlementCashFlows()
     {
         await using var context = CreateContext();

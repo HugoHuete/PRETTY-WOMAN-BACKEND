@@ -14,6 +14,49 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
     private readonly IApplicationDbContext _context = context;
     private readonly ICurrentUserService _currentUserService = currentUserService;
 
+    public async Task<IEnumerable<PendingReconciliationDeliveryDTO>> GetPendingDeliveriesAsync(int? deliveryAgencyId = null)
+    {
+        var query = _context.SaleDeliveries
+            .AsNoTracking()
+            .Include(item => item.DeliveryAgency)
+            .Include(item => item.DeliveryStatus)
+            .Include(item => item.Client)
+            .Include(item => item.Sale)
+            .Where(item =>
+                !item.DeliveryAgencyReconciliationId.HasValue &&
+                (item.DeliveryStatusId == (int)DeliveryStatusCode.Completed ||
+                 item.DeliveryStatusId == (int)DeliveryStatusCode.Failed));
+
+        if (deliveryAgencyId.HasValue)
+        {
+            query = query.Where(item => item.DeliveryAgencyId == deliveryAgencyId.Value);
+        }
+
+        var deliveries = await query
+            .OrderBy(item => item.DeliveryAgency!.Name)
+            .ThenBy(item => item.CreatedAt)
+            .ThenBy(item => item.Id)
+            .ToListAsync();
+
+        return deliveries.Select(item => new PendingReconciliationDeliveryDTO
+        {
+            SaleDeliveryId = item.Id,
+            Code = item.Code,
+            CreatedAt = item.CreatedAt,
+            DeliveryStatusId = item.DeliveryStatusId,
+            DeliveryStatusName = item.DeliveryStatus?.Name,
+            DeliveryAgencyId = item.DeliveryAgencyId,
+            DeliveryAgencyName = item.DeliveryAgency?.Name,
+            SaleId = item.SaleId,
+            SaleTotal = item.Sale?.Total ?? 0,
+            ClientId = item.ClientId,
+            ClientName = item.Client?.Name,
+            DeliveryAddress = item.DeliveryAddress,
+            AmountToCollect = item.AmountToCollect,
+            ShippingChargedToClient = item.ShippingChargedToClient
+        }).ToList();
+    }
+
     public async Task<int> CreateAsync(CreateDeliveryAgencyReconciliationDTO request)
     {
         NormalizeAndValidateRequest(request);
