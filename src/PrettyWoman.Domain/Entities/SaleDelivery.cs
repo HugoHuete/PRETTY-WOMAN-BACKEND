@@ -13,20 +13,21 @@ public class SaleDelivery
     public decimal AmountToCollect { get; set; }
     public decimal AmountCollectedNio { get; set; } = 0;
     public decimal AmountCollectedUsd { get; set; } = 0;
-    public decimal ChangeAmount { get; set; } = 0; // Vuelto para cuando pague en Usd
-    public decimal? ExchangeRate { get; set; }
+    public decimal ChangeGivenNio { get; set; } = 0;
+    public decimal? CollectionExchangeRate { get; set; }
     public decimal ShippingChargedToClient { get; set; }
     public decimal ShippingPaidToAgency { get; set; }
     public string? DeliveryAddress { get; set; }
     public required string UserId { get; set; }
     public string? Comments { get; set; }
-
+    public int? DeliveryAgencyReconciliationId { get; set; }
 
     public Sale? Sale { get; set; }
     public Municipality? Municipality { get; set; }
     public DeliveryStatus? DeliveryStatus { get; set; }
     public DeliveryAgency? DeliveryAgency { get; set; }
     public Client? Client { get; set; }
+    public DeliveryAgencyReconciliation? DeliveryAgencyReconciliation { get; set; }
     public List<SalePaymentMovement> PaymentMovements { get; set; } = [];
 
 }

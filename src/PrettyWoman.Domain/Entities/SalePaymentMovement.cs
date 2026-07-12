@@ -16,6 +16,7 @@ public class SalePaymentMovement : IAuditableEntity
     public decimal ProductAmount { get; set; }
     public decimal ShippingAmount { get; set; }
     public int? SaleDeliveryId { get; set; }
+    public int? DeliveryAgencyReconciliationId { get; set; }
     public decimal CommissionPercentage { get; set; }
     public decimal CommissionAmount { get; set; }
     public decimal IncomeTaxPercentage { get; set; }
@@ -30,6 +31,7 @@ public class SalePaymentMovement : IAuditableEntity
 
     public Sale? Sale { get; set; }
     public SaleDelivery? SaleDelivery { get; set; }
+    public DeliveryAgencyReconciliation? DeliveryAgencyReconciliation { get; set; }
     public MovementDirection? MovementDirection { get; set; }
     public PaymentMethod? PaymentMethod { get; set; }
     public PaymentTerminal? PaymentTerminal { get; set; }

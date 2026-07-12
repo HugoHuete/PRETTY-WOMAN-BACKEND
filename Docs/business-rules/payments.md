@@ -50,7 +50,7 @@ For an agency that cannot collect cash on delivery, products must be paid before
 
 A direct cash, transfer, or card payment creates one financial movement for its `net_received_amount`. The financial movement represents the entire payment; the product/shipping columns explain its business allocation.
 
-Payments collected by an agency will be handled during delivery reconciliation. They will settle the sale without creating their own direct financial movement; the reconciliation will record the actual net remittance.
+Payments collected by an agency are created during delivery reconciliation. They settle the sale without creating their own direct financial movement; the reconciliation records the actual incoming and outgoing cash flows with the agency.
 
 ## Refunds
 

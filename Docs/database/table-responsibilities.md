@@ -241,6 +241,12 @@ Agencias usadas para entregar ventas a clientes.
 
 `can_collect_cash_on_delivery` indica si la agencia puede recaudar efectivo contra entrega.
 
+## delivery_agency_reconciliations
+
+Representa una liquidacion con una sola agencia de envios.
+
+Guarda los montos reales recibidos y pagados en NIO/USD, junto con la tasa aplicada para valorar la liquidacion. Los envios conciliados se relacionan directamente con esta tabla.
+
 ## inventory_stock_buckets
 
 Catalogo de buckets de inventario usados por `inventory_movements` para indicar origen y destino.

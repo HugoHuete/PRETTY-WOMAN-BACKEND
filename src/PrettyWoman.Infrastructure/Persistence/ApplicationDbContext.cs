@@ -109,6 +109,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public DbSet<DeliveryAgency> DeliveryAgencies { get; set; }
     public DbSet<DeliveryStatus> DeliveryStatuses { get; set; }
     public DbSet<SaleDelivery> SaleDeliveries { get; set; }
+    public DbSet<DeliveryAgencyReconciliation> DeliveryAgencyReconciliations { get; set; }
     public DbSet<Department> Departments { get; set; }
     public DbSet<Municipality> Municipalities { get; set; }
 

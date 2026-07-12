@@ -14,6 +14,7 @@ public class SalePaymentMovementDTO
     public decimal ProductAmount { get; set; }
     public decimal ShippingAmount { get; set; }
     public int? SaleDeliveryId { get; set;}
+    public int? DeliveryAgencyReconciliationId { get; set; }
     public decimal CommissionPercentage { get; set; }
     public decimal CommissionAmount { get; set; }
     public decimal IncomeTaxPercentage { get; set; }

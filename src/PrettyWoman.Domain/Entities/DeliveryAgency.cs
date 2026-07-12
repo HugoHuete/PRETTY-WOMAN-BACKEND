@@ -8,4 +8,5 @@ public class DeliveryAgency
     public bool Enabled { get; set; } = true;
     public bool CanCollectCashOnDelivery { get; set; }
     public ICollection<SaleDelivery> SaleDeliveries { get; set; } = [];
+    public ICollection<DeliveryAgencyReconciliation> Reconciliations { get; set; } = [];
 }

@@ -1,0 +1,244 @@
+using Microsoft.EntityFrameworkCore;
+using PrettyWoman.Application.Common.Calculations;
+using PrettyWoman.Application.Common.Extensions;
+using PrettyWoman.Application.DTOs.DeliveryAgencyReconciliations;
+using PrettyWoman.Application.Exceptions;
+using PrettyWoman.Application.Interfaces;
+using PrettyWoman.Domain.Entities;
+using PrettyWoman.Domain.Enums;
+
+namespace PrettyWoman.Application.Services;
+
+public class DeliveryAgencyReconciliationService(IApplicationDbContext context, ICurrentUserService currentUserService) : IDeliveryAgencyReconciliationService
+{
+    private readonly IApplicationDbContext _context = context;
+    private readonly ICurrentUserService _currentUserService = currentUserService;
+
+    public async Task<int> CreateAsync(CreateDeliveryAgencyReconciliationDTO request)
+    {
+        NormalizeAndValidateRequest(request);
+        EnsureDistinctDeliveryIds(request.Deliveries);
+
+        var agency = await _context.DeliveryAgencies
+            .FirstOrDefaultAsync(item => item.Id == request.DeliveryAgencyId)
+            ?? throw new AppNotFoundException($"La agencia de envio con id {request.DeliveryAgencyId} no existe.");
+
+        var deliveryIds = request.Deliveries.Select(item => item.SaleDeliveryId).ToList();
+        // Se cargan los pagos existentes para calcular el saldo real al momento de conciliar,
+        // no el monto que tenia el envio cuando fue creado.
+        var deliveries = await _context.SaleDeliveries
+            .Include(item => item.Sale)
+                .ThenInclude(sale => sale!.PaymentMovements)
+            .Where(item => deliveryIds.Contains(item.Id))
+            .ToListAsync();
+
+        if (deliveries.Count != deliveryIds.Count)
+            throw new AppNotFoundException("Uno o mas envios indicados no existen.");
+
+        var reconciliation = new DeliveryAgencyReconciliation
+        {
+            DeliveryAgencyId = agency.Id,
+            ReconciliationDate = request.ReconciliationDate ?? DateTime.UtcNow,
+            SettlementExchangeRate = request.SettlementExchangeRate,
+            AmountReceivedNio = request.AmountReceivedNio,
+            AmountReceivedUsd = request.AmountReceivedUsd,
+            AmountPaidToAgencyNio = request.AmountPaidToAgencyNio,
+            AmountPaidToAgencyUsd = request.AmountPaidToAgencyUsd,
+            Comments = request.Comments
+        };
+
+        var deliveryRequests = request.Deliveries.ToDictionary(item => item.SaleDeliveryId);
+        var salesWithNewPayments = new Dictionary<int, Sale>();
+        // Los cobros de agencia se registran como pagos de la venta, pero el efectivo solo
+        // entra o sale de caja mediante los movimientos financieros de la conciliacion.
+        foreach (var delivery in deliveries)
+        {
+            var deliveryRequest = deliveryRequests[delivery.Id];
+            var collectedAmount = CalculateCollectedAmount(deliveryRequest);
+            ValidateDeliveryForReconciliation(delivery, deliveryRequest, agency.Id, collectedAmount);
+            ApplyDeliveryCollection(delivery, deliveryRequest, reconciliation);
+
+            if (delivery.DeliveryStatusId == (int)DeliveryStatusCode.Completed && collectedAmount > 0)
+            {
+                var payment = CreateAgencyCollectionPayment(delivery.Sale!, delivery, collectedAmount, reconciliation, ResolveUserId());
+                delivery.Sale!.PaymentMovements.Add(payment);
+                salesWithNewPayments[delivery.SaleId] = delivery.Sale;
+            }
+        }
+
+        foreach (var sale in salesWithNewPayments.Values)
+        {
+            var productPaymentTotal = SalePaymentMovementRules.CalculateProductTotal(sale.PaymentMovements);
+            SalePaymentMovementRules.EnsureAllowedProductTotal(
+                sale.SaleChannelId,
+                sale.Total,
+                productPaymentTotal,
+                allowOverpayment: sale.SalePaymentStatusId == (int)SalePaymentStatusOption.RefundPending);
+            sale.SalePaymentStatusId = SalePaymentMovementRules.ResolveStatus(sale.Total, productPaymentTotal);
+        }
+
+        foreach (var delivery in deliveries)
+        {
+            delivery.DeliveryAgencyReconciliation = reconciliation;
+        }
+
+        await _context.DeliveryAgencyReconciliations.AddAsync(reconciliation);
+        // Una liquidacion puede tener remesa, pago a la agencia, ambos, o ninguno.
+        await AddFinancialMovementsAsync(reconciliation, agency.Name);
+        await _context.SaveChangesAsync();
+
+        return reconciliation.Id;
+    }
+
+    private async Task AddFinancialMovementsAsync(DeliveryAgencyReconciliation reconciliation, string agencyName)
+    {
+        // La tasa de liquidacion es historica y puede diferir de la tasa aplicada al cliente.
+        var amountReceivedNio = Math.Round(
+            reconciliation.AmountReceivedNio + reconciliation.AmountReceivedUsd * reconciliation.SettlementExchangeRate,
+            2);
+        var amountPaidNio = Math.Round(
+            reconciliation.AmountPaidToAgencyNio + reconciliation.AmountPaidToAgencyUsd * reconciliation.SettlementExchangeRate,
+            2);
+
+        if (amountReceivedNio > 0)
+        {
+            await _context.FinancialMovements.AddAsync(new FinancialMovement
+            {
+                Description = $"Remesa recibida de {agencyName}",
+                MovementDate = reconciliation.ReconciliationDate,
+                MovementDirectionId = (int)MovementDirectionOptions.In,
+                FinancialMovementTypeId = (int)FinancialMovementTypeOption.DeliveryAgencyReconciliation,
+                DeliveryAgencyReconciliation = reconciliation,
+                Amount = amountReceivedNio,
+                ExchangeRate = reconciliation.SettlementExchangeRate,
+                Comments = reconciliation.Comments
+            });
+        }
+
+        if (amountPaidNio > 0)
+        {
+            await _context.FinancialMovements.AddAsync(new FinancialMovement
+            {
+                Description = $"Liquidacion pagada a {agencyName}",
+                MovementDate = reconciliation.ReconciliationDate,
+                MovementDirectionId = (int)MovementDirectionOptions.Out,
+                FinancialMovementTypeId = (int)FinancialMovementTypeOption.DeliveryAgencyReconciliation,
+                DeliveryAgencyReconciliation = reconciliation,
+                Amount = amountPaidNio,
+                ExchangeRate = reconciliation.SettlementExchangeRate,
+                Comments = reconciliation.Comments
+            });
+        }
+    }
+
+    private static SalePaymentMovement CreateAgencyCollectionPayment(
+        Sale sale,
+        SaleDelivery delivery,
+        decimal collectedAmount,
+        DeliveryAgencyReconciliation reconciliation,
+        string userId)
+    {
+        var outstandingProductAmount = Math.Max(0, sale.Total - SalePaymentMovementRules.CalculateProductTotal(sale.PaymentMovements));
+        var outstandingShippingAmount = Math.Max(0, delivery.ShippingChargedToClient - SalePaymentMovementRules.CalculateShippingTotal(sale.PaymentMovements, delivery.Id));
+        var outstandingTotal = outstandingProductAmount + outstandingShippingAmount;
+        if (collectedAmount > outstandingTotal)
+            throw new AppBadRequestException("El monto recolectado no puede exceder el saldo pendiente de la venta y su envio.");
+
+        // El cobro contra entrega cubre primero productos y luego el envio pendiente.
+        var productAmount = Math.Min(collectedAmount, outstandingProductAmount);
+        var shippingAmount = collectedAmount - productAmount;
+
+        return new SalePaymentMovement
+        {
+            MovementDate = reconciliation.ReconciliationDate,
+            SaleId = sale.Id,
+            MovementDirectionId = (int)MovementDirectionOptions.In,
+            PaymentMethodId = (int)PaymentMethodOption.Cash,
+            GrossAmount = collectedAmount,
+            ProductAmount = productAmount,
+            ShippingAmount = shippingAmount,
+            SaleDeliveryId = shippingAmount > 0 ? delivery.Id : null,
+            DeliveryAgencyReconciliation = reconciliation,
+            NetReceivedAmount = collectedAmount,
+            UserId = userId
+        };
+    }
+
+    private static void ApplyDeliveryCollection(
+        SaleDelivery delivery,
+        ReconcileSaleDeliveryDTO request,
+        DeliveryAgencyReconciliation reconciliation)
+    {
+        delivery.AmountCollectedNio = request.AmountCollectedNio;
+        delivery.AmountCollectedUsd = request.AmountCollectedUsd;
+        delivery.ChangeGivenNio = request.ChangeGivenNio;
+        delivery.CollectionExchangeRate = request.CollectionExchangeRate;
+        delivery.ShippingPaidToAgency = request.ShippingPaidToAgency;
+        delivery.DeliveryAgencyReconciliation = reconciliation;
+    }
+
+    private static void ValidateDeliveryForReconciliation(
+        SaleDelivery delivery,
+        ReconcileSaleDeliveryDTO request,
+        int deliveryAgencyId,
+        decimal collectedAmount)
+    {
+        if (delivery.DeliveryAgencyId != deliveryAgencyId)
+            throw new AppBadRequestException("Todos los envios de una conciliacion deben pertenecer a la misma agencia.");
+        if (delivery.DeliveryAgencyReconciliationId.HasValue)
+            throw new AppBadRequestException("Un envio no puede incluirse en mas de una conciliacion.");
+        if (delivery.DeliveryStatusId is not ((int)DeliveryStatusCode.Completed or (int)DeliveryStatusCode.Failed))
+            throw new AppBadRequestException("Solo se pueden conciliar envios completados o fallidos.");
+
+        ValidateDeliveryAmounts(request);
+        if (delivery.DeliveryStatusId == (int)DeliveryStatusCode.Failed && collectedAmount != 0)
+            throw new AppBadRequestException("Un envio fallido no puede registrar cobros de la clienta.");
+        if (collectedAmount > delivery.AmountToCollect)
+            throw new AppBadRequestException("El monto recolectado no puede exceder el monto indicado para cobrar en el envio.");
+    }
+
+    // El efectivo neto recaudado excluye el vuelto entregado en cordobas.
+    private static decimal CalculateCollectedAmount(ReconcileSaleDeliveryDTO request)
+        => Math.Round(
+            request.AmountCollectedNio + request.AmountCollectedUsd * (request.CollectionExchangeRate ?? 0) - request.ChangeGivenNio,
+            2);
+
+    private static void NormalizeAndValidateRequest(CreateDeliveryAgencyReconciliationDTO request)
+    {
+        request.Comments = request.Comments.NormalizeOptional();
+        request.Deliveries ??= [];
+        if (request.Deliveries.Count == 0)
+            throw new AppBadRequestException("Debe indicar al menos un envio para conciliar.");
+        if (request.SettlementExchangeRate <= 0)
+            throw new AppBadRequestException("La tasa de cambio usada para la liquidacion debe ser mayor que cero.");
+        if (request.AmountReceivedNio < 0 || request.AmountReceivedUsd < 0 ||
+            request.AmountPaidToAgencyNio < 0 || request.AmountPaidToAgencyUsd < 0)
+        {
+            throw new AppBadRequestException("Los montos recibidos y pagados a la agencia no pueden ser negativos.");
+        }
+    }
+
+    private static void EnsureDistinctDeliveryIds(IEnumerable<ReconcileSaleDeliveryDTO> deliveries)
+    {
+        if (deliveries.Select(item => item.SaleDeliveryId).Distinct().Count() != deliveries.Count())
+            throw new AppBadRequestException("No se puede incluir el mismo envio mas de una vez en una conciliacion.");
+    }
+
+    private string ResolveUserId() => _currentUserService.UserId ?? "system";
+
+    private static void ValidateDeliveryAmounts(ReconcileSaleDeliveryDTO request)
+    {
+        if (request.AmountCollectedNio < 0 || request.AmountCollectedUsd < 0 ||
+            request.ChangeGivenNio < 0 || request.ShippingPaidToAgency < 0)
+        {
+            throw new AppBadRequestException("Los montos del envio no pueden ser negativos.");
+        }
+
+        if (request.AmountCollectedUsd == 0 && request.CollectionExchangeRate.HasValue)
+            throw new AppBadRequestException("La tasa de cambio del cobro solo debe indicarse cuando se recolecten dolares.");
+        if (request.AmountCollectedUsd > 0 && (!request.CollectionExchangeRate.HasValue || request.CollectionExchangeRate <= 0))
+            throw new AppBadRequestException("Los cobros en dolares deben indicar la tasa de cambio aplicada por la agencia.");
+        if (request.ChangeGivenNio > request.AmountCollectedNio + request.AmountCollectedUsd * (request.CollectionExchangeRate ?? 0))
+            throw new AppBadRequestException("El vuelto entregado no puede exceder el monto recibido de la clienta.");
+    }
+}

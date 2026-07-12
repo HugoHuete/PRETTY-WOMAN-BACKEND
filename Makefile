@@ -43,3 +43,6 @@ ifndef name
 	$(error Debes enviar el nombre: make migration name=NombreDeLaMigracion)
 endif
 	$(EF) migrations add $(name) --project $(INFRA_PROJECT) --startup-project $(STARTUP_PROJECT)
+
+remove-migration:
+	$(EF) migrations remove --project $(INFRA_PROJECT) --startup-project $(STARTUP_PROJECT)

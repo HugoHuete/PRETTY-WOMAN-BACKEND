@@ -192,6 +192,7 @@ public class FinancialService(IApplicationDbContext context) : IFinancialService
             ExpenseCategoryId = movement.ExpenseCategoryId,
             OrderId = movement.OrderId,
             SalePaymentMovementId = movement.SalePaymentMovementId,
+            DeliveryAgencyReconciliationId = movement.DeliveryAgencyReconciliationId,
             LoanId = movement.LoanId,
             LoanPaymentId = movement.LoanPaymentId,
             Amount = movement.Amount,

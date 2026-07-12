@@ -27,7 +27,8 @@ public class FinancialMovementTypeConfiguration : IEntityTypeConfiguration<Finan
             new FinancialMovementType { Id = (int)FinancialMovementTypeOption.LoanReceived, Name = nameof(FinancialMovementTypeOption.LoanReceived) },
             new FinancialMovementType { Id = (int)FinancialMovementTypeOption.LoanPayment, Name = nameof(FinancialMovementTypeOption.LoanPayment) },
             new FinancialMovementType { Id = (int)FinancialMovementTypeOption.WarehouseShippingPayment, Name = nameof(FinancialMovementTypeOption.WarehouseShippingPayment) },
-            new FinancialMovementType { Id = (int)FinancialMovementTypeOption.Adjustment, Name = nameof(FinancialMovementTypeOption.Adjustment) }
+            new FinancialMovementType { Id = (int)FinancialMovementTypeOption.Adjustment, Name = nameof(FinancialMovementTypeOption.Adjustment) },
+            new FinancialMovementType { Id = (int)FinancialMovementTypeOption.DeliveryAgencyReconciliation, Name = nameof(FinancialMovementTypeOption.DeliveryAgencyReconciliation) }
         );
     }
 }

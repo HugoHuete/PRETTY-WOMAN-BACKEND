@@ -448,6 +448,7 @@ public class SaleService(
                 ProductAmount = payment.ProductAmount,
                 ShippingAmount = payment.ShippingAmount,
                 SaleDeliveryId = payment.SaleDeliveryId,
+                DeliveryAgencyReconciliationId = payment.DeliveryAgencyReconciliationId,
                 CommissionPercentage = payment.CommissionPercentage,
                 CommissionAmount = payment.CommissionAmount,
                 IncomeTaxPercentage = payment.IncomeTaxPercentage,

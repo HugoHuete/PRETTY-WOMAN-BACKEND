@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using PrettyWoman.Application.DTOs.DeliveryAgencyReconciliations;
 using PrettyWoman.Application.DTOs.Sales;
 using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Interfaces;
@@ -997,6 +998,150 @@ public class SaleServiceTests
         var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
         Assert.Equal((int)SaleStatusOption.SentForDelivery, sale.SaleStatusId);
     }
+
+    [Fact]
+    public async Task CreateAgencyReconciliationAsync_RecordsUsdCollectionChangeAndSettlementCashFlows()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        await context.SaveChangesAsync();
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var saleService = CreateService(context);
+        var reconciliationService = new DeliveryAgencyReconciliationService(context, new TestCurrentUserService());
+        var saleId = await saleService.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+        var deliveryId = await saleService.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "DEL-RECON-USD",
+            MunicipalityId = 1,
+            DeliveryAgencyId = 1,
+            ShippingChargedToClient = 50m
+        });
+        await saleService.MarkDeliveryAsSentAsync(saleId, deliveryId);
+        await saleService.MarkDeliveryAsCompletedAsync(saleId, deliveryId);
+
+        var reconciliationId = await reconciliationService.CreateAsync(new CreateDeliveryAgencyReconciliationDTO
+        {
+            DeliveryAgencyId = 1,
+            SettlementExchangeRate = 36m,
+            AmountReceivedUsd = 20m,
+            AmountPaidToAgencyNio = 250m,
+            Deliveries =
+            [
+                new ReconcileSaleDeliveryDTO
+                {
+                    SaleDeliveryId = deliveryId,
+                    AmountCollectedUsd = 20m,
+                    CollectionExchangeRate = 36m,
+                    ChangeGivenNio = 170m,
+                    ShippingPaidToAgency = 80m
+                }
+            ]
+        });
+
+        var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
+        var sale = await context.Sales.Include(item => item.PaymentMovements).SingleAsync(item => item.Id == saleId);
+        var financialMovements = await context.FinancialMovements
+            .Where(item => item.DeliveryAgencyReconciliationId == reconciliationId)
+            .OrderBy(item => item.MovementDirectionId)
+            .ToListAsync();
+
+        Assert.Equal(reconciliationId, delivery.DeliveryAgencyReconciliationId);
+        Assert.Equal(20m, delivery.AmountCollectedUsd);
+        Assert.Equal(170m, delivery.ChangeGivenNio);
+        Assert.Equal(36m, delivery.CollectionExchangeRate);
+        Assert.Equal(80m, delivery.ShippingPaidToAgency);
+        Assert.Equal((int)SalePaymentStatusOption.Paid, sale.SalePaymentStatusId);
+        Assert.Contains(sale.PaymentMovements, item =>
+            item.DeliveryAgencyReconciliationId == reconciliationId &&
+            item.ProductAmount == 500m &&
+            item.ShippingAmount == 50m &&
+            item.GrossAmount == 550m);
+        Assert.Equal(2, financialMovements.Count);
+        Assert.Contains(financialMovements, item => item.MovementDirectionId == (int)MovementDirectionOptions.In && item.Amount == 720m);
+        Assert.Contains(financialMovements, item => item.MovementDirectionId == (int)MovementDirectionOptions.Out && item.Amount == 250m);
+    }
+
+    [Fact]
+    public async Task CreateAgencyReconciliationAsync_AllowsShippingCollectionWhenSaleIsRefundPending()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        await context.SaveChangesAsync();
+        var expensiveProduct = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var cheaperProduct = await AddProductAsync(context, availableQuantity: 1, salePrice: 300m, unitCostNio: 120m);
+        var saleService = CreateService(context);
+        var reconciliationService = new DeliveryAgencyReconciliationService(context, new TestCurrentUserService());
+        var saleId = await saleService.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            Products = [new CreateSaleProductDTO { ProductId = expensiveProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Transfer, ProductAmount = 500m }]
+        });
+        var deliveryId = await saleService.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "DEL-RECON-REFUND",
+            MunicipalityId = 1,
+            DeliveryAgencyId = 1,
+            ShippingChargedToClient = 50m
+        });
+        await saleService.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
+        {
+            Products = [new CreateSaleProductDTO { ProductId = cheaperProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+        await saleService.MarkDeliveryAsSentAsync(saleId, deliveryId);
+        await saleService.MarkDeliveryAsCompletedAsync(saleId, deliveryId);
+
+        var reconciliationId = await reconciliationService.CreateAsync(new CreateDeliveryAgencyReconciliationDTO
+        {
+            DeliveryAgencyId = 1,
+            SettlementExchangeRate = 36m,
+            Deliveries =
+            [
+                new ReconcileSaleDeliveryDTO
+                {
+                    SaleDeliveryId = deliveryId,
+                    AmountCollectedNio = 50m,
+                    ShippingPaidToAgency = 25m
+                }
+            ]
+        });
+
+        var sale = await context.Sales.Include(item => item.PaymentMovements).SingleAsync(item => item.Id == saleId);
+        Assert.Equal((int)SalePaymentStatusOption.RefundPending, sale.SalePaymentStatusId);
+        Assert.Contains(sale.PaymentMovements, item =>
+            item.DeliveryAgencyReconciliationId == reconciliationId &&
+            item.ProductAmount == 0m &&
+            item.ShippingAmount == 50m);
+    }
+
+    [Fact]
+    public async Task CreateAgencyReconciliationAsync_RejectsNullDeliveries()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var reconciliationService = new DeliveryAgencyReconciliationService(context, new TestCurrentUserService());
+        var request = JsonSerializer.Deserialize<CreateDeliveryAgencyReconciliationDTO>(
+            """
+            {
+              "deliveryAgencyId": 1,
+              "settlementExchangeRate": 36,
+              "deliveries": null
+            }
+            """)!;
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => reconciliationService.CreateAsync(request));
+
+        Assert.Contains("al menos un envio", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static SaleService CreateService(ApplicationDbContext context)
     {
 var currentUser = new TestCurrentUserService();
@@ -1065,6 +1210,11 @@ var currentUser = new TestCurrentUserService();
             Enabled = true
         });
         context.DeliveryAgencies.Add(new DeliveryAgency { Id = 1, Name = "Agencia COD", PhoneNumber = "88880000", CanCollectCashOnDelivery = true });
+        context.FinancialMovementTypes.Add(new FinancialMovementType
+        {
+            Id = (int)FinancialMovementTypeOption.DeliveryAgencyReconciliation,
+            Name = nameof(FinancialMovementTypeOption.DeliveryAgencyReconciliation)
+        });
 
         context.DollarExchangeRates.Add(new DollarExchangeRate
         {

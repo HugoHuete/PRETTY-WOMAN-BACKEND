@@ -18,6 +18,7 @@ public static class DependencyInjection
         services.AddScoped<IClientService, ClientService>();
         services.AddScoped<IOrderService, OrderService>();
         services.AddScoped<ISaleDeliveryService, SaleDeliveryService>();
+        services.AddScoped<IDeliveryAgencyReconciliationService, DeliveryAgencyReconciliationService>();
         services.AddScoped<ISalePaymentMovementService, SalePaymentMovementService>();
         services.AddScoped<ISaleService, SaleService>();
         services.AddScoped<IOrderReceiptService, OrderReceiptService>();

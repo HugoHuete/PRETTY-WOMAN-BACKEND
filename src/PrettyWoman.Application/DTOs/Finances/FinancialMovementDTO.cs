@@ -13,6 +13,7 @@ public class FinancialMovementDTO
     public int? ExpenseCategoryId { get; set; }
     public int? OrderId { get; set; }
     public int? SalePaymentMovementId { get; set; }
+    public int? DeliveryAgencyReconciliationId { get; set; }
     public int? LoanId { get; set; }
     public int? LoanPaymentId { get; set; }
     public decimal Amount { get; set; }

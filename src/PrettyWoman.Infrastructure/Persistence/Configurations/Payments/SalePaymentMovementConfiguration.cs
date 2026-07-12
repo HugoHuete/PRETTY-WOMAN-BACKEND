@@ -23,6 +23,7 @@ public class SalePaymentMovementConfiguration : IEntityTypeConfiguration<SalePay
 
         builder.HasOne(x => x.Sale).WithMany(x => x.PaymentMovements).HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.SaleDelivery).WithMany(x => x.PaymentMovements).HasForeignKey(x => x.SaleDeliveryId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.DeliveryAgencyReconciliation).WithMany(x => x.PaymentMovements).HasForeignKey(x => x.DeliveryAgencyReconciliationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.MovementDirection).WithMany().HasForeignKey(x => x.MovementDirectionId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.PaymentMethod).WithMany().HasForeignKey(x => x.PaymentMethodId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.PaymentTerminal).WithMany().HasForeignKey(x => x.PaymentTerminalId).OnDelete(DeleteBehavior.Restrict);
@@ -35,6 +36,7 @@ public class SalePaymentMovementConfiguration : IEntityTypeConfiguration<SalePay
         builder.HasIndex(x => x.PaymentMethodId);
         builder.HasIndex(x => x.PaymentTerminalId);
         builder.HasIndex(x => x.SaleDeliveryId);
+        builder.HasIndex(x => x.DeliveryAgencyReconciliationId);
         builder.HasIndex(x => x.ReversedSalePaymentMovementId);
         builder.HasIndex(x => x.ReversedSalePaymentMovementId)
             .IsUnique()

@@ -40,7 +40,33 @@ For an agency with `can_collect_cash_on_delivery = false`:
 - `shipping_charged_to_client` remains the price charged to the customer for the delivery.
 - `amount_to_collect` is zero because the agency cannot collect on delivery.
 
-The amount collected by the agency is not a sale payment until the business receives the remittance.
+The amount collected by the agency is not a sale payment until its delivery is included in an agency reconciliation.
+
+## Agency reconciliation
+
+A `delivery_agency_reconciliation` groups completed or failed deliveries from exactly one agency. Each delivery can belong to only one reconciliation.
+
+During reconciliation, the delivery records the cash received from the customer, the shipping cost charged by the agency, and, when applicable, the NIO change given for an USD payment.
+
+```text
+net_customer_collection =
+  amount_collected_nio
+  + (amount_collected_usd * collection_exchange_rate)
+  - change_given_nio
+```
+
+- Completed deliveries can collect from zero up to `amount_to_collect`.
+- Failed deliveries cannot record a customer collection, but can record `shipping_paid_to_agency`.
+- USD collections require `collection_exchange_rate`, the actual rate applied by the agency for that delivery.
+- The reconciliation stores its own `settlement_exchange_rate` to value the remittance received or paid in USD. It is historical input, not a rate inferred from the rate catalog.
+- A collection payment is created for the amount actually collected. It settles products first and then the delivery charge, and does not create a direct financial movement.
+
+The reconciliation records the actual NIO/USD amounts received from and paid to the agency. It creates up to two financial movements of type `DeliveryAgencyReconciliation`:
+
+- An `In` movement for the NIO-equivalent value received from the agency.
+- An `Out` movement for the NIO-equivalent value paid to the agency, including change reimbursements and shipping costs.
+
+These are cash-flow movements, not operational expenses. Shipping margin remains `shipping_charged_to_client - shipping_paid_to_agency`.
 
 ## Creation input
 
