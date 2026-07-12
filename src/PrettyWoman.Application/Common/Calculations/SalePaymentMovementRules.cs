@@ -26,10 +26,6 @@ public static class SalePaymentMovementRules
     {
         if (!allowOverpayment && productPaymentTotal > amountToCharge)
             throw new AppBadRequestException("La suma de pagos aplicados a productos no puede exceder el total de la venta.");
-        if (saleChannelId == (int)SaleChannelOption.InStoreSale && !allowOverpayment && productPaymentTotal != amountToCharge)
-            throw new AppBadRequestException("Las ventas en local deben quedar pagadas completamente al momento de registrarse.");
-        if (saleChannelId == (int)SaleChannelOption.InStoreSale && allowOverpayment && productPaymentTotal < amountToCharge)
-            throw new AppBadRequestException("Las ventas en local deben quedar pagadas completamente al momento de registrarse.");
     }
 
     private static decimal SignedAmount(SalePaymentMovement payment, decimal amount)

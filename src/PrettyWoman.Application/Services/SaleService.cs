@@ -72,6 +72,8 @@ public class SaleService(
             PaymentMovements = payments
         };
 
+        CompleteInStoreSaleWhenPaid(sale);
+
         // El inventario sale solo para estados que ya comprometen existencias.
         if (SaleAffectsInventory(sale.SaleStatusId))
         {
@@ -321,17 +323,31 @@ public class SaleService(
         await _context.SaveChangesAsync();
     }
 
-    public Task<int> AddPaymentMovementAsync(int saleId, CreateSalePaymentMovementDTO paymentMovement)
-        => _paymentMovementService.AddAsync(saleId, paymentMovement);
+    public async Task<int> AddPaymentMovementAsync(int saleId, CreateSalePaymentMovementDTO paymentMovement)
+    {
+        var paymentMovementId = await _paymentMovementService.AddAsync(saleId, paymentMovement);
+        await SynchronizeInStoreSaleCompletionAsync(saleId);
+        return paymentMovementId;
+    }
 
-    public Task UpdatePaymentMovementAsync(int saleId, int paymentMovementId, UpdateSalePaymentMovementDTO paymentMovement)
-        => _paymentMovementService.PatchAsync(saleId, paymentMovementId, paymentMovement);
+    public async Task UpdatePaymentMovementAsync(int saleId, int paymentMovementId, UpdateSalePaymentMovementDTO paymentMovement)
+    {
+        await _paymentMovementService.PatchAsync(saleId, paymentMovementId, paymentMovement);
+        await SynchronizeInStoreSaleCompletionAsync(saleId);
+    }
 
-    public Task<int> RefundPaymentMovementAsync(int saleId, int paymentMovementId, RefundSalePaymentMovementDTO refund)
-        => _paymentMovementService.RefundAsync(saleId, paymentMovementId, refund);
+    public async Task<int> RefundPaymentMovementAsync(int saleId, int paymentMovementId, RefundSalePaymentMovementDTO refund)
+    {
+        var refundPaymentMovementId = await _paymentMovementService.RefundAsync(saleId, paymentMovementId, refund);
+        await SynchronizeInStoreSaleCompletionAsync(saleId);
+        return refundPaymentMovementId;
+    }
 
-    public Task AdjustPaymentMovementsAsync(int saleId, AdjustSalePaymentMovementsDTO adjustment)
-        => _paymentMovementService.AdjustAsync(saleId, adjustment);
+    public async Task AdjustPaymentMovementsAsync(int saleId, AdjustSalePaymentMovementsDTO adjustment)
+    {
+        await _paymentMovementService.AdjustAsync(saleId, adjustment);
+        await SynchronizeInStoreSaleCompletionAsync(saleId);
+    }
 
     private async Task<Sale> GetSaleWithDetailsAsync(int id, bool asNoTracking)
     {
@@ -411,6 +427,16 @@ public class SaleService(
         {
             if (product.Quantity <= 0) throw new AppBadRequestException("La cantidad de cada producto debe ser mayor que cero.");
             if (product.DiscountAmount < 0) throw new AppBadRequestException("El descuento no puede ser negativo.");
+
+            var hasDiscount = product.DiscountAmount > 0;
+            var discountSource = (DiscountSourceOption)product.DiscountSourceId;
+
+            if (hasDiscount && discountSource == DiscountSourceOption.None)
+                throw new AppBadRequestException("Debe indicar la fuente cuando aplica un descuento.");
+            if (discountSource == DiscountSourceOption.Manual && product.DiscountCampaignId.HasValue)
+                throw new AppBadRequestException("Un descuento manual no puede tener una campaña de descuento asociada.");
+            if (!hasDiscount && (discountSource != DiscountSourceOption.None || product.DiscountCampaignId.HasValue))
+                throw new AppBadRequestException("Cuando no hay descuento, la fuente debe ser None y no se debe indicar una campaña de descuento.");
             if (!await _context.DiscountSources.AnyAsync(source => source.Id == product.DiscountSourceId))
                 throw new AppNotFoundException($"La fuente de descuento con id {product.DiscountSourceId} no existe.");
             if (product.DiscountCampaignId.HasValue && !await _context.DiscountCampaigns.AnyAsync(campaign => campaign.Id == product.DiscountCampaignId.Value))
@@ -536,6 +562,41 @@ public class SaleService(
         sale.SalePaymentStatusId = SalePaymentMovementRules.ResolveStatus(
             sale.Total,
             SalePaymentMovementRules.CalculateProductTotal(sale.PaymentMovements));
+    }
+
+    private static void CompleteInStoreSaleWhenPaid(Sale sale)
+    {
+        if (sale.SaleChannelId == (int)SaleChannelOption.InStoreSale &&
+            sale.SalePaymentStatusId == (int)SalePaymentStatusOption.Paid)
+        {
+            sale.SaleStatusId = (int)SaleStatusOption.Completed;
+        }
+    }
+
+    private async Task SynchronizeInStoreSaleCompletionAsync(int saleId)
+    {
+        var sale = await GetSaleWithDetailsAsync(saleId, asNoTracking: false);
+        if (sale.SaleChannelId != (int)SaleChannelOption.InStoreSale ||
+            sale.SaleStatusId == (int)SaleStatusOption.Cancelled)
+        {
+            return;
+        }
+
+        if (sale.SalePaymentStatusId == (int)SalePaymentStatusOption.Paid)
+        {
+            if (sale.SaleStatusId == (int)SaleStatusOption.Completed) return;
+
+            var alreadyAffectsInventory = SaleAffectsInventory(sale.SaleStatusId);
+            sale.SaleStatusId = (int)SaleStatusOption.Completed;
+            if (!alreadyAffectsInventory) ApplyInventoryOutput(sale);
+        }
+        else if (sale.SaleStatusId == (int)SaleStatusOption.Completed)
+        {
+            // A refund or payment correction reopens the sale while keeping its inventory reserved.
+            sale.SaleStatusId = (int)SaleStatusOption.Reserved;
+        }
+
+        await _context.SaveChangesAsync();
     }
 
     private static bool SaleAffectsInventory(int saleStatusId)

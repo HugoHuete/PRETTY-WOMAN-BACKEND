@@ -25,7 +25,6 @@ public class SaleServiceTests
         {
             SaleDate = new DateTime(2026, 7, 10, 10, 0, 0, DateTimeKind.Utc),
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            SaleStatusId = (int)SaleStatusOption.Reserved,
             Products =
             [
                 new CreateSaleProductDTO
@@ -61,6 +60,7 @@ public class SaleServiceTests
         var movements = await context.FinancialMovements.OrderBy(item => item.Id).ToListAsync();
 
         Assert.Equal((int)SalePaymentStatusOption.Paid, sale.SalePaymentStatusId);
+        Assert.Equal((int)SaleStatusOption.Completed, sale.SaleStatusId);
         Assert.Equal(1000m, sale.Subtotal);
         Assert.Equal(1000m, sale.Total);
         Assert.Equal(2, updatedProduct.AvailableQuantity);
@@ -71,14 +71,14 @@ public class SaleServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_RejectsInStoreSaleWithoutFullPayment()
+    public async Task CreateAsync_AllowsPartiallyPaidInStoreSaleWithoutAffectingInventory()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
         var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 1000m, unitCostNio: 400m);
         var service = CreateService(context);
 
-        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(new CreateSaleDTO
+        var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
             Products =
@@ -94,14 +94,52 @@ public class SaleServiceTests
             [
                 new CreateSalePaymentMovementDTO
                 {
-                    PaymentMethodId = 1,
+                    PaymentMethodId = (int)PaymentMethodOption.Cash,
                     ProductAmount = 500m
                 }
             ]
-        }));
+        });
 
-        Assert.Contains("ventas en local", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.False(await context.Sales.AnyAsync());
+        var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        var updatedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+
+        Assert.Equal((int)SalePaymentStatusOption.PartiallyPaid, sale.SalePaymentStatusId);
+        Assert.Equal((int)SaleStatusOption.Pending, sale.SaleStatusId);
+        Assert.Equal(3, updatedProduct.AvailableQuantity);
+        Assert.Empty(await context.InventoryMovements.ToListAsync());
+    }
+
+    [Fact]
+    public async Task RefundPaymentMovementAsync_ReopensCompletedInStoreSaleAndAllowsCancellation()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Cash, ProductAmount = 500m }]
+        });
+        var paymentMovementId = await context.SalePaymentMovements
+            .Where(item => item.SaleId == saleId && item.MovementDirectionId == (int)MovementDirectionOptions.In)
+            .Select(item => item.Id)
+            .SingleAsync();
+
+        await service.RefundPaymentMovementAsync(saleId, paymentMovementId, new RefundSalePaymentMovementDTO());
+
+        var reopenedSale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        Assert.Equal((int)SalePaymentStatusOption.Unpaid, reopenedSale.SalePaymentStatusId);
+        Assert.Equal((int)SaleStatusOption.Reserved, reopenedSale.SaleStatusId);
+        Assert.Equal(0, (await context.Products.SingleAsync(item => item.Id == product.Id)).AvailableQuantity);
+
+        await service.CancelAsync(saleId);
+
+        var cancelledSale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        Assert.Equal((int)SaleStatusOption.Cancelled, cancelledSale.SaleStatusId);
+        Assert.Equal(1, (await context.Products.SingleAsync(item => item.Id == product.Id)).AvailableQuantity);
     }
 
     [Fact]
@@ -232,7 +270,7 @@ public class SaleServiceTests
                 {
                     ProductId = secondProduct.Id,
                     Quantity = 2,
-                    DiscountSourceId = (int)DiscountSourceOption.None,
+                    DiscountSourceId = (int)DiscountSourceOption.Manual,
                     DiscountAmount = 25m
                 }
             ]
@@ -1382,6 +1420,54 @@ public class SaleServiceTests
         Assert.Equal(1, (await context.Products.SingleAsync(item => item.Id == replacement.Id)).AvailableQuantity);
     }
 
+    [Fact]
+    public async Task CreateAsync_RejectsDiscountWithoutSource()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, 1, 500m, 200m);
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => CreateService(context).CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountAmount = 50m, DiscountSourceId = (int)DiscountSourceOption.None }]
+        }));
+
+        Assert.Contains("fuente", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsManualDiscountWithCampaign()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, 1, 500m, 200m);
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => CreateService(context).CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountAmount = 50m, DiscountSourceId = (int)DiscountSourceOption.Manual, DiscountCampaignId = 1 }]
+        }));
+
+        Assert.Contains("manual", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsSourceOrCampaignWhenThereIsNoDiscount()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, 1, 500m, 200m);
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => CreateService(context).CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.Manual }]
+        }));
+
+        Assert.Contains("no hay descuento", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static async Task<int> CreateSaleWithProductAsync(ApplicationDbContext context, int productId, SaleStatusOption status)
     {
         var initialStatus = status == SaleStatusOption.SentForDelivery ? SaleStatusOption.Reserved : status;
@@ -1457,7 +1543,10 @@ var currentUser = new TestCurrentUserService();
             new DeliveryStatus { Id = (int)DeliveryStatusCode.Cancelled, Name = nameof(DeliveryStatusCode.Cancelled) },
             new DeliveryStatus { Id = (int)DeliveryStatusCode.Sent, Name = nameof(DeliveryStatusCode.Sent) },
             new DeliveryStatus { Id = (int)DeliveryStatusCode.Failed, Name = nameof(DeliveryStatusCode.Failed) });
-        context.DiscountSources.Add(new DiscountSource { Id = (int)DiscountSourceOption.None, Name = nameof(DiscountSourceOption.None) });
+        context.DiscountSources.AddRange(
+            new DiscountSource { Id = (int)DiscountSourceOption.None, Name = nameof(DiscountSourceOption.None) },
+            new DiscountSource { Id = (int)DiscountSourceOption.Campaign, Name = nameof(DiscountSourceOption.Campaign) },
+            new DiscountSource { Id = (int)DiscountSourceOption.Manual, Name = nameof(DiscountSourceOption.Manual) });
         context.PaymentMethods.AddRange(
             new PaymentMethod { Id = (int)PaymentMethodOption.Cash, Name = "Efectivo" },
             new PaymentMethod { Id = (int)PaymentMethodOption.Transfer, Name = "Transferencia" },
