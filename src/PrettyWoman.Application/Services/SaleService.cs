@@ -47,7 +47,7 @@ public class SaleService(
         await ValidateSaleRequestAsync(createSaleDTO);
 
         // Se congelan precios, costos y descuentos antes de persistir la venta.
-        var products = await LoadSaleProductsAsync(createSaleDTO.Products);
+        var products = await LoadSaleProductsAsync(createSaleDTO.Products, createSaleDTO.SelectionProducts);
         var saleProducts = CreateSaleProducts(createSaleDTO.Products, products);
         var payments = await _paymentMovementService.CreateInitialAsync(createSaleDTO.PaymentMovements);
         // Los nuevos totales se validan contra pagos ya aplicados; un exceso queda como reembolso pendiente.
@@ -68,6 +68,7 @@ public class SaleService(
             Comments = createSaleDTO.Comments,
             ClientId = createSaleDTO.ClientId,
             Products = saleProducts,
+            ProductHolds = CreateSelectionHolds(createSaleDTO.SelectionProducts, products),
             PaymentMovements = payments
         };
 
@@ -76,6 +77,8 @@ public class SaleService(
         {
             ApplyInventoryOutput(sale);
         }
+
+        ApplySelectionHoldsInventory(sale.ProductHolds);
 
         await _paymentMovementService.CreateFinancialMovementsAsync(payments);
         await _context.Sales.AddAsync(sale);
@@ -142,7 +145,7 @@ public class SaleService(
         _context.InventoryMovements.RemoveRange(inventoryMovements);
         _context.SaleProducts.RemoveRange(sale.Products);
 
-        var products = await LoadSaleProductsAsync(replaceSaleProductsDTO.Products);
+        var products = await LoadSaleProductsAsync(replaceSaleProductsDTO.Products, []);
         var saleProducts = CreateSaleProducts(replaceSaleProductsDTO.Products, products);
         // Los nuevos totales se validan contra pagos ya aplicados; un exceso queda como reembolso pendiente.
         var totals = CalculateSaleTotals(saleProducts);
@@ -165,6 +168,108 @@ public class SaleService(
         await _context.SaveChangesAsync();
     }
 
+    public async Task AddSelectionHoldsAsync(int saleId, List<CreateSaleSelectionProductDTO> selectionProducts)
+    {
+        selectionProducts ??= [];
+        await ValidateSelectionProductRequestAsync(selectionProducts);
+
+        var sale = await GetSaleWithDetailsAsync(saleId, asNoTracking: false);
+        if (sale.SaleStatusId is (int)SaleStatusOption.Cancelled or (int)SaleStatusOption.Completed ||
+            sale.Deliveries.Any(delivery => delivery.DeliveryStatusId != (int)DeliveryStatusCode.Pending))
+            throw new AppBadRequestException("Solo se pueden agregar prendas para seleccion antes de enviar la venta.");
+
+        var products = await LoadSaleProductsAsync([], selectionProducts);
+        var holds = CreateSelectionHolds(selectionProducts, products);
+        sale.ProductHolds.AddRange(holds);
+        ApplySelectionHoldsInventory(holds);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task ResolveSelectionHoldAsync(int saleId, int holdId, ResolveSelectionHoldDTO resolution)
+    {
+        resolution.Comments = resolution.Comments.NormalizeOptional();
+        var sale = await GetSaleWithDetailsAsync(saleId, asNoTracking: false);
+        var hold = sale.ProductHolds.SingleOrDefault(item => item.Id == holdId)
+            ?? throw new AppNotFoundException($"La prenda en seleccion con id {holdId} no existe para la venta indicada.");
+        if (hold.ProductHoldStatusId != (int)ProductHoldStatusOption.Active)
+            throw new AppBadRequestException("Solo se puede resolver una prenda que esta enviada para seleccion.");
+
+        hold.Comments = resolution.Comments ?? hold.Comments;
+        hold.ResolvedAt = DateTime.UtcNow;
+        var product = hold.Product!;
+        if (resolution.Selected)
+        {
+            await ValidateSaleProductRequestAsync(new CreateSaleProductDTO
+            {
+                ProductId = product.Id,
+                Quantity = hold.Quantity,
+                DiscountAmount = resolution.DiscountAmount,
+                DiscountSourceId = resolution.DiscountSourceId,
+                DiscountCampaignId = resolution.DiscountCampaignId
+            });
+
+            var saleProduct = CreateSaleProducts(
+                [new CreateSaleProductDTO
+                {
+                    ProductId = product.Id,
+                    Quantity = hold.Quantity,
+                    DiscountAmount = resolution.DiscountAmount,
+                    DiscountSourceId = resolution.DiscountSourceId,
+                    DiscountCampaignId = resolution.DiscountCampaignId
+                }],
+                [product]).Single();
+            sale.Products.Add(saleProduct);
+            hold.ProductHoldStatusId = (int)ProductHoldStatusOption.ConvertedToSale;
+            product.UnavailableQuantity -= hold.Quantity;
+            product.InventoryMovements.Add(new InventoryMovement
+            {
+                Product = product,
+                ProductHold = hold,
+                SaleProduct = saleProduct,
+                InventoryMovementTypeId = (int)InventoryMovementTypeOption.SelectionConvertedToSale,
+                FromStockBucketId = (int)InventoryStockBucketOption.Unavailable,
+                ToStockBucketId = (int)InventoryStockBucketOption.OutOfInventory,
+                Quantity = hold.Quantity,
+                MovementDate = DateTime.UtcNow,
+                Comments = "Prenda de seleccion convertida a venta."
+            });
+        }
+        else
+        {
+            hold.ProductHoldStatusId = (int)ProductHoldStatusOption.AwaitingReturn;
+            product.UnavailableQuantity -= hold.Quantity;
+            product.AvailableQuantity += hold.Quantity;
+            product.InventoryMovements.Add(new InventoryMovement
+            {
+                Product = product,
+                ProductHold = hold,
+                InventoryMovementTypeId = (int)InventoryMovementTypeOption.SelectionReturned,
+                FromStockBucketId = (int)InventoryStockBucketOption.Unavailable,
+                ToStockBucketId = (int)InventoryStockBucketOption.Available,
+                Quantity = hold.Quantity,
+                MovementDate = DateTime.UtcNow,
+                Comments = "Prenda no seleccionada; pendiente de retorno fisico."
+            });
+        }
+
+        RecalculateSaleTotals(sale);
+        await _deliveryService.SyncActiveAmountToCollectAsync(sale.Id, sale.Total, sale.PaymentMovements);
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task MarkSelectionHoldAsReturnedAsync(int saleId, int holdId)
+    {
+        var sale = await GetSaleWithDetailsAsync(saleId, asNoTracking: false);
+        var hold = sale.ProductHolds.SingleOrDefault(item => item.Id == holdId)
+            ?? throw new AppNotFoundException($"La prenda en seleccion con id {holdId} no existe para la venta indicada.");
+        if (hold.ProductHoldStatusId != (int)ProductHoldStatusOption.AwaitingReturn)
+            throw new AppBadRequestException("Solo se puede registrar el retorno de una prenda pendiente de devolver.");
+
+        hold.ProductHoldStatusId = (int)ProductHoldStatusOption.NotSelected;
+        hold.UpdatedAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+    }
+
     public Task<int> CreateDeliveryAsync(int saleId, CreateSaleDeliveryDTO delivery)
         => _deliveryService.CreateAsync(saleId, delivery);
 
@@ -173,6 +278,9 @@ public class SaleService(
 
     public Task MarkDeliveryAsSentAsync(int saleId, int deliveryId)
         => _deliveryService.MarkAsSentAsync(saleId, deliveryId);
+
+    public Task MarkDeliveryAsDeliveredPendingSelectionAsync(int saleId, int deliveryId)
+        => _deliveryService.MarkAsDeliveredPendingSelectionAsync(saleId, deliveryId);
 
     public Task MarkDeliveryAsCompletedAsync(int saleId, int deliveryId)
         => _deliveryService.MarkAsCompletedAsync(saleId, deliveryId);
@@ -201,6 +309,8 @@ public class SaleService(
         {
             RevertInventoryForCancelledSale(sale);
         }
+
+        ReleaseActiveSelectionHoldsForCancelledSale(sale);
 
         foreach (var saleProduct in sale.Products)
         {
@@ -233,6 +343,8 @@ public class SaleService(
             .Include(sale => sale.Products).ThenInclude(saleProduct => saleProduct.Product)
             .Include(sale => sale.Products).ThenInclude(saleProduct => saleProduct.DiscountSource)
             .Include(sale => sale.Products).ThenInclude(saleProduct => saleProduct.SaleProductStatus)
+            .Include(sale => sale.ProductHolds).ThenInclude(hold => hold.Product)
+            .Include(sale => sale.ProductHolds).ThenInclude(hold => hold.ProductHoldStatus)
             .Include(sale => sale.PaymentMovements).ThenInclude(payment => payment.PaymentMethod)
             .Include(sale => sale.PaymentMovements).ThenInclude(payment => payment.PaymentTerminal)
             .Include(sale => sale.Deliveries)
@@ -251,7 +363,7 @@ public class SaleService(
 
         await ValidateOptionalReferencesAsync(saleDTO.ClientId);
         await ValidateRequestedSaleStatusAsync(saleDTO.SaleStatusId);
-        await ValidateProductRequestAsync(saleDTO.Products);
+        await ValidateProductRequestAsync(saleDTO.Products, saleDTO.SelectionProducts, requireAtLeastOne: true);
     }
 
     private async Task ValidateSaleHeaderPatchAsync(PatchSaleHeaderDTO saleDTO)
@@ -267,7 +379,7 @@ public class SaleService(
     }
 
     private async Task ValidateSaleProductsReplacementAsync(ReplaceSaleProductsDTO saleDTO)
-        => await ValidateProductRequestAsync(saleDTO.Products);
+        => await ValidateProductRequestAsync(saleDTO.Products, [], requireAtLeastOne: true);
 
     private async Task ValidateOptionalReferencesAsync(int? clientId)
     {
@@ -287,9 +399,13 @@ public class SaleService(
         }
     }
 
-    private async Task ValidateProductRequestAsync(List<CreateSaleProductDTO> products)
+    private async Task ValidateProductRequestAsync(
+        List<CreateSaleProductDTO> products,
+        List<CreateSaleSelectionProductDTO> selectionProducts,
+        bool requireAtLeastOne)
     {
-        if (products.Count == 0) throw new AppBadRequestException("Debe enviar al menos un producto para la venta.");
+        if (requireAtLeastOne && products.Count == 0 && selectionProducts.Count == 0)
+            throw new AppBadRequestException("Debe enviar al menos un producto vendido o una prenda para seleccion.");
 
         foreach (var product in products)
         {
@@ -300,16 +416,39 @@ public class SaleService(
             if (product.DiscountCampaignId.HasValue && !await _context.DiscountCampaigns.AnyAsync(campaign => campaign.Id == product.DiscountCampaignId.Value))
                 throw new AppNotFoundException($"La campana de descuento con id {product.DiscountCampaignId.Value} no existe.");
         }
+
+        await ValidateSelectionProductRequestAsync(selectionProducts);
     }
 
-    private async Task<List<Product>> LoadSaleProductsAsync(List<CreateSaleProductDTO> productRequests)
+    private async Task ValidateSaleProductRequestAsync(CreateSaleProductDTO product)
+        => await ValidateProductRequestAsync([product], [], requireAtLeastOne: true);
+
+    private static Task ValidateSelectionProductRequestAsync(List<CreateSaleSelectionProductDTO> selectionProducts)
     {
-        var productIds = productRequests.Select(product => product.ProductId).Distinct().ToList();
+        foreach (var product in selectionProducts)
+        {
+            if (product.ProductId <= 0) throw new AppBadRequestException("Producto es obligatorio para seleccion.");
+            if (product.Quantity <= 0) throw new AppBadRequestException("La cantidad de cada prenda para seleccion debe ser mayor que cero.");
+        }
+
+        return Task.CompletedTask;
+    }
+
+    private async Task<List<Product>> LoadSaleProductsAsync(
+        List<CreateSaleProductDTO> productRequests,
+        List<CreateSaleSelectionProductDTO> selectionProducts)
+    {
+        var productIds = productRequests.Select(product => product.ProductId)
+            .Concat(selectionProducts.Select(product => product.ProductId))
+            .Distinct().ToList();
         var products = await _context.Products.Where(product => productIds.Contains(product.Id)).ToListAsync();
         var missingProductId = productIds.FirstOrDefault(id => products.All(product => product.Id != id));
         if (missingProductId != 0) throw new AppNotFoundException($"El producto con id {missingProductId} no existe.");
 
-        var requestedQuantities = productRequests.GroupBy(product => product.ProductId).ToDictionary(group => group.Key, group => group.Sum(product => product.Quantity));
+        var requestedQuantities = productRequests.Select(product => new { product.ProductId, product.Quantity })
+            .Concat(selectionProducts.GroupBy(product => product.ProductId).Select(group => new { ProductId = group.Key, Quantity = group.Sum(product => product.Quantity) }))
+            .GroupBy(product => product.ProductId)
+            .ToDictionary(group => group.Key, group => group.Sum(product => product.Quantity));
         foreach (var product in products)
         {
             if (product.AvailableQuantity < requestedQuantities[product.Id])
@@ -348,12 +487,55 @@ public class SaleService(
         }).ToList();
     }
 
+    private static List<ProductHold> CreateSelectionHolds(List<CreateSaleSelectionProductDTO> requests, List<Product> products)
+        => requests.Select(request => new ProductHold
+        {
+            ProductId = request.ProductId,
+            Product = products.Single(product => product.Id == request.ProductId),
+            Quantity = request.Quantity,
+            HoldReason = "SentForSelection",
+            Comments = request.Comments.NormalizeOptional(),
+            ProductHoldStatusId = (int)ProductHoldStatusOption.Active
+        }).ToList();
+
+    private static void ApplySelectionHoldsInventory(IEnumerable<ProductHold> holds)
+    {
+        foreach (var hold in holds)
+        {
+            var product = hold.Product!;
+            product.AvailableQuantity -= hold.Quantity;
+            product.UnavailableQuantity += hold.Quantity;
+            product.InventoryMovements.Add(new InventoryMovement
+            {
+                Product = product,
+                ProductHold = hold,
+                InventoryMovementTypeId = (int)InventoryMovementTypeOption.SelectionSent,
+                FromStockBucketId = (int)InventoryStockBucketOption.Available,
+                ToStockBucketId = (int)InventoryStockBucketOption.Unavailable,
+                Quantity = hold.Quantity,
+                MovementDate = hold.HoldDate,
+                Comments = "Prenda enviada para seleccion."
+            });
+        }
+    }
+
     private static SaleTotals CalculateSaleTotals(List<SaleProduct> products)
     {
         return new SaleTotals(
             Math.Round(products.Sum(product => product.OriginalUnitPrice * product.Quantity), 2),
             Math.Round(products.Sum(product => product.DiscountAmount * product.Quantity), 2),
             Math.Round(products.Sum(product => product.LineTotal), 2));
+    }
+
+    private static void RecalculateSaleTotals(Sale sale)
+    {
+        var totals = CalculateSaleTotals(sale.Products);
+        sale.Subtotal = totals.Subtotal;
+        sale.TotalDiscount = totals.TotalDiscount;
+        sale.Total = totals.Total;
+        sale.SalePaymentStatusId = SalePaymentMovementRules.ResolveStatus(
+            sale.Total,
+            SalePaymentMovementRules.CalculateProductTotal(sale.PaymentMovements));
     }
 
     private static bool SaleAffectsInventory(int saleStatusId)
@@ -406,6 +588,29 @@ public class SaleService(
         }
     }
 
+    private static void ReleaseActiveSelectionHoldsForCancelledSale(Sale sale)
+    {
+        foreach (var hold in sale.ProductHolds.Where(hold => hold.ProductHoldStatusId == (int)ProductHoldStatusOption.Active))
+        {
+            var product = hold.Product!;
+            product.UnavailableQuantity -= hold.Quantity;
+            product.AvailableQuantity += hold.Quantity;
+            hold.ProductHoldStatusId = (int)ProductHoldStatusOption.NotSelected;
+            hold.ResolvedAt = DateTime.UtcNow;
+            product.InventoryMovements.Add(new InventoryMovement
+            {
+                Product = product,
+                ProductHold = hold,
+                InventoryMovementTypeId = (int)InventoryMovementTypeOption.SelectionReturned,
+                FromStockBucketId = (int)InventoryStockBucketOption.Unavailable,
+                ToStockBucketId = (int)InventoryStockBucketOption.Available,
+                Quantity = hold.Quantity,
+                MovementDate = DateTime.UtcNow,
+                Comments = "Seleccion liberada por cancelacion de venta."
+            });
+        }
+    }
+
     private async Task SyncInventoryMovementDatesAsync(Sale sale)
     {
         if (!SaleAffectsInventory(sale.SaleStatusId)) return;
@@ -435,7 +640,8 @@ public class SaleService(
             throw new AppBadRequestException("La venta ya esta cancelada.");
         if (sale.SaleStatusId == (int)SaleStatusOption.Completed)
             throw new AppBadRequestException("No se puede cancelar una venta completada.");
-        if (sale.Deliveries.Any(delivery => delivery.DeliveryStatusId == (int)DeliveryStatusCode.Sent))
+        if (sale.Deliveries.Any(delivery => delivery.DeliveryStatusId is
+            (int)DeliveryStatusCode.Sent or (int)DeliveryStatusCode.DeliveredPendingSelection))
             throw new AppBadRequestException("No se puede cancelar una venta con un envio enviado a la agencia.");
     }
 
@@ -448,6 +654,7 @@ public class SaleService(
     {
         saleDTO.Comments = saleDTO.Comments.NormalizeOptional();
         saleDTO.Products ??= [];
+        saleDTO.SelectionProducts ??= [];
         saleDTO.PaymentMovements ??= [];
     }
 
@@ -496,6 +703,17 @@ public class SaleService(
                 GrossProfit = product.GrossProfit,
                 SaleProductStatusId = product.SaleProductStatusId,
                 SaleProductStatusName = product.SaleProductStatus?.Name
+            }).ToList(),
+            SelectionHolds = sale.ProductHolds.Select(hold => new SaleSelectionHoldDTO
+            {
+                Id = hold.Id,
+                ProductId = hold.ProductId,
+                Quantity = hold.Quantity,
+                ProductHoldStatusId = hold.ProductHoldStatusId,
+                ProductHoldStatusName = hold.ProductHoldStatus?.Name,
+                HoldDate = hold.HoldDate,
+                ResolvedAt = hold.ResolvedAt,
+                Comments = hold.Comments
             }).ToList(),
             PaymentMovements = sale.PaymentMovements.Select(payment => new SalePaymentMovementDTO
             {

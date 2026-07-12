@@ -6,5 +6,6 @@ public enum DeliveryStatusCode
     Completed = 2,
     Cancelled = 3,
     Sent = 4,
-    Failed = 5
+    Failed = 5,
+    DeliveredPendingSelection = 6
 }

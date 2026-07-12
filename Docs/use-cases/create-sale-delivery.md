@@ -5,6 +5,7 @@
 - `POST /api/v1/sales/{saleId}/deliveries`
 - `PATCH /api/v1/sales/{saleId}/deliveries/{deliveryId}`
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/send`
+- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/delivered-pending-selection`
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/complete`
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/fail`
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/cancel`
@@ -40,6 +41,8 @@
 The send endpoint only accepts a `Pending` delivery. It verifies that the delivery belongs to the sale, validates the selected agency payment rule, changes the delivery to `Sent`, and changes the sale to `SentForDelivery`.
 
 A sent delivery can then be completed or failed. Completion marks the sale as `Completed`; failure returns it to `ReadyForDelivery` so a new delivery can be created. Cancellation is only available while the delivery is pending and also returns the sale to `ReadyForDelivery`.
+
+When the delivery includes products sent for selection, it can be marked as `DeliveredPendingSelection` after the agency hands it to the client. It cannot be completed, failed, or included in a reconciliation while any related `product_hold` remains `Active`.
 
 ## Collection semantics
 

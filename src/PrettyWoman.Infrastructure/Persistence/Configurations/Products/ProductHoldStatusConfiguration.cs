@@ -33,6 +33,11 @@ public class ProductHoldStatusConfiguration : IEntityTypeConfiguration<ProductHo
             {
                 Id = (int)ProductHoldStatusOption.NotSelected,
                 Name = nameof(ProductHoldStatusOption.NotSelected)
+            },
+            new ProductHoldStatus
+            {
+                Id = (int)ProductHoldStatusOption.AwaitingReturn,
+                Name = nameof(ProductHoldStatusOption.AwaitingReturn)
             }
         );
     }

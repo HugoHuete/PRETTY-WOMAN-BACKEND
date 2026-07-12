@@ -767,6 +767,36 @@ public class SaleServiceTests
     }
 
     [Fact]
+    public async Task CancelAsync_ReleasesActiveSelectionHoldsAndRestoresInventory()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.Reserved,
+            SelectionProducts = [new CreateSaleSelectionProductDTO { ProductId = product.Id, Quantity = 1 }]
+        });
+
+        await service.CancelAsync(saleId);
+
+        var hold = await context.ProductHolds.SingleAsync(item => item.SaleId == saleId);
+        var updatedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        var movement = await context.InventoryMovements.SingleAsync(item => item.ProductHoldId == hold.Id &&
+            item.Comments == "Seleccion liberada por cancelacion de venta.");
+
+        Assert.Equal((int)ProductHoldStatusOption.NotSelected, hold.ProductHoldStatusId);
+        Assert.NotNull(hold.ResolvedAt);
+        Assert.Equal(2, updatedProduct.AvailableQuantity);
+        Assert.Equal(0, updatedProduct.UnavailableQuantity);
+        Assert.Equal((int)InventoryStockBucketOption.Unavailable, movement.FromStockBucketId);
+        Assert.Equal((int)InventoryStockBucketOption.Available, movement.ToStockBucketId);
+    }
+
+    [Fact]
     public async Task CancelAsync_RejectsSaleWithPaymentsPendingRefund()
     {
         await using var context = CreateContext();

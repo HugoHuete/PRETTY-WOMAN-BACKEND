@@ -30,7 +30,10 @@ public class InventoryMovementTypeConfiguration : IEntityTypeConfiguration<Inven
             new InventoryMovementType { Id = (int)InventoryMovementTypeOption.ReservationConvertedToSale, Name = nameof(InventoryMovementTypeOption.ReservationConvertedToSale) },
             new InventoryMovementType { Id = (int)InventoryMovementTypeOption.Donation, Name = nameof(InventoryMovementTypeOption.Donation) },
             new InventoryMovementType { Id = (int)InventoryMovementTypeOption.AdjustmentIncrease, Name = nameof(InventoryMovementTypeOption.AdjustmentIncrease) },
-            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.AdjustmentDecrease, Name = nameof(InventoryMovementTypeOption.AdjustmentDecrease) }
+            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.AdjustmentDecrease, Name = nameof(InventoryMovementTypeOption.AdjustmentDecrease) },
+            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.SelectionSent, Name = nameof(InventoryMovementTypeOption.SelectionSent) },
+            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.SelectionConvertedToSale, Name = nameof(InventoryMovementTypeOption.SelectionConvertedToSale) },
+            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.SelectionReturned, Name = nameof(InventoryMovementTypeOption.SelectionReturned) }
         );
     }
 }

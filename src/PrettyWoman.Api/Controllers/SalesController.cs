@@ -45,6 +45,27 @@ public class SalesController(ISaleService saleService) : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{id:int}/selection-holds")]
+    public async Task<IActionResult> AddSelectionHolds(int id, [FromBody] List<CreateSaleSelectionProductDTO> selectionProducts)
+    {
+        await _saleService.AddSelectionHoldsAsync(id, selectionProducts);
+        return NoContent();
+    }
+
+    [HttpPost("{id:int}/selection-holds/{holdId:int}/resolve")]
+    public async Task<IActionResult> ResolveSelectionHold(int id, int holdId, [FromBody] ResolveSelectionHoldDTO resolution)
+    {
+        await _saleService.ResolveSelectionHoldAsync(id, holdId, resolution);
+        return NoContent();
+    }
+
+    [HttpPost("{id:int}/selection-holds/{holdId:int}/return")]
+    public async Task<IActionResult> MarkSelectionHoldAsReturned(int id, int holdId)
+    {
+        await _saleService.MarkSelectionHoldAsReturnedAsync(id, holdId);
+        return NoContent();
+    }
+
     [HttpPost("{id:int}/payment-movements")]
     public async Task<ActionResult<int>> AddPaymentMovement(int id, [FromBody] CreateSalePaymentMovementDTO paymentMovement)
     {
@@ -91,6 +112,13 @@ public class SalesController(ISaleService saleService) : ControllerBase
     public async Task<IActionResult> MarkDeliveryAsSent(int id, int deliveryId)
     {
         await _saleService.MarkDeliveryAsSentAsync(id, deliveryId);
+        return NoContent();
+    }
+
+    [HttpPost("{id:int}/deliveries/{deliveryId:int}/delivered-pending-selection")]
+    public async Task<IActionResult> MarkDeliveryAsDeliveredPendingSelection(int id, int deliveryId)
+    {
+        await _saleService.MarkDeliveryAsDeliveredPendingSelectionAsync(id, deliveryId);
         return NoContent();
     }
 

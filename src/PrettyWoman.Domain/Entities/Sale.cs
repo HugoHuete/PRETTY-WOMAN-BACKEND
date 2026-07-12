@@ -26,6 +26,7 @@ public class Sale : IAuditableEntity
     public SaleChannel? SaleChannel { get; set; }
     public Client? Client { get; set; }
     public List<SaleProduct> Products { get; set; } = [];
+    public List<ProductHold> ProductHolds { get; set; } = [];
     public List<SalePaymentMovement> PaymentMovements { get; set; } = [];
     public List<SaleDelivery> Deliveries { get; set; } = [];
 }

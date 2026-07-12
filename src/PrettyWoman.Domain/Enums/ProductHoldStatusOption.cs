@@ -4,5 +4,6 @@ public enum ProductHoldStatusOption
 {
     Active = 1,
     ConvertedToSale = 2,
-    NotSelected = 3
+    NotSelected = 3,
+    AwaitingReturn = 4
 }

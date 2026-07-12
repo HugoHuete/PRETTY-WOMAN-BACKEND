@@ -25,7 +25,10 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             .Where(item =>
                 !item.DeliveryAgencyReconciliationId.HasValue &&
                 (item.DeliveryStatusId == (int)DeliveryStatusCode.Completed ||
-                 item.DeliveryStatusId == (int)DeliveryStatusCode.Failed));
+                 item.DeliveryStatusId == (int)DeliveryStatusCode.Failed) &&
+                !_context.ProductHolds.Any(hold =>
+                    hold.SaleId == item.SaleId &&
+                    hold.ProductHoldStatusId == (int)ProductHoldStatusOption.Active));
 
         if (deliveryAgencyId.HasValue)
         {
@@ -72,6 +75,8 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
         var deliveries = await _context.SaleDeliveries
             .Include(item => item.Sale)
                 .ThenInclude(sale => sale!.PaymentMovements)
+            .Include(item => item.Sale)
+                .ThenInclude(sale => sale!.ProductHolds)
             .Where(item => deliveryIds.Contains(item.Id))
             .ToListAsync();
 
@@ -231,6 +236,8 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             throw new AppBadRequestException("Un envio no puede incluirse en mas de una conciliacion.");
         if (delivery.DeliveryStatusId is not ((int)DeliveryStatusCode.Completed or (int)DeliveryStatusCode.Failed))
             throw new AppBadRequestException("Solo se pueden conciliar envios completados o fallidos.");
+        if (delivery.Sale!.ProductHolds.Any(hold => hold.ProductHoldStatusId == (int)ProductHoldStatusOption.Active))
+            throw new AppBadRequestException("No se puede conciliar un envio con prendas enviadas para seleccion sin resolver.");
 
         ValidateDeliveryAmounts(request);
         if (delivery.DeliveryStatusId == (int)DeliveryStatusCode.Failed && collectedAmount != 0)

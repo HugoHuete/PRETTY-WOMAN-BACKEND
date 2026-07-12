@@ -35,6 +35,7 @@ No debe usarse para apartar productos por pago pendiente o reserva de clienta. E
 - `Active`
 - `NotSelected`
 - `ConvertedToSale`
+- `AwaitingReturn`
 
 ## Razones
 
@@ -52,16 +53,25 @@ Cuando se envia o aparta producto para seleccion/prueba/talla:
 
 El producto no queda reservado para una venta confirmada; queda temporalmente no disponible porque esta fuera de tienda o en seleccion.
 
-## Regla: liberar hold no seleccionado
+## Regla: resolver hold no seleccionado pendiente de retorno
+
+Cuando la clienta no escoge una prenda pero todavía no la ha devuelto:
+
+1. Cambiar el hold a `AwaitingReturn`.
+2. Colocar `resolved_at`.
+3. Disminuir `products.unavailable_quantity`.
+4. Aumentar `products.available_quantity` para que pueda venderse si se coordina su recuperación.
+
+El hold continúa mostrando que la prenda está fuera de tienda y pendiente de retorno físico.
+
+## Regla: registrar retorno físico
 
 Cuando el producto regresa a tienda o la clienta no lo selecciona:
 
-1. Validar que el hold este `Active`.
+1. Validar que el hold este `AwaitingReturn`.
 2. Cambiar `product_hold.status` a `NotSelected`.
-3. Colocar `resolved_at`.
-4. Disminuir `products.unavailable_quantity`.
-5. Aumentar `products.available_quantity`.
-6. Crear `inventory_movement` relacionado con `product_hold_id`.
+
+No se modifica inventario en este paso porque la disponibilidad comercial fue restaurada al resolver que la prenda no fue seleccionada.
 
 ## Regla: convertir hold en venta
 
@@ -91,7 +101,7 @@ Flujo:
 3. Ambas prendas dejan de estar disponibles y aumentan `unavailable_quantity`.
 4. La clienta escoge M.
 5. Hold M pasa a `ConvertedToSale` y disminuye `unavailable_quantity`.
-6. Hold L pasa a `NotSelected`, disminuye `unavailable_quantity` y aumenta `available_quantity`.
+6. Hold L pasa a `AwaitingReturn`, disminuye `unavailable_quantity` y aumenta `available_quantity`; al volver físicamente a tienda pasa a `NotSelected`.
 7. Solo M aparece en `sale_products` como producto vendido.
 
 ## Regla: no usar `sale_products` para productos no vendidos

@@ -106,7 +106,8 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
     public async Task MarkAsCompletedAsync(int saleId, int deliveryId)
     {
         var delivery = await GetDeliveryWithSaleAsync(saleId, deliveryId);
-        EnsureDeliveryIsSent(delivery, "completar");
+        EnsureDeliveryCanBeCompleted(delivery);
+        await EnsureSelectionHoldsAreResolvedAsync(saleId);
 
         delivery.DeliveryStatusId = (int)DeliveryStatusCode.Completed;
         delivery.Sale!.SaleStatusId = (int)SaleStatusOption.Completed;
@@ -117,10 +118,23 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
     {
         var delivery = await GetDeliveryWithSaleAsync(saleId, deliveryId);
         EnsureDeliveryIsSent(delivery, "marcar como fallido");
+        await EnsureSelectionHoldsAreResolvedAsync(saleId);
 
         // Un intento fallido libera la venta para que se pueda crear un nuevo envio.
         delivery.DeliveryStatusId = (int)DeliveryStatusCode.Failed;
         delivery.Sale!.SaleStatusId = (int)SaleStatusOption.ReadyForDelivery;
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task MarkAsDeliveredPendingSelectionAsync(int saleId, int deliveryId)
+    {
+        var delivery = await GetDeliveryWithSaleAsync(saleId, deliveryId);
+        EnsureDeliveryIsSent(delivery, "marcar como entregado pendiente de seleccion");
+        if (!await _context.ProductHolds.AnyAsync(hold =>
+                hold.SaleId == saleId && hold.ProductHoldStatusId == (int)ProductHoldStatusOption.Active))
+            throw new AppBadRequestException("El envio no tiene prendas pendientes de seleccion.");
+
+        delivery.DeliveryStatusId = (int)DeliveryStatusCode.DeliveredPendingSelection;
         await _context.SaveChangesAsync();
     }
 
@@ -229,6 +243,15 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
             ?? throw new AppNotFoundException($"El envio con id {deliveryId} no existe para la venta indicada.");
     }
 
+    private async Task EnsureSelectionHoldsAreResolvedAsync(int saleId)
+    {
+        if (await _context.ProductHolds.AnyAsync(hold =>
+                hold.SaleId == saleId && hold.ProductHoldStatusId == (int)ProductHoldStatusOption.Active))
+        {
+            throw new AppBadRequestException("No se puede cerrar el envio mientras existan prendas enviadas para seleccion sin resolver.");
+        }
+    }
+
     private async Task<SaleDelivery?> GetActiveDeliveryAsync(int saleId)
     {
         return await _context.SaleDeliveries
@@ -290,6 +313,12 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
     {
         if (delivery.DeliveryStatusId != (int)DeliveryStatusCode.Sent)
             throw new AppBadRequestException($"Solo se puede {action} un envio enviado a la agencia.");
+    }
+
+    private static void EnsureDeliveryCanBeCompleted(SaleDelivery delivery)
+    {
+        if (delivery.DeliveryStatusId is not ((int)DeliveryStatusCode.Sent or (int)DeliveryStatusCode.DeliveredPendingSelection))
+            throw new AppBadRequestException("Solo se puede completar un envio enviado a la agencia.");
     }
 
     private static void EnsureDeliveryCanBeSent(SaleDelivery delivery)

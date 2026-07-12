@@ -20,6 +20,10 @@ public enum InventoryMovementTypeOption
 
     Donation = 12,
     AdjustmentIncrease = 13,
-    AdjustmentDecrease = 14
+    AdjustmentDecrease = 14,
+
+    SelectionSent = 15,
+    SelectionConvertedToSale = 16,
+    SelectionReturned = 17
 
 }

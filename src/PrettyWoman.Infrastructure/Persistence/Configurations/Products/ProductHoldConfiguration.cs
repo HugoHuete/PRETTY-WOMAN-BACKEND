@@ -14,7 +14,7 @@ public class ProductHoldConfiguration : IEntityTypeConfiguration<ProductHold>
 
         builder.HasOne(x => x.Product).WithMany(x => x.ProductHolds).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.ProductHoldStatus).WithMany().HasForeignKey(x => x.ProductHoldStatusId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne(x => x.Sale).WithMany().HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.Sale).WithMany(x => x.ProductHolds).HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Restrict);
 
 
         builder.ToTable(t =>

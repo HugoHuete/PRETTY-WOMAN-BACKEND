@@ -41,6 +41,11 @@ public class DeliveryStatusConfiguration : IEntityTypeConfiguration<DeliveryStat
             {
                 Id = (int)DeliveryStatusCode.Failed,
                 Name = nameof(DeliveryStatusCode.Failed)
+            },
+            new DeliveryStatus
+            {
+                Id = (int)DeliveryStatusCode.DeliveredPendingSelection,
+                Name = nameof(DeliveryStatusCode.DeliveredPendingSelection)
             }
         );
     }
