@@ -183,6 +183,34 @@ public class SaleService(
     public Task CancelDeliveryAsync(int saleId, int deliveryId)
         => _deliveryService.CancelAsync(saleId, deliveryId);
 
+    public async Task CancelAsync(int id)
+    {
+        var sale = await GetSaleWithDetailsAsync(id, asNoTracking: false);
+        EnsureSaleCanBeCancelled(sale);
+
+        // Los cobros se reembolsan por sus movimientos para conservar el medio de pago y su movimiento financiero.
+        if (HasOutstandingPayments(sale))
+            throw new AppBadRequestException("No se puede cancelar una venta con pagos pendientes de reembolso.");
+
+        foreach (var delivery in sale.Deliveries.Where(delivery => delivery.DeliveryStatusId == (int)DeliveryStatusCode.Pending))
+        {
+            delivery.DeliveryStatusId = (int)DeliveryStatusCode.Cancelled;
+        }
+
+        if (SaleAffectsInventory(sale.SaleStatusId))
+        {
+            RevertInventoryForCancelledSale(sale);
+        }
+
+        foreach (var saleProduct in sale.Products)
+        {
+            saleProduct.SaleProductStatusId = (int)SaleProductStatusOption.Cancelled;
+        }
+
+        sale.SaleStatusId = (int)SaleStatusOption.Cancelled;
+        await _context.SaveChangesAsync();
+    }
+
     public Task<int> AddPaymentMovementAsync(int saleId, CreateSalePaymentMovementDTO paymentMovement)
         => _paymentMovementService.AddAsync(saleId, paymentMovement);
 
@@ -358,6 +386,26 @@ public class SaleService(
         foreach (var saleProduct in sale.Products) saleProduct.Product!.AvailableQuantity += saleProduct.Quantity;
     }
 
+    private static void RevertInventoryForCancelledSale(Sale sale)
+    {
+        foreach (var saleProduct in sale.Products)
+        {
+            var product = saleProduct.Product!;
+            product.AvailableQuantity += saleProduct.Quantity;
+            product.InventoryMovements.Add(new InventoryMovement
+            {
+                Product = product,
+                InventoryMovementTypeId = (int)InventoryMovementTypeOption.SaleCancelled,
+                FromStockBucketId = (int)InventoryStockBucketOption.OutOfInventory,
+                ToStockBucketId = (int)InventoryStockBucketOption.Available,
+                Quantity = saleProduct.Quantity,
+                SaleProduct = saleProduct,
+                MovementDate = DateTime.UtcNow,
+                Comments = "Venta cancelada."
+            });
+        }
+    }
+
     private async Task SyncInventoryMovementDatesAsync(Sale sale)
     {
         if (!SaleAffectsInventory(sale.SaleStatusId)) return;
@@ -380,6 +428,21 @@ public class SaleService(
         if (sale.SaleStatusId is (int)SaleStatusOption.Cancelled or (int)SaleStatusOption.SentForDelivery or (int)SaleStatusOption.Completed)
             throw new AppBadRequestException("No se pueden reemplazar los productos de una venta cancelada enviada o completada.");
     }
+
+    private static void EnsureSaleCanBeCancelled(Sale sale)
+    {
+        if (sale.SaleStatusId == (int)SaleStatusOption.Cancelled)
+            throw new AppBadRequestException("La venta ya esta cancelada.");
+        if (sale.SaleStatusId == (int)SaleStatusOption.Completed)
+            throw new AppBadRequestException("No se puede cancelar una venta completada.");
+        if (sale.Deliveries.Any(delivery => delivery.DeliveryStatusId == (int)DeliveryStatusCode.Sent))
+            throw new AppBadRequestException("No se puede cancelar una venta con un envio enviado a la agencia.");
+    }
+
+    private static bool HasOutstandingPayments(Sale sale)
+        => sale.PaymentMovements.Sum(payment =>
+            (payment.MovementDirectionId == (int)MovementDirectionOptions.Out ? -1 : 1) *
+            (payment.ProductAmount + payment.ShippingAmount)) != 0;
 
     private static void NormalizeSaleFields(CreateSaleDTO saleDTO)
     {

@@ -724,6 +724,70 @@ public class SaleServiceTests
         Assert.Equal((int)DeliveryStatusCode.Completed, completedDelivery.DeliveryStatusId);
         Assert.Equal((int)SaleStatusOption.Completed, sale.SaleStatusId);
     }
+
+    [Fact]
+    public async Task CancelAsync_CancelsSaleAndPendingDeliveryAndRestoresInventory()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        await context.SaveChangesAsync();
+        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.Reserved,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+        var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "DEL-SALE-CANCELLED",
+            MunicipalityId = 1,
+            DeliveryAgencyId = 1
+        });
+
+        await service.CancelAsync(saleId);
+
+        var sale = await context.Sales.Include(item => item.Products).SingleAsync(item => item.Id == saleId);
+        var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
+        var updatedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        var inventoryMovement = await context.InventoryMovements.SingleAsync(item =>
+            item.SaleProductId == sale.Products.Single().Id &&
+            item.InventoryMovementTypeId == (int)InventoryMovementTypeOption.SaleCancelled);
+
+        Assert.Equal((int)SaleStatusOption.Cancelled, sale.SaleStatusId);
+        Assert.Equal((int)SaleProductStatusOption.Cancelled, sale.Products.Single().SaleProductStatusId);
+        Assert.Equal((int)DeliveryStatusCode.Cancelled, delivery.DeliveryStatusId);
+        Assert.Equal(2, updatedProduct.AvailableQuantity);
+        Assert.Equal((int)InventoryStockBucketOption.OutOfInventory, inventoryMovement.FromStockBucketId);
+        Assert.Equal((int)InventoryStockBucketOption.Available, inventoryMovement.ToStockBucketId);
+    }
+
+    [Fact]
+    public async Task CancelAsync_RejectsSaleWithPaymentsPendingRefund()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.Reserved,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Cash, ProductAmount = 500m }]
+        });
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CancelAsync(saleId));
+
+        Assert.Contains("reembolso", exception.Message, StringComparison.OrdinalIgnoreCase);
+        var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        Assert.Equal((int)SaleStatusOption.Reserved, sale.SaleStatusId);
+    }
+
     [Fact]
     public async Task CreateDeliveryAsync_RequiresFullPaymentWhenAgencyCannotCollectCash()
     {
@@ -1189,7 +1253,8 @@ var currentUser = new TestCurrentUserService();
             new SalePaymentStatus { Id = (int)SalePaymentStatusOption.RefundPending, Name = nameof(SalePaymentStatusOption.RefundPending) });
         context.SaleProductStatuses.AddRange(
             new SaleProductStatus { Id = (int)SaleProductStatusOption.Pending, Name = nameof(SaleProductStatusOption.Pending) },
-            new SaleProductStatus { Id = (int)SaleProductStatusOption.Completed, Name = nameof(SaleProductStatusOption.Completed) });
+            new SaleProductStatus { Id = (int)SaleProductStatusOption.Completed, Name = nameof(SaleProductStatusOption.Completed) },
+            new SaleProductStatus { Id = (int)SaleProductStatusOption.Cancelled, Name = nameof(SaleProductStatusOption.Cancelled) });
         context.DeliveryStatuses.AddRange(
             new DeliveryStatus { Id = (int)DeliveryStatusCode.Pending, Name = nameof(DeliveryStatusCode.Pending) },
             new DeliveryStatus { Id = (int)DeliveryStatusCode.Completed, Name = nameof(DeliveryStatusCode.Completed) },

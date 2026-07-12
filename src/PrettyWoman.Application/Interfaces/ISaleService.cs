@@ -19,4 +19,5 @@ public interface ISaleService
     Task MarkDeliveryAsCompletedAsync(int saleId, int deliveryId);
     Task MarkDeliveryAsFailedAsync(int saleId, int deliveryId);
     Task CancelDeliveryAsync(int saleId, int deliveryId);
+    Task CancelAsync(int id);
 }

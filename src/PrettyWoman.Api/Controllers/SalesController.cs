@@ -114,4 +114,11 @@ public class SalesController(ISaleService saleService) : ControllerBase
         await _saleService.CancelDeliveryAsync(id, deliveryId);
         return NoContent();
     }
+
+    [HttpPost("{id:int}/cancel")]
+    public async Task<IActionResult> Cancel(int id)
+    {
+        await _saleService.CancelAsync(id);
+        return NoContent();
+    }
 }
