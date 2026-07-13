@@ -12,7 +12,7 @@ using PrettyWoman.Infrastructure.Persistence;
 namespace PrettyWoman.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260713203217_InitialMigration")]
+    [Migration("20260713203941_InitialMigration")]
     partial class InitialMigration
     {
         /// <inheritdoc />
@@ -2936,10 +2936,6 @@ namespace PrettyWoman.Infrastructure.Migrations
                             t.HasCheckConstraint("ck_sale_deliveries_amount_collected_usd_non_negative", "amount_collected_usd >= 0");
 
                             t.HasCheckConstraint("ck_sale_deliveries_amount_to_collect_non_negative", "amount_to_collect >= 0");
-
-                            t.HasCheckConstraint("ck_sale_deliveries_amount_transferred_nio_non_negative", "amount_transferred_nio >= 0");
-
-                            t.HasCheckConstraint("ck_sale_deliveries_amount_transferred_usd_non_negative", "amount_transferred_usd >= 0");
 
                             t.HasCheckConstraint("ck_sale_deliveries_change_given_nio_non_negative", "change_given_nio >= 0");
 

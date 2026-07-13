@@ -2934,10 +2934,6 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                             t.HasCheckConstraint("ck_sale_deliveries_amount_to_collect_non_negative", "amount_to_collect >= 0");
 
-                            t.HasCheckConstraint("ck_sale_deliveries_amount_transferred_nio_non_negative", "amount_transferred_nio >= 0");
-
-                            t.HasCheckConstraint("ck_sale_deliveries_amount_transferred_usd_non_negative", "amount_transferred_usd >= 0");
-
                             t.HasCheckConstraint("ck_sale_deliveries_change_given_nio_non_negative", "change_given_nio >= 0");
 
                             t.HasCheckConstraint("ck_sale_deliveries_collection_exchange_rate_required_for_usd", "(\n                    (amount_collected_usd = 0 AND collection_exchange_rate IS NULL)\n                    OR\n                    (amount_collected_usd > 0 AND collection_exchange_rate > 0)\n                )");

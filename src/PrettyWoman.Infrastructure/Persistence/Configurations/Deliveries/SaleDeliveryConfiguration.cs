@@ -53,12 +53,6 @@ public class SaleDeliveryConfiguration : IEntityTypeConfiguration<SaleDelivery>
                 "ck_sale_deliveries_amount_collected_usd_non_negative",
                 "amount_collected_usd >= 0");
             t.HasCheckConstraint(
-                "ck_sale_deliveries_amount_transferred_nio_non_negative",
-                "amount_transferred_nio >= 0");
-            t.HasCheckConstraint(
-                "ck_sale_deliveries_amount_transferred_usd_non_negative",
-                "amount_transferred_usd >= 0");
-            t.HasCheckConstraint(
                 "ck_sale_deliveries_shipping_charged_to_client_non_negative",
                 "shipping_charged_to_client >= 0");
             t.HasCheckConstraint(
