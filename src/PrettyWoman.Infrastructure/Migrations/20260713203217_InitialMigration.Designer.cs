@@ -12,8 +12,8 @@ using PrettyWoman.Infrastructure.Persistence;
 namespace PrettyWoman.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260713011645_AddSaleReturns")]
-    partial class AddSaleReturns
+    [Migration("20260713203217_InitialMigration")]
+    partial class InitialMigration
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
