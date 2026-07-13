@@ -97,7 +97,9 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory) : IClassFixtur
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.NotNull(error);
         Assert.Equal(401, error.Status);
-        Assert.Equal("Credenciales invalidas.", error.Message);
+        Assert.Equal("No autorizado", error.Title);
+        Assert.Equal("Credenciales invalidas.", error.Detail);
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
     }
 
     [Fact]
@@ -111,6 +113,8 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory) : IClassFixtur
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
         Assert.NotNull(error);
         Assert.Equal(404, error.Status);
+        Assert.Equal("Recurso no encontrado", error.Title);
+        Assert.NotNull(error.Detail);
     }
 
     private async Task<HttpClient> CreateEmployeeClientAsync()
@@ -135,6 +139,8 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory) : IClassFixtur
     private sealed class ApiErrorResponse
     {
         public int Status { get; init; }
-        public string? Message { get; init; }
+        public string? Title { get; init; }
+        public string? Detail { get; init; }
+        public string? Instance { get; init; }
     }
 }

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc;
 using PrettyWoman.Application.Exceptions;
 
 namespace PrettyWoman.Api.Middlewares;
@@ -24,31 +25,48 @@ public class ExceptionHandlingMiddleware
         }
         catch (AppExceptionBase ex)
         {
-            context.Response.ContentType = "application/json";
-            context.Response.StatusCode = (int)ex.StatusCode;
-
-            var response = new
-            {
-                status = context.Response.StatusCode,
-                message = ex.Message
-            };
-
-            await context.Response.WriteAsync(JsonSerializer.Serialize(response));
+            await WriteProblemDetailsAsync(context, (int)ex.StatusCode, ex.Message);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Unhandled exception");
 
-            context.Response.ContentType = "application/json";
-            context.Response.StatusCode = StatusCodes.Status500InternalServerError;
-
-            var response = new
-            {
-                status = 500,
-                message = "Ocurrió un error inesperado."
-            };
-
-            await context.Response.WriteAsync(JsonSerializer.Serialize(response));
+            await WriteProblemDetailsAsync(
+                context,
+                StatusCodes.Status500InternalServerError,
+                "Ocurrió un error inesperado.");
         }
     }
+
+    private static async Task WriteProblemDetailsAsync(HttpContext context, int status, string detail)
+    {
+        var problemDetails = new ProblemDetails
+        {
+            Type = $"https://httpstatuses.com/{status}",
+            Title = GetTitle(status),
+            Status = status,
+            Detail = detail,
+            Instance = context.Request.Path
+        };
+        problemDetails.Extensions["traceId"] = context.TraceIdentifier;
+
+        context.Response.StatusCode = status;
+        context.Response.ContentType = "application/problem+json";
+        await JsonSerializer.SerializeAsync(
+            context.Response.Body,
+            problemDetails,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web),
+            context.RequestAborted);
+    }
+
+    private static string GetTitle(int status) => status switch
+    {
+        StatusCodes.Status400BadRequest => "Solicitud inválida",
+        StatusCodes.Status401Unauthorized => "No autorizado",
+        StatusCodes.Status403Forbidden => "Acceso denegado",
+        StatusCodes.Status404NotFound => "Recurso no encontrado",
+        StatusCodes.Status415UnsupportedMediaType => "Tipo de contenido no compatible",
+        StatusCodes.Status500InternalServerError => "Error interno del servidor",
+        _ => "Error de solicitud"
+    };
 }
