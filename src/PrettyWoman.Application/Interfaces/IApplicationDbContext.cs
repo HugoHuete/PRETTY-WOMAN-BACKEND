@@ -44,6 +44,8 @@ public interface IApplicationDbContext
     DbSet<SaleExchange> SaleExchanges { get; }
     DbSet<ExchangeReturnItem> ExchangeReturnItems { get; }
     DbSet<ExchangeOutboundItem> ExchangeOutboundItems { get; }
+    DbSet<SaleReturn> SaleReturns { get; }
+    DbSet<SaleReturnItem> SaleReturnItems { get; }
 
     // Payments
     DbSet<PaymentMethod> PaymentMethods { get; }

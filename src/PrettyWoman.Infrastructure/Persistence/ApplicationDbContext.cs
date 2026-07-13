@@ -100,6 +100,8 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public DbSet<SaleExchange> SaleExchanges { get; set; }
     public DbSet<ExchangeReturnItem> ExchangeReturnItems { get; set; }
     public DbSet<ExchangeOutboundItem> ExchangeOutboundItems { get; set; }
+    public DbSet<SaleReturn> SaleReturns { get; set; }
+    public DbSet<SaleReturnItem> SaleReturnItems { get; set; }
 
     // Payments
     public DbSet<PaymentMethod> PaymentMethods { get; set; }
