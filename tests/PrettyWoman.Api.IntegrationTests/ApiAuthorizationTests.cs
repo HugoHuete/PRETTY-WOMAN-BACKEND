@@ -42,6 +42,20 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task Cors_PreflightFromAdminFrontend_ReturnsAllowedOrigin()
+    {
+        using var client = _factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Options, "/api/v1/categories");
+        request.Headers.Add("Origin", "http://localhost:5173");
+        request.Headers.Add("Access-Control-Request-Method", "GET");
+
+        var response = await client.SendAsync(request);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal("http://localhost:5173", response.Headers.GetValues("Access-Control-Allow-Origin").Single());
+    }
+
+    [Fact]
     public async Task Employee_CanReadCatalogsButCannotManageThem()
     {
         using var client = await CreateEmployeeClientAsync();

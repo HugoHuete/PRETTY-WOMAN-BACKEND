@@ -34,6 +34,7 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
         SetEnvironmentVariable("SeedAdmin__Password", AdminPassword);
         SetEnvironmentVariable("SeedAdmin__Name", "Admin");
         SetEnvironmentVariable("SeedAdmin__Lastname", "Integration");
+        SetEnvironmentVariable("Cors__AdminOrigins__0", "http://localhost:5173");
     }
 
     public async Task InitializeAsync()

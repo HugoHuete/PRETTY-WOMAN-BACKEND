@@ -13,6 +13,16 @@ using PrettyWoman.Infrastructure.Authentication;
 using PrettyWoman.Infrastructure.Persistence;
 
 var builder = WebApplication.CreateBuilder(args);
+const string AdminFrontendCorsPolicy = "AdminFrontend";
+
+var configuredAdminOrigins = builder.Configuration.GetSection("Cors:AdminOrigins").Get<string[]>() ?? [];
+var adminOrigins = configuredAdminOrigins.Length > 0
+    ? configuredAdminOrigins
+    : builder.Environment.IsDevelopment() ? ["http://localhost:5173"] : [];
+if (adminOrigins.Length == 0 || adminOrigins.Any(string.IsNullOrWhiteSpace))
+{
+    throw new InvalidOperationException("Debe configurar al menos un origen en Cors:AdminOrigins.");
+}
 
 builder.Services.AddDataProtection();
 builder.Services.AddControllers();
@@ -42,6 +52,13 @@ builder.Services.AddSwaggerGen(options =>
 });
 
 builder.Services.AddRouting(options => { options.LowercaseUrls = true; });
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy(AdminFrontendCorsPolicy, policy =>
+        policy.WithOrigins(adminOrigins)
+            .AllowAnyHeader()
+            .AllowAnyMethod());
+});
 
 builder.Services.Configure<JwtOptions>(
     builder.Configuration.GetSection(JwtOptions.SectionName));
@@ -124,6 +141,7 @@ else
     app.UseHttpsRedirection();
 }
 
+app.UseCors(AdminFrontendCorsPolicy);
 app.UseAuthentication();
 app.UseAuthorization();
 
