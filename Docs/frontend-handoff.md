@@ -67,7 +67,7 @@ Puede trabajar con:
 |---|---|---|---|---|---|
 | Autenticacion | Login | Admin, Vendedor | Iniciar sesion | Credenciales | `POST /api/v1/auth/login` |
 | Autenticacion | Usuarios | Admin | Crear usuario, desbloquear usuario | Usuarios, roles/permisos | `POST /api/v1/auth/users`, `POST /api/v1/auth/users/{id}/unlock` |
-| Dashboard | Resumen | Admin, Vendedor | Ver ventas, pagos, stock y alertas | Balance, movimientos, ventas, inventario | Pendiente de endpoint especifico |
+| Dashboard | Resumen | Admin, Vendedor | Ver ventas, pagos, reservas, entregas e incidencias | Ventas, cobros, reservas, entregas e incidencias; el bloque financiero es exclusivo de Admin | `GET /api/v1/dashboard/summary` |
 | Productos | Lista de productos | Admin, Vendedor | Buscar, filtrar, paginar, abrir detalle | Productos, categoria, subcategoria, talla, stock | `GET /api/v1/product-details` |
 | Productos | Detalle de producto | Admin, Vendedor | Ver informacion completa y disponibilidad | Producto, variantes/detalle, stock | `GET /api/v1/product-details/{productDetailId}` |
 | Catalogos | Categorias | Admin | Listar, crear, editar | Categorias | `GET /api/v1/categories`, `POST /api/v1/categories`, `PUT /api/v1/categories/{id}` |
@@ -143,3 +143,12 @@ Estas pantallas aparecen en las reglas de negocio y casos de uso, pero deben con
 - Crear `Pretty-Woman_Frontend_Admin`.
 - Mover o copiar este documento a `Pretty-Woman_Frontend_Admin/Docs/product/admin-screen-map.md`.
 - Definir layout base: sidebar, topbar, area de contenido, tablas, formularios y modales.
+
+## Contrato del dashboard
+
+- `GET /api/v1/dashboard/summary`
+- Requiere JWT de Admin o Vendedor (`Employee`).
+- Query opcional: `fromDate` y `toDate` en formato `YYYY-MM-DD`. Ambas fechas son inclusivas y, si se omiten, el período es el día actual en hora de Nicaragua.
+- Devuelve ventas no canceladas, cobros registrados, reservas activas creadas en el período, entregas creadas en el período e incidencias de inventario abiertas registradas en el período.
+- El bloque `financial` solo se devuelve a Admin e incluye ingresos, egresos y balance del período. El frontend de Vendedor no debe depender de ese campo.
+- Las listas `payments.byPaymentMethod` y `operations.deliveriesByStatus` pueden estar vacías; el frontend debe representarlas como cero, no como error.
