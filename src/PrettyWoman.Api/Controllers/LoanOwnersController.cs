@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Application.DTOs.LoanOwners;
 using PrettyWoman.Application.Interfaces;
 
@@ -6,6 +8,7 @@ namespace PrettyWoman.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
+[Authorize(Policy = AppPolicies.RequireAdminRole)]
 public class LoanOwnersController(ILoanOwnerService loanOwnerService) : ControllerBase
 {
     private readonly ILoanOwnerService _loanOwnerService = loanOwnerService;

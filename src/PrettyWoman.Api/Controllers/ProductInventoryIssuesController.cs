@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PrettyWoman.Application.Common.Models;
+using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Application.DTOs.Products.InventoryIssues;
 using PrettyWoman.Application.Interfaces;
 
@@ -7,6 +9,7 @@ namespace PrettyWoman.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/product-inventory-issues")]
+[Authorize(Policy = AppPolicies.RequireEmployeeRole)]
 public class ProductInventoryIssuesController(IProductInventoryIssueService productInventoryIssueService) : ControllerBase
 {
     private readonly IProductInventoryIssueService _productInventoryIssueService = productInventoryIssueService;
@@ -25,6 +28,7 @@ public class ProductInventoryIssuesController(IProductInventoryIssueService prod
         return Ok(issue);
     }
 
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost]
     public async Task<ActionResult<int>> Create(CreateProductInventoryIssueDTO createIssueDTO)
     {
@@ -32,6 +36,7 @@ public class ProductInventoryIssuesController(IProductInventoryIssueService prod
         return CreatedAtAction(nameof(GetById), new { id }, id);
     }
 
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPatch("{id:int}/resolution")]
     public async Task<ActionResult<ProductInventoryIssueDTO>> Resolve(int id, ResolveProductInventoryIssueDTO resolveIssueDTO)
     {
@@ -39,6 +44,7 @@ public class ProductInventoryIssuesController(IProductInventoryIssueService prod
         return Ok(issue);
     }
 
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpDelete("{id:int}")]
     public async Task<ActionResult<ProductInventoryIssueDTO>> Delete(int id)
     {

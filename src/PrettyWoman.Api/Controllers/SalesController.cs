@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PrettyWoman.Application.Common.Models;
+using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Application.DTOs.Sales;
 using PrettyWoman.Application.Interfaces;
 
@@ -7,6 +9,7 @@ namespace PrettyWoman.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
+[Authorize(Policy = AppPolicies.RequireEmployeeRole)]
 public class SalesController(ISaleService saleService, ISaleExchangeService saleExchangeService, ISaleReturnService saleReturnService) : ControllerBase
 {
     private readonly ISaleService _saleService = saleService;
@@ -38,6 +41,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Actualiza los datos generales de una venta mientras aún requiera correcciones.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPatch("{id:int}")]
     public async Task<IActionResult> PatchHeader(int id, [FromBody] PatchSaleHeaderDTO patchSaleHeaderDTO)
     {
@@ -46,6 +50,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Reemplaza los productos de una venta para corregir su contenido antes de finalizarla.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPut("{id:int}/products")]
     public async Task<IActionResult> ReplaceProducts(int id, [FromBody] ReplaceSaleProductsDTO replaceSaleProductsDTO)
     {
@@ -54,6 +59,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Agrega productos entregados en selección para registrar los que el cliente decidirá conservar.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/selection-holds")]
     public async Task<IActionResult> AddSelectionHolds(int id, [FromBody] List<CreateSaleSelectionProductDTO> selectionProducts)
     {
@@ -62,6 +68,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Resuelve un producto en selección cuando el cliente confirma si lo conserva o lo devuelve.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/selection-holds/{holdId:int}/resolve")]
     public async Task<IActionResult> ResolveSelectionHold(int id, int holdId, [FromBody] ResolveSelectionHoldDTO resolution)
     {
@@ -70,6 +77,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Marca como devuelto un producto en selección cuando regresa sin ser comprado.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/selection-holds/{holdId:int}/return")]
     public async Task<IActionResult> MarkSelectionHoldAsReturned(int id, int holdId)
     {
@@ -83,6 +91,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
         => Ok(await _saleExchangeService.GetBySaleIdAsync(id));
 
     /// <summary>Registra un intercambio cuando el cliente devuelve productos y recibe otros a cambio.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/exchanges")]
     public async Task<ActionResult<int>> CreateExchange(int id, [FromBody] CreateSaleExchangeDTO exchange)
     {
@@ -91,6 +100,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Registra el intercambio físico: la agencia entrega las prendas nuevas y recibe las retornadas en el mismo acto.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/exchanges/{exchangeId:int}/handover")]
     public async Task<IActionResult> CompleteExchangeHandover(int id, int exchangeId)
     {
@@ -99,6 +109,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Confirma la recepción de un artículo devuelto para reincorporarlo al proceso de inventario.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/exchanges/{exchangeId:int}/return-items/{returnItemId:int}/received")]
     public async Task<IActionResult> MarkExchangeReturnReceived(int id, int exchangeId, int returnItemId)
     {
@@ -107,6 +118,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Cancela un intercambio cuando ya no debe continuar su procesamiento.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/exchanges/{exchangeId:int}/cancel")]
     public async Task<IActionResult> CancelExchange(int id, int exchangeId)
     {
@@ -120,6 +132,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
         => Ok(await _saleReturnService.GetBySaleIdAsync(id));
 
     /// <summary>Solicita una devolución parcial o total de productos ya entregados.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/returns")]
     public async Task<ActionResult<int>> CreateReturn(int id, [FromBody] CreateSaleReturnDTO request)
     {
@@ -128,6 +141,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Registra que la agencia recogió la devolución y ejecuta su reembolso.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/returns/{returnId:int}/pickup")]
     public async Task<IActionResult> RegisterReturnPickup(int id, int returnId, [FromBody] ProcessSaleReturnDTO request)
     {
@@ -136,6 +150,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Confirma la recepción física, reincorpora inventario o abre issue por daño.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/returns/{returnId:int}/receive")]
     public async Task<IActionResult> ReceiveReturn(int id, int returnId, [FromBody] ReceiveSaleReturnDTO request)
     {
@@ -144,6 +159,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Cancela una devolución aún no recogida ni recibida.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/returns/{returnId:int}/cancel")]
     public async Task<IActionResult> CancelReturn(int id, int returnId)
     {
@@ -160,6 +176,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Corrige los datos de un movimiento de pago cuando fue registrado con información incorrecta.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPatch("{id:int}/payment-movements/{paymentMovementId:int}")]
     public async Task<IActionResult> UpdatePaymentMovement(int id, int paymentMovementId, [FromBody] UpdateSalePaymentMovementDTO paymentMovement)
     {
@@ -168,6 +185,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Registra el reembolso de un movimiento de pago cuando se devuelve dinero al cliente.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/payment-movements/{paymentMovementId:int}/refunds")]
     public async Task<ActionResult<int>> RefundPaymentMovement(int id, int paymentMovementId, [FromBody] RefundSalePaymentMovementDTO refund)
     {
@@ -184,6 +202,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Actualiza la información logística de un envío antes de que sea cerrado.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPatch("{id:int}/deliveries/{deliveryId:int}")]
     public async Task<IActionResult> UpdateDelivery(int id, int deliveryId, [FromBody] PatchSaleDeliveryDTO delivery)
     {
@@ -192,6 +211,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Marca el envío como despachado cuando los productos salen hacia el cliente o la agencia.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/deliveries/{deliveryId:int}/send")]
     public async Task<IActionResult> MarkDeliveryAsSent(int id, int deliveryId)
     {
@@ -200,6 +220,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Indica que el envío fue entregado pero quedan productos en selección por resolver.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/deliveries/{deliveryId:int}/delivered-pending-selection")]
     public async Task<IActionResult> MarkDeliveryAsDeliveredPendingSelection(int id, int deliveryId)
     {
@@ -208,6 +229,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Finaliza un envío cuando la entrega y cualquier selección pendiente se completaron.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/deliveries/{deliveryId:int}/complete")]
     public async Task<IActionResult> MarkDeliveryAsCompleted(int id, int deliveryId)
     {
@@ -216,6 +238,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Marca el envío como fallido cuando no pudo ser entregado.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/deliveries/{deliveryId:int}/fail")]
     public async Task<IActionResult> MarkDeliveryAsFailed(int id, int deliveryId)
     {
@@ -224,6 +247,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Cancela un envío cuando deja de ser necesario o no debe continuar.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/deliveries/{deliveryId:int}/cancel")]
     public async Task<IActionResult> CancelDelivery(int id, int deliveryId)
     {
@@ -232,6 +256,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     }
 
     /// <summary>Cancela una venta cuando debe anularse por completo.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/cancel")]
     public async Task<IActionResult> Cancel(int id)
     {

@@ -121,6 +121,16 @@ Estas pantallas aparecen en las reglas de negocio y casos de uso, pero deben con
 
 - El frontend inicial sera solo administrativo.
 - Los roles iniciales son Admin y Vendedor.
+- En la API actual, el rol tecnico `Employee` representa al Vendedor. No se debe asumir que un
+  Vendedor puede usar cualquier endpoint autenticado: cada modulo y accion se valida en el backend.
+- El Vendedor puede consultar productos, inventario e incidencias; consultar categorias, subcategorias
+  y tallas para filtrar el catalogo; crear y editar clientes; consultar agencias de envio y terminales
+  de pago; y consultar o crear ventas, pagos y entregas. Un descuento manual se aplica como parte de
+  la creacion de una venta.
+- El Vendedor no puede crear ni actualizar catalogos, compras, configuracion, campanas de descuento,
+  finanzas, incidencias de inventario, ni bloquear clientes. Las correcciones, cancelaciones,
+  devoluciones, reembolsos, cambios y transiciones posteriores de una venta son exclusivas de Admin.
+- Admin conserva acceso completo a todos los modulos.
 - La tienda publica para clientas, si se construye, ira en otro proyecto.
 - El mapa de pantallas puede empezar en este backend como handoff y moverse al repo frontend cuando exista.
 
@@ -133,4 +143,3 @@ Estas pantallas aparecen en las reglas de negocio y casos de uso, pero deben con
 - Crear `Pretty-Woman_Frontend_Admin`.
 - Mover o copiar este documento a `Pretty-Woman_Frontend_Admin/Docs/product/admin-screen-map.md`.
 - Definir layout base: sidebar, topbar, area de contenido, tablas, formularios y modales.
-

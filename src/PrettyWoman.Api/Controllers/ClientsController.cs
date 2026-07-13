@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PrettyWoman.Application.Common.Models;
+using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Application.DTOs.Clients;
 using PrettyWoman.Application.Interfaces;
 
@@ -7,6 +9,7 @@ namespace PrettyWoman.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
+[Authorize(Policy = AppPolicies.RequireEmployeeRole)]
 public class ClientsController(IClientService clientService) : ControllerBase
 {
     private readonly IClientService _clientService = clientService;
@@ -39,6 +42,7 @@ public class ClientsController(IClientService clientService) : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPatch("{id:int}/block")]
     public async Task<IActionResult> Block(int id, [FromBody] BlockClientDTO blockClientDTO)
     {
@@ -46,6 +50,7 @@ public class ClientsController(IClientService clientService) : ControllerBase
         return NoContent();
     }
 
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPatch("{id:int}/unblock")]
     public async Task<IActionResult> Unblock(int id)
     {

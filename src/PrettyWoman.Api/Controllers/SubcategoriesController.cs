@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Application.DTOs.Subcategories;
 using PrettyWoman.Application.Interfaces;
 
@@ -6,6 +8,7 @@ namespace PrettyWoman.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
+[Authorize(Policy = AppPolicies.RequireEmployeeRole)]
 public class SubcategoriesController(ISubcategoryService subcategoryService) : ControllerBase
 {
     private readonly ISubcategoryService _subcategoryService = subcategoryService;
@@ -24,6 +27,7 @@ public class SubcategoriesController(ISubcategoryService subcategoryService) : C
         return Ok(subcategory);
     }
 
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost]
     public async Task<ActionResult<int>> Create([FromBody] CreateSubcategoryDTO createSubcategoryDTO)
     {
@@ -32,6 +36,7 @@ public class SubcategoriesController(ISubcategoryService subcategoryService) : C
         return CreatedAtAction(nameof(GetById), new { id }, id);
     }
 
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateSubcategoryDTO updateSubcategoryDTO)
     {

@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Application.DTOs.DeliveryAgencies;
 using PrettyWoman.Application.Interfaces;
 
@@ -6,6 +8,7 @@ namespace PrettyWoman.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
+[Authorize(Policy = AppPolicies.RequireEmployeeRole)]
 public class DeliveryAgenciesController(IDeliveryAgencyService deliveryAgencyService) : ControllerBase
 {
     private readonly IDeliveryAgencyService _deliveryAgencyService = deliveryAgencyService;
@@ -24,6 +27,7 @@ public class DeliveryAgenciesController(IDeliveryAgencyService deliveryAgencySer
         return Ok(deliveryAgency);
     }
 
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost]
     public async Task<ActionResult<int>> Create([FromBody] CreateDeliveryAgencyDTO createDeliveryAgencyDTO)
     {
@@ -32,6 +36,7 @@ public class DeliveryAgenciesController(IDeliveryAgencyService deliveryAgencySer
         return CreatedAtAction(nameof(GetById), new { id }, id);
     }
 
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateDeliveryAgencyDTO updateDeliveryAgencyDTO)
     {

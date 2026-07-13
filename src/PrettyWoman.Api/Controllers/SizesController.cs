@@ -1,4 +1,6 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Application.DTOs.Sizes;
 using PrettyWoman.Application.Interfaces;
 
@@ -6,6 +8,7 @@ namespace PrettyWoman.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
+[Authorize(Policy = AppPolicies.RequireEmployeeRole)]
 public class SizesController(ISizeService sizeService) : ControllerBase
 {
     private readonly ISizeService _sizeService = sizeService;
@@ -24,6 +27,7 @@ public class SizesController(ISizeService sizeService) : ControllerBase
         return Ok(size);
     }
 
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost]
     public async Task<ActionResult<int>> Create([FromBody] CreateSizeDTO createSizeDTO)
     {
@@ -32,6 +36,7 @@ public class SizesController(ISizeService sizeService) : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id }, id);
     }
 
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPut("{id:int}")]
     public async Task<IActionResult> Update(int id, [FromBody] UpdateSizeDTO updateSizeDTO)
     {

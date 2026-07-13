@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PrettyWoman.Application.Common.Models;
+using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Application.DTOs.Products;
 using PrettyWoman.Application.Interfaces;
 
@@ -7,6 +9,7 @@ namespace PrettyWoman.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/product-details")]
+[Authorize(Policy = AppPolicies.RequireEmployeeRole)]
 public class ProductDetailsController(IProductService productService) : ControllerBase
 {
     private readonly IProductService _productService = productService;
