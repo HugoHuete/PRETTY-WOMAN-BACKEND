@@ -1,0 +1,106 @@
+using System.Net;
+using System.Net.Http.Headers;
+using System.Net.Http.Json;
+using PrettyWoman.Api.IntegrationTests.Infrastructure;
+using PrettyWoman.Application.DTOs.Auth;
+using PrettyWoman.Application.DTOs.Clients;
+
+namespace PrettyWoman.Api.IntegrationTests;
+
+public class ApiAuthorizationTests(PrettyWomanApiFactory factory) : IClassFixture<PrettyWomanApiFactory>
+{
+    private readonly PrettyWomanApiFactory _factory = factory;
+
+    [Fact]
+    public async Task ProtectedEndpoint_WithoutJwt_ReturnsUnauthorized()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/api/v1/clients");
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Employee_CanReadCatalogsButCannotManageThem()
+    {
+        using var client = await CreateEmployeeClientAsync();
+
+        var readResponse = await client.GetAsync("/api/v1/categories");
+        var createResponse = await client.PostAsJsonAsync("/api/v1/categories", new { name = "No autorizado" });
+
+        Assert.Equal(HttpStatusCode.OK, readResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, createResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Employee_CanCreateClientButCannotAccessFinances()
+    {
+        using var client = await CreateEmployeeClientAsync();
+
+        var createResponse = await client.PostAsJsonAsync("/api/v1/clients", new CreateClientDTO
+        {
+            Name = "Cliente de integración"
+        });
+        var financeResponse = await client.GetAsync("/api/v1/finances/current-balance");
+
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, financeResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Login_WithInvalidCredentials_ReturnsMiddlewareErrorResponse()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
+        {
+            Email = PrettyWomanApiFactory.AdminEmail,
+            Password = "invalid-password"
+        });
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>();
+
+        Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+        Assert.NotNull(error);
+        Assert.Equal(401, error.Status);
+        Assert.Equal("Credenciales invalidas.", error.Message);
+    }
+
+    [Fact]
+    public async Task AuthenticatedClient_RequestingMissingClient_ReturnsNotFoundMiddlewareResponse()
+    {
+        using var client = await CreateEmployeeClientAsync();
+
+        var response = await client.GetAsync("/api/v1/clients/999999");
+        var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>();
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        Assert.NotNull(error);
+        Assert.Equal(404, error.Status);
+    }
+
+    private async Task<HttpClient> CreateEmployeeClientAsync()
+    {
+        await _factory.EnsureEmployeeAsync();
+
+        var client = _factory.CreateClient();
+        var loginResponse = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
+        {
+            Email = PrettyWomanApiFactory.EmployeeEmail,
+            Password = PrettyWomanApiFactory.EmployeePassword
+        });
+        var auth = await loginResponse.Content.ReadFromJsonAsync<AuthResponseDTO>();
+
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+        Assert.NotNull(auth);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
+        return client;
+    }
+
+    private sealed class ApiErrorResponse
+    {
+        public int Status { get; init; }
+        public string? Message { get; init; }
+    }
+}
