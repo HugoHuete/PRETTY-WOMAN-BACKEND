@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PrettyWoman.Application.Common.Security;
+using PrettyWoman.Domain.Entities;
+using PrettyWoman.Domain.Enums;
 using PrettyWoman.Infrastructure.Persistence;
 using Testcontainers.PostgreSql;
 
@@ -96,6 +98,98 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
         }
     }
 
+    public async Task<SeededProduct> SeedProductAsync(
+        int quantity,
+        int receivedQuantity,
+        int availableQuantity,
+        decimal salePrice = 1000m)
+    {
+        using var scope = Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var nextProductDetailCode = (await context.ProductDetails.MaxAsync(item => (int?)item.Code) ?? 0) + 1;
+
+        if (!await context.DollarExchangeRates.AnyAsync(rate => rate.Enabled && rate.StartDate <= DateTime.UtcNow))
+        {
+            context.DollarExchangeRates.Add(new DollarExchangeRate
+            {
+                StartDate = DateTime.UtcNow.Date.AddDays(-1),
+                StoreRate = 36m,
+                BankRate = 36m,
+                Enabled = true
+            });
+        }
+
+        var category = new Category { Name = $"Categoría integración {suffix}" };
+        var subcategory = new Subcategory { Name = $"Subcategoría integración {suffix}", Category = category };
+        var sizeGroup = new SizeGroup { Name = $"Tallas integración {suffix}" };
+        var size = new Size { Name = "M", SizeGroup = sizeGroup, DisplayOrder = 1 };
+        var supplier = new Supplier { Name = $"Proveedor integración {suffix}" };
+        var order = new Order
+        {
+            Supplier = supplier,
+            PurchaseDate = DateTime.UtcNow,
+            OrderStatusId = (int)OrderStatusCode.Pending,
+            PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd,
+            ExchangeRate = 36m,
+            MerchandiseTotalNio = quantity * 400m,
+            TotalCostNio = quantity * 400m
+        };
+        var detail = new ProductDetail
+        {
+            SupplierProductCode = $"SKU-{suffix}",
+            Code = nextProductDetailCode,
+            Name = $"Producto integración {suffix}",
+            Subcategory = subcategory
+        };
+        var product = new Product
+        {
+            Order = order,
+            ProductDetail = detail,
+            Size = size,
+            Quantity = quantity,
+            ReceivedQuantity = receivedQuantity,
+            AvailableQuantity = availableQuantity,
+            UnitCostNio = 400m,
+            MerchandiseTotalCostNio = quantity * 400m,
+            TotalCostNio = quantity * 400m,
+            SalePrice = salePrice
+        };
+
+        context.Products.Add(product);
+        await context.SaveChangesAsync();
+
+        return new SeededProduct(order.Id, product.Id);
+    }
+
+    public async Task<ProductStock> GetProductStockAsync(int productId)
+    {
+        using var scope = Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var product = await context.Products.SingleAsync(item => item.Id == productId);
+
+        return new ProductStock(product.ReceivedQuantity, product.AvailableQuantity, product.ReservedQuantity, product.UnavailableQuantity);
+    }
+
+    public async Task<DeliveryLocation> SeedDeliveryLocationAsync()
+    {
+        using var scope = Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var department = new Department { Name = $"Departamento {suffix}" };
+        var municipality = new Municipality { Name = $"Municipio {suffix}", Department = department };
+        var agency = new DeliveryAgency
+        {
+            Name = $"Agencia {suffix}",
+            PhoneNumber = "88880000",
+            CanCollectCashOnDelivery = true
+        };
+
+        context.AddRange(municipality, agency);
+        await context.SaveChangesAsync();
+        return new DeliveryLocation(municipality.Id, agency.Id);
+    }
+
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
         builder.UseEnvironment("Testing");
@@ -106,4 +200,8 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
         _originalEnvironmentVariables[name] = Environment.GetEnvironmentVariable(name);
         Environment.SetEnvironmentVariable(name, value);
     }
+
+    public sealed record SeededProduct(int OrderId, int ProductId);
+    public sealed record ProductStock(int ReceivedQuantity, int AvailableQuantity, int ReservedQuantity, int UnavailableQuantity);
+    public sealed record DeliveryLocation(int MunicipalityId, int DeliveryAgencyId);
 }

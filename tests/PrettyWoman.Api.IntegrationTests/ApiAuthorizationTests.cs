@@ -8,7 +8,8 @@ using PrettyWoman.Application.DTOs.Clients;
 
 namespace PrettyWoman.Api.IntegrationTests;
 
-public class ApiAuthorizationTests(PrettyWomanApiFactory factory) : IClassFixture<PrettyWomanApiFactory>
+[Collection(ApiIntegrationCollection.Name)]
+public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
 {
     private readonly PrettyWomanApiFactory _factory = factory;
 
