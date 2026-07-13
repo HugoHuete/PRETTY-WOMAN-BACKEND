@@ -647,47 +647,6 @@ public class SaleServiceTests
     }
 
     [Fact]
-    public async Task AdjustPaymentMovementsAsync_ReplacesAnInStorePaymentAtomically()
-    {
-        await using var context = CreateContext();
-        await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
-        var service = CreateService(context);
-
-        var saleId = await service.CreateAsync(new CreateSaleDTO
-        {
-            SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products =
-            [
-                new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }
-            ],
-            PaymentMovements =
-            [
-                new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Cash, ProductAmount = 500m }
-            ]
-        });
-        var cashPaymentId = await context.SalePaymentMovements.Where(item => item.SaleId == saleId).Select(item => item.Id).SingleAsync();
-
-        await service.AdjustPaymentMovementsAsync(saleId, new AdjustSalePaymentMovementsDTO
-        {
-            PaymentMovements =
-            [
-                new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Card, PaymentTerminalId = 1, ProductAmount = 500m }
-            ],
-            Refunds =
-            [
-                new CreateSalePaymentRefundDTO { PaymentMovementId = cashPaymentId, ProductAmount = 500m }
-            ]
-        });
-
-        var sale = await context.Sales.Include(item => item.PaymentMovements).SingleAsync(item => item.Id == saleId);
-        Assert.Equal((int)SalePaymentStatusOption.Paid, sale.SalePaymentStatusId);
-        Assert.Equal(3, sale.PaymentMovements.Count);
-        Assert.Contains(sale.PaymentMovements, item => item.MovementDirectionId == (int)MovementDirectionOptions.Out && item.ReversedSalePaymentMovementId == cashPaymentId);
-        Assert.Contains(sale.PaymentMovements, item => item.MovementDirectionId == (int)MovementDirectionOptions.In && item.PaymentMethodId == (int)PaymentMethodOption.Card);
-    }
-    [Fact]
     public async Task CreateDeliveryAsync_CreatesCodDeliveryMarksSaleReadyAndCanBeSent()
     {
         await using var context = CreateContext();
@@ -1361,7 +1320,7 @@ public class SaleServiceTests
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => reconciliationService.CreateAsync(request));
 
-        Assert.Contains("al menos un envio", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("al menos un envío", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

@@ -167,14 +167,6 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
         return NoContent();
     }
 
-    /// <summary>Redistribuye o ajusta movimientos de pago para cuadrar el saldo de la venta.</summary>
-    [HttpPost("{id:int}/payment-movements/adjustments")]
-    public async Task<IActionResult> AdjustPaymentMovements(int id, [FromBody] AdjustSalePaymentMovementsDTO adjustment)
-    {
-        await _saleService.AdjustPaymentMovementsAsync(id, adjustment);
-        return NoContent();
-    }
-
     /// <summary>Registra el reembolso de un movimiento de pago cuando se devuelve dinero al cliente.</summary>
     [HttpPost("{id:int}/payment-movements/{paymentMovementId:int}/refunds")]
     public async Task<ActionResult<int>> RefundPaymentMovement(int id, int paymentMovementId, [FromBody] RefundSalePaymentMovementDTO refund)
