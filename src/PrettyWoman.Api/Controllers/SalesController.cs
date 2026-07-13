@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Application.DTOs.Sales;
@@ -10,11 +11,16 @@ namespace PrettyWoman.Api.Controllers;
 [ApiController]
 [Route("api/v1/[controller]")]
 [Authorize(Policy = AppPolicies.RequireEmployeeRole)]
-public class SalesController(ISaleService saleService, ISaleExchangeService saleExchangeService, ISaleReturnService saleReturnService) : ControllerBase
+public class SalesController(
+    ISaleService saleService,
+    ISaleExchangeService saleExchangeService,
+    ISaleReturnService saleReturnService,
+    ILogger<SalesController> logger) : ControllerBase
 {
     private readonly ISaleService _saleService = saleService;
     private readonly ISaleExchangeService _saleExchangeService = saleExchangeService;
     private readonly ISaleReturnService _saleReturnService = saleReturnService;
+    private readonly ILogger<SalesController> _logger = logger;
 
     /// <summary>Consulta ventas paginadas y permite filtrar por estado, pago, canal, clienta y fechas.</summary>
     [HttpGet]
@@ -37,6 +43,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     public async Task<ActionResult<int>> Create([FromBody] CreateSaleDTO createSaleDTO)
     {
         var id = await _saleService.CreateAsync(createSaleDTO);
+        _logger.LogInformation("Venta creada {SaleId} por usuario {UserId}", id, GetUserId());
         return CreatedAtAction(nameof(GetById), new { id }, id);
     }
 
@@ -172,6 +179,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     public async Task<ActionResult<int>> AddPaymentMovement(int id, [FromBody] CreateSalePaymentMovementDTO paymentMovement)
     {
         var paymentMovementId = await _saleService.AddPaymentMovementAsync(id, paymentMovement);
+        _logger.LogInformation("Pago registrado {PaymentMovementId} para venta {SaleId} por usuario {UserId}", paymentMovementId, id, GetUserId());
         return CreatedAtAction(nameof(GetById), new { id }, paymentMovementId);
     }
 
@@ -190,6 +198,7 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     public async Task<ActionResult<int>> RefundPaymentMovement(int id, int paymentMovementId, [FromBody] RefundSalePaymentMovementDTO refund)
     {
         var refundPaymentMovementId = await _saleService.RefundPaymentMovementAsync(id, paymentMovementId, refund);
+        _logger.LogInformation("Reembolso registrado {RefundPaymentMovementId} para pago {PaymentMovementId} de venta {SaleId} por usuario {UserId}", refundPaymentMovementId, paymentMovementId, id, GetUserId());
         return CreatedAtAction(nameof(GetById), new { id }, refundPaymentMovementId);
     }
 
@@ -261,6 +270,10 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     public async Task<IActionResult> Cancel(int id)
     {
         await _saleService.CancelAsync(id);
+        _logger.LogInformation("Venta cancelada {SaleId} por usuario {UserId}", id, GetUserId());
         return NoContent();
     }
+
+    private string GetUserId()
+        => User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown";
 }

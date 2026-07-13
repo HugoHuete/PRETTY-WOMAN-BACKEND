@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using PrettyWoman.Api.IntegrationTests.Infrastructure;
 using PrettyWoman.Application.DTOs.Auth;
 using PrettyWoman.Application.DTOs.Clients;
@@ -19,6 +20,27 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory) : IClassFixtur
         var response = await client.GetAsync("/api/v1/clients");
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Request_WithCorrelationId_ReturnsItInResponseAndProblemDetails()
+    {
+        using var client = _factory.CreateClient();
+        using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/login")
+        {
+            Content = JsonContent.Create(new LoginRequestDTO
+            {
+                Email = PrettyWomanApiFactory.AdminEmail,
+                Password = "invalid-password"
+            })
+        };
+        request.Headers.Add("X-Correlation-ID", "integration-correlation-id");
+
+        var response = await client.SendAsync(request);
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+
+        Assert.Equal("integration-correlation-id", response.Headers.GetValues("X-Correlation-ID").Single());
+        Assert.Equal("integration-correlation-id", document.RootElement.GetProperty("traceId").GetString());
     }
 
     [Fact]

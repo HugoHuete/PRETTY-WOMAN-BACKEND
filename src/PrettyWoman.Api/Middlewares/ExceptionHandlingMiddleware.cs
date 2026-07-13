@@ -29,7 +29,12 @@ public class ExceptionHandlingMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Unhandled exception");
+            _logger.LogError(
+                ex,
+                "Excepción no controlada al procesar {RequestMethod} {RequestPath} con correlación {CorrelationId}",
+                context.Request.Method,
+                context.Request.Path,
+                context.TraceIdentifier);
 
             await WriteProblemDetailsAsync(
                 context,

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Application.DTOs.Products.InventoryIssues;
@@ -10,9 +11,12 @@ namespace PrettyWoman.Api.Controllers;
 [ApiController]
 [Route("api/v1/product-inventory-issues")]
 [Authorize(Policy = AppPolicies.RequireEmployeeRole)]
-public class ProductInventoryIssuesController(IProductInventoryIssueService productInventoryIssueService) : ControllerBase
+public class ProductInventoryIssuesController(
+    IProductInventoryIssueService productInventoryIssueService,
+    ILogger<ProductInventoryIssuesController> logger) : ControllerBase
 {
     private readonly IProductInventoryIssueService _productInventoryIssueService = productInventoryIssueService;
+    private readonly ILogger<ProductInventoryIssuesController> _logger = logger;
 
     [HttpGet]
     public async Task<ActionResult<PaginatedResult<ProductInventoryIssueDTO>>> GetAll([FromQuery] ProductInventoryIssueQueryDTO query)
@@ -33,6 +37,7 @@ public class ProductInventoryIssuesController(IProductInventoryIssueService prod
     public async Task<ActionResult<int>> Create(CreateProductInventoryIssueDTO createIssueDTO)
     {
         var id = await _productInventoryIssueService.CreateAsync(createIssueDTO);
+        _logger.LogInformation("Ajuste de inventario creado {InventoryIssueId} por usuario {UserId}", id, GetUserId());
         return CreatedAtAction(nameof(GetById), new { id }, id);
     }
 
@@ -41,6 +46,7 @@ public class ProductInventoryIssuesController(IProductInventoryIssueService prod
     public async Task<ActionResult<ProductInventoryIssueDTO>> Resolve(int id, ResolveProductInventoryIssueDTO resolveIssueDTO)
     {
         var issue = await _productInventoryIssueService.ResolveAsync(id, resolveIssueDTO);
+        _logger.LogInformation("Ajuste de inventario resuelto {InventoryIssueId} por usuario {UserId}", id, GetUserId());
         return Ok(issue);
     }
 
@@ -49,6 +55,10 @@ public class ProductInventoryIssuesController(IProductInventoryIssueService prod
     public async Task<ActionResult<ProductInventoryIssueDTO>> Delete(int id)
     {
         var issue = await _productInventoryIssueService.DeleteAsync(id);
+        _logger.LogInformation("Ajuste de inventario eliminado {InventoryIssueId} por usuario {UserId}", id, GetUserId());
         return Ok(issue);
     }
+
+    private string GetUserId()
+        => User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown";
 }

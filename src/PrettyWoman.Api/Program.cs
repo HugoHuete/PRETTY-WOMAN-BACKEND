@@ -128,6 +128,8 @@ var app = builder.Build();
 
 await IdentitySeeder.SeedAsync(app.Services, app.Configuration);
 
+app.UseMiddleware<CorrelationIdMiddleware>();
+app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
 
 // Configure the HTTP request pipeline.
