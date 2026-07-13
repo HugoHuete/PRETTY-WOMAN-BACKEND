@@ -10,5 +10,4 @@ public interface ISalePaymentMovementService
     Task<int> AddAsync(int saleId, CreateSalePaymentMovementDTO paymentMovement);
     Task PatchAsync(int saleId, int paymentMovementId, UpdateSalePaymentMovementDTO paymentMovement);
     Task<int> RefundAsync(int saleId, int paymentMovementId, RefundSalePaymentMovementDTO refund);
-    Task AdjustAsync(int saleId, AdjustSalePaymentMovementsDTO adjustment);
 }

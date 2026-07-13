@@ -115,51 +115,6 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
 
         return refundMovement.Id;
     }
-
-    /// <summary>
-    /// Records payments and refunds as a single atomic adjustment.
-    /// For example, it can replace a cash payment with a card payment or redistribute a payment across methods
-    /// without temporarily leaving the sale underpaid or overpaid.
-    /// </summary>
-    public async Task AdjustAsync(int saleId, AdjustSalePaymentMovementsDTO adjustment)
-    {
-        adjustment.PaymentMovements ??= [];
-        adjustment.Refunds ??= [];
-        if (adjustment.PaymentMovements.Count == 0 && adjustment.Refunds.Count == 0)
-            throw new AppBadRequestException("Debe enviar al menos un pago o un reembolso para ajustar la venta.");
-
-        var sale = await GetSaleForPaymentChangesAsync(saleId);
-        EnsureSaleIsNotCancelled(sale);
-
-        var newPayments = new List<SalePaymentMovement>();
-        foreach (var request in adjustment.PaymentMovements)
-        {
-            var allocation = ResolveCreateAllocation(request);
-            await ValidatePaymentDataAsync(request.PaymentMethodId, request.PaymentTerminalId, allocation.GrossAmount);
-            await ValidateShippingAllocationAsync(sale, allocation);
-            newPayments.Add(await CreatePaymentMovementAsync(request, allocation));
-        }
-
-        var refunds = new List<SalePaymentMovement>();
-        foreach (var refundRequest in adjustment.Refunds)
-        {
-            var originalPayment = GetPaymentMovement(sale, refundRequest.PaymentMovementId);
-            var refund = await CreateRefundPaymentMovementAsync(originalPayment, refundRequest);
-            RegisterRefund(sale, originalPayment, refund);
-            refunds.Add(refund);
-        }
-
-        // Ajustes compuestos se validan como un conjunto para evitar estados intermedios invalidos.
-        sale.PaymentMovements.AddRange(newPayments);
-        // Cada cambio se valida contra los limites de productos y de cada envio antes de guardar.
-        await ValidatePaymentTotalsAsync(sale);
-        sale.SalePaymentStatusId = SalePaymentMovementRules.ResolveStatus(sale.Total, SalePaymentMovementRules.CalculateProductTotal(sale.PaymentMovements));
-        await _deliveryService.SyncActiveAmountToCollectAsync(sale.Id, sale.Total, sale.PaymentMovements);
-
-        await CreateFinancialMovementsAsync(newPayments.Concat(refunds));
-        await SaveWithConcurrencyHandlingAsync();
-    }
-
     private async Task<Sale> GetSaleForPaymentChangesAsync(int saleId)
     {
         return await _context.Sales

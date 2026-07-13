@@ -358,12 +358,6 @@ public class SaleService(
         return refundPaymentMovementId;
     }
 
-    public async Task AdjustPaymentMovementsAsync(int saleId, AdjustSalePaymentMovementsDTO adjustment)
-    {
-        await _paymentMovementService.AdjustAsync(saleId, adjustment);
-        await SynchronizeInStoreSaleCompletionAsync(saleId);
-    }
-
     private async Task<Sale> GetSaleWithDetailsAsync(int id, bool asNoTracking)
     {
         var query = _context.Sales
