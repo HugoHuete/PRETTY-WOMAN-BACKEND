@@ -123,6 +123,10 @@ El estado de venta es operativo y no debe indicar si la venta está pagada. El e
 
 Una venta reservada debe usar `Reserved` cuando la clienta ya confirmó la compra y el producto queda apartado para retiro o envío futuro. La reserva puede estar sin pago, parcialmente pagada o pagada completa según la suma de sus pagos.
 
+## Regla: ventas en local, pago e inventario
+
+Una venta en local puede crearse sin pago o con pago parcial; por sí sola queda pendiente y no descuenta inventario. Cuando sus pagos de productos alcanzan el total, el sistema la marca `Completed` y registra la salida de inventario. Si posteriormente se corrige o reembolsa un pago que impide mantenerla completada, queda `Reserved` para conservar el inventario apartado y permitir su cancelación o corrección.
+
 ## Regla: estados por línea de venta
 
 Estados sugeridos para `sale_detail_statuses`:
@@ -152,15 +156,9 @@ No se debe eliminar la línea original.
 
 ## Regla: devolución de un producto
 
-Cuando una clienta devuelve un producto:
+Las devoluciones posteriores se registran como `SaleReturn` y `SaleReturnItem`; no cambian los productos ni los pagos históricos de la venta. Cada ítem conserva el monto reconocido y `OriginalUnitCost` de la línea original.
 
-1. Cambiar la línea original a estado `Refunded`.
-2. Registrar el ingreso del producto al inventario si está en condiciones de volver a venderse.
-3. Crear el movimiento de inventario correspondiente.
-4. Registrar el reembolso financiero si aplica.
-5. Conservar el costo histórico de la línea original.
-
-Si el producto no puede volver a venderse, debe registrarse posteriormente como dañado o descartado mediante movimientos de inventario.
+El reembolso crea un movimiento financiero independiente `CustomerRefund`, sin cambiar el estado de pago de la venta. Una prenda buena vuelve de `OutOfInventory` a `Available`; una dañada pasa a `Unavailable` con un issue `Damaged` abierto. Ver `Docs/use-cases/return-products-after-sale.md`.
 
 ## Regla: venta con cambio de producto
 

@@ -18,6 +18,7 @@ public class DeliveryAgencyReconciliation : IAuditableEntity
 
     public DeliveryAgency? DeliveryAgency { get; set; }
     public List<SaleDelivery> Deliveries { get; set; } = [];
+    public List<SaleReturn> SaleReturns { get; set; } = [];
     public List<SalePaymentMovement> PaymentMovements { get; set; } = [];
     public List<FinancialMovement> FinancialMovements { get; set; } = [];
 }

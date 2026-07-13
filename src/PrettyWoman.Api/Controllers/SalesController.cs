@@ -7,10 +7,11 @@ namespace PrettyWoman.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-public class SalesController(ISaleService saleService, ISaleExchangeService saleExchangeService) : ControllerBase
+public class SalesController(ISaleService saleService, ISaleExchangeService saleExchangeService, ISaleReturnService saleReturnService) : ControllerBase
 {
     private readonly ISaleService _saleService = saleService;
     private readonly ISaleExchangeService _saleExchangeService = saleExchangeService;
+    private readonly ISaleReturnService _saleReturnService = saleReturnService;
 
     /// <summary>Consulta ventas paginadas y permite filtrar por estado, pago, canal, clienta y fechas.</summary>
     [HttpGet]
@@ -110,6 +111,43 @@ public class SalesController(ISaleService saleService, ISaleExchangeService sale
     public async Task<IActionResult> CancelExchange(int id, int exchangeId)
     {
         await _saleExchangeService.CancelAsync(id, exchangeId);
+        return NoContent();
+    }
+
+    /// <summary>Consulta las devoluciones asociadas a una venta.</summary>
+    [HttpGet("{id:int}/returns")]
+    public async Task<ActionResult<IEnumerable<SaleReturnDTO>>> GetReturns(int id)
+        => Ok(await _saleReturnService.GetBySaleIdAsync(id));
+
+    /// <summary>Solicita una devolución parcial o total de productos ya entregados.</summary>
+    [HttpPost("{id:int}/returns")]
+    public async Task<ActionResult<int>> CreateReturn(int id, [FromBody] CreateSaleReturnDTO request)
+    {
+        var returnId = await _saleReturnService.CreateAsync(id, request);
+        return CreatedAtAction(nameof(GetReturns), new { id }, returnId);
+    }
+
+    /// <summary>Registra que la agencia recogió la devolución y ejecuta su reembolso.</summary>
+    [HttpPost("{id:int}/returns/{returnId:int}/pickup")]
+    public async Task<IActionResult> RegisterReturnPickup(int id, int returnId, [FromBody] ProcessSaleReturnDTO request)
+    {
+        await _saleReturnService.RegisterAgencyPickupAsync(id, returnId, request);
+        return NoContent();
+    }
+
+    /// <summary>Confirma la recepción física, reincorpora inventario o abre issue por daño.</summary>
+    [HttpPost("{id:int}/returns/{returnId:int}/receive")]
+    public async Task<IActionResult> ReceiveReturn(int id, int returnId, [FromBody] ReceiveSaleReturnDTO request)
+    {
+        await _saleReturnService.ReceiveAsync(id, returnId, request);
+        return NoContent();
+    }
+
+    /// <summary>Cancela una devolución aún no recogida ni recibida.</summary>
+    [HttpPost("{id:int}/returns/{returnId:int}/cancel")]
+    public async Task<IActionResult> CancelReturn(int id, int returnId)
+    {
+        await _saleReturnService.CancelAsync(id, returnId);
         return NoContent();
     }
 

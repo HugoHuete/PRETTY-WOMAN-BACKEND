@@ -29,6 +29,7 @@ Cada documento intenta cubrir:
 - Cancelar venta
 - Cancelar línea de venta
 - Cambiar producto vendido
+- Devolver productos después de la venta
 - Aplicar descuento de campaña
 - Aplicar descuento manual
 - Registrar producto dañado

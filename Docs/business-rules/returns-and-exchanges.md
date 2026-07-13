@@ -39,16 +39,18 @@ Si se cancela solo un producto dentro de una venta:
 3. Recalcular totales de la venta si aplica.
 4. Registrar movimiento financiero si hay devolución de dinero.
 
-## Regla: reembolso
+## Regla: devolución posterior a una venta
 
-Cuando una clienta devuelve un producto y se le reembolsa:
+Una devolución es distinta de una cancelación y de un cambio: usa `SaleReturn` y `SaleReturnItem`, y no modifica la venta ni sus pagos históricos. Cada ítem conserva `OriginalUnitCost` para calcular la utilidad histórica.
 
-1. Cambiar línea a estado `Refunded`.
-2. Aumentar inventario si el producto vuelve a estar disponible.
-3. Crear movimiento de inventario tipo `Return`.
-4. Crear movimiento financiero de egreso por el monto devuelto.
+- Solo admite prendas cuya venta ya descontó inventario; la suma devuelta o cambiada no puede superar lo vendido.
+- Por agencia se reembolsa al retiro; en local al recibir la prenda.
+- Una prenda buena vuelve a disponible. Una dañada queda no disponible con un issue `Damaged` abierto.
+- Por preferencia, el envío de retorno puede descontarse del reembolso y no se devuelve el envío original.
+- Por defecto, error de tienda, la tienda asume el retorno; el envío original solo se devuelve si la venta tenía una sola prenda.
+- El costo del retorno de agencia se paga en su conciliación, no desde los pagos de la venta.
 
-Si el producto vuelve dañado, no debe regresar a `available_quantity`; debe registrarse como dañado o no disponible.
+Ver `Docs/use-cases/return-products-after-sale.md`.
 
 ## Regla: cambio por otra talla
 

@@ -63,6 +63,13 @@ No permitir dos descuentos activos para el mismo producto general (`product_deta
 
 Si en el futuro se decide permitirlo, debe existir una regla de prioridad clara.
 
+## Regla: consistencia entre monto, fuente y campaña
+
+- Si `discount_amount > 0`, `discount_source_id` es obligatorio y no puede ser `None`.
+- Si la fuente es `Manual`, `discount_campaign_id` debe ser `NULL`. El monto se registra explícitamente en la venta.
+- Si la fuente es `Campaign`, la campaña es obligatoria y el descuento debe calcularse desde la campaña aplicable; el monto resultante se congela en la línea histórica.
+- Si no hay descuento (`discount_amount = 0`), la única fuente permitida es `None` y `discount_campaign_id` debe ser `NULL`.
+
 ## Regla: descuentos manuales
 
 Un descuento manual es aquel dado por decisión de venta en el momento.

@@ -7,6 +7,12 @@ public class CreateDeliveryAgencyReconciliationDTO
     public decimal SettlementExchangeRate { get; set; }
     public string? Comments { get; set; }
     public List<ReconcileSaleDeliveryDTO> Deliveries { get; set; } = [];
+    public List<ReconcileSaleReturnDTO> Returns { get; set; } = [];
+}
+
+public class ReconcileSaleReturnDTO
+{
+    public int SaleReturnId { get; set; }
 }
 
 public class ReconcileSaleDeliveryDTO

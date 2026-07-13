@@ -10,6 +10,7 @@ public class SaleReturnItem : IAuditableEntity
     public int ProductId { get; set; }
     public int Quantity { get; set; }
     public decimal RecognizedUnitAmount { get; set; }
+    public decimal OriginalUnitCost { get; set; }
     public int? ProductInventoryIssueId { get; set; }
     public DateTime? ReceivedAt { get; set; }
     public string? Comments { get; set; }

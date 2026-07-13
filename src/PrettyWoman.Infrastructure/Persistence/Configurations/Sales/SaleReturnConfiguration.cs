@@ -17,8 +17,11 @@ public class SaleReturnConfiguration : IEntityTypeConfiguration<SaleReturn>
         builder.Property(x => x.Comments).HasMaxLength(500);
         builder.HasOne(x => x.OriginalSale).WithMany(x => x.Returns).HasForeignKey(x => x.OriginalSaleId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.DeliveryAgency).WithMany().HasForeignKey(x => x.DeliveryAgencyId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.RefundPaymentMethod).WithMany().HasForeignKey(x => x.RefundPaymentMethodId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.DeliveryAgencyReconciliation).WithMany(x => x.SaleReturns).HasForeignKey(x => x.DeliveryAgencyReconciliationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => x.OriginalSaleId);
         builder.HasIndex(x => new { x.OriginalSaleId, x.StatusId });
+        builder.HasIndex(x => x.DeliveryAgencyReconciliationId);
         builder.ToTable(t => t.HasCheckConstraint("ck_sale_returns_totals_non_negative", "product_refund_total >= 0 AND return_shipping_charged_to_client >= 0 AND return_shipping_paid_to_agency >= 0 AND original_shipping_refund >= 0 AND refund_total >= 0"));
     }
 }

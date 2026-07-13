@@ -9,6 +9,7 @@ public class SaleReturnItemConfiguration : IEntityTypeConfiguration<SaleReturnIt
     public void Configure(EntityTypeBuilder<SaleReturnItem> builder)
     {
         builder.Property(x => x.RecognizedUnitAmount).HasPrecision(14, 2);
+        builder.Property(x => x.OriginalUnitCost).HasPrecision(18, 6);
         builder.Property(x => x.Comments).HasMaxLength(500);
         builder.HasOne(x => x.SaleReturn).WithMany(x => x.Items).HasForeignKey(x => x.SaleReturnId).OnDelete(DeleteBehavior.Cascade);
         builder.HasOne(x => x.OriginalSaleProduct).WithMany().HasForeignKey(x => x.OriginalSaleProductId).OnDelete(DeleteBehavior.Restrict);

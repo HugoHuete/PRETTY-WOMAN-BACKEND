@@ -16,6 +16,9 @@ public class SaleReturn : IAuditableEntity
     public decimal ReturnShippingPaidToAgency { get; set; }
     public decimal OriginalShippingRefund { get; set; }
     public decimal RefundTotal { get; set; }
+    public int? RefundPaymentMethodId { get; set; }
+    public int? DeliveryAgencyReconciliationId { get; set; }
+    public DateTime? RefundedAt { get; set; }
     public DateTime? PickedUpAt { get; set; }
     public DateTime? ReceivedAt { get; set; }
     public string? Comments { get; set; }
@@ -26,5 +29,8 @@ public class SaleReturn : IAuditableEntity
 
     public Sale? OriginalSale { get; set; }
     public DeliveryAgency? DeliveryAgency { get; set; }
+    public PaymentMethod? RefundPaymentMethod { get; set; }
+    public DeliveryAgencyReconciliation? DeliveryAgencyReconciliation { get; set; }
+    public List<FinancialMovement> FinancialMovements { get; set; } = [];
     public List<SaleReturnItem> Items { get; set; } = [];
 }

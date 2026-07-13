@@ -14,6 +14,7 @@ public class InventoryMovement : IAuditableEntity
     public int? ProductInventoryIssueId { get; set; }
     public int? ExchangeReturnItemId { get; set; }
     public int? ExchangeOutboundItemId { get; set; }
+    public int? SaleReturnItemId { get; set; }
     public string? Comments { get; set; }
 
     public DateTime MovementDate { get; set; }
@@ -35,6 +36,7 @@ public class InventoryMovement : IAuditableEntity
     public ProductInventoryIssue? ProductInventoryIssue { get; set; }
     public ExchangeReturnItem? ExchangeReturnItem { get; set; }
     public ExchangeOutboundItem? ExchangeOutboundItem { get; set; }
+    public SaleReturnItem? SaleReturnItem { get; set; }
 
 
 }
