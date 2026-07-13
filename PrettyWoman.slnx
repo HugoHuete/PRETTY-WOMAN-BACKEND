@@ -7,6 +7,7 @@
     <Project Path="src/PrettyWoman.Workers/PrettyWoman.Workers.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/PrettyWoman.Api.IntegrationTests/PrettyWoman.Api.IntegrationTests.csproj" />
     <Project Path="tests/PrettyWoman.Application.Tests/PrettyWoman.Application.Tests.csproj" />
     <Project Path="tests/PrettyWoman.Infrastructure.Tests/PrettyWoman.Infrastructure.Tests.csproj" />
   </Folder>

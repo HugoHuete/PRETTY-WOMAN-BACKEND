@@ -1,9 +1,11 @@
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using PrettyWoman.Api.Middlewares;
+using PrettyWoman.Api.Health;
 using PrettyWoman.Application;
 using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Infrastructure;
@@ -101,6 +103,9 @@ builder.Services.AddAuthorization(options =>
 
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddApplication();
+builder.Services.AddHealthChecks()
+    .AddCheck("self", () => Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy(), tags: ["live"])
+    .AddCheck<PostgreSqlHealthCheck>("postgresql", tags: ["ready"]);
 
 var app = builder.Build();
 
@@ -123,6 +128,14 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHealthChecks("/health/live", new HealthCheckOptions
+{
+    Predicate = healthCheck => healthCheck.Tags.Contains("live")
+}).AllowAnonymous();
+app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = healthCheck => healthCheck.Tags.Contains("ready")
+}).AllowAnonymous();
 
 app.Run();
 

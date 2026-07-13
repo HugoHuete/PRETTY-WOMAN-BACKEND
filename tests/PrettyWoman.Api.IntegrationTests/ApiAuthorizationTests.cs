@@ -22,6 +22,26 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory) : IClassFixtur
     }
 
     [Fact]
+    public async Task LivenessHealthCheck_IsAnonymousAndReturnsOk()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/health/live");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ReadinessHealthCheck_VerifiesPostgreSqlAndReturnsOk()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/health/ready");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Employee_CanReadCatalogsButCannotManageThem()
     {
         using var client = await CreateEmployeeClientAsync();
