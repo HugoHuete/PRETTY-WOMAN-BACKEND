@@ -5,6 +5,10 @@ namespace PrettyWoman.Application.Interfaces;
 
 public interface IApplicationDbContext
 {
+    // Media
+    DbSet<MediaAsset> MediaAssets { get; }
+    DbSet<MediaAssetVariant> MediaAssetVariants { get; }
+
     // Orders
     DbSet<Supplier> Suppliers { get; }
     DbSet<ShippingCompany> ShippingCompanies { get; }

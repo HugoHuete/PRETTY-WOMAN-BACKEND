@@ -9,11 +9,11 @@ public class ProductImageConfiguration : IEntityTypeConfiguration<ProductImage>
 {
     public void Configure(EntityTypeBuilder<ProductImage> builder)
     {
-        builder.Property(x => x.ImageUrl).IsRequired().HasMaxLength(1000);
-
         builder.HasOne(x => x.ProductDetail).WithMany(x => x.ProductImages).HasForeignKey(x => x.ProductDetailId).OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(x => x.MediaAsset).WithMany().HasForeignKey(x => x.MediaAssetId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => x.ProductDetailId);
+        builder.HasIndex(x => x.MediaAssetId).IsUnique().HasFilter("media_asset_id is not null");
 
         builder.HasIndex(x => new { x.ProductDetailId, x.SortOrder });
 

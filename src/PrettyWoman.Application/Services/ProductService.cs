@@ -8,7 +8,7 @@ using PrettyWoman.Domain.Enums;
 
 namespace PrettyWoman.Application.Services;
 
-public class ProductService(IApplicationDbContext context) : IProductService
+public class ProductService(IApplicationDbContext context, IMediaUrlResolver mediaUrlResolver) : IProductService
 {
     private readonly IApplicationDbContext _context = context;
 
@@ -27,6 +27,8 @@ public class ProductService(IApplicationDbContext context) : IProductService
             .Include(productDetail => productDetail.Subcategory)
                 .ThenInclude(subcategory => subcategory!.Category)
             .Include(productDetail => productDetail.ProductImages)
+                .ThenInclude(productImage => productImage.MediaAsset)
+                    .ThenInclude(mediaAsset => mediaAsset!.Variants)
             .Include(productDetail => productDetail.DiscountCampaignProducts)
                 .ThenInclude(discount => discount.DiscountCampaign)
             .Include(productDetail => productDetail.Products)
@@ -59,6 +61,8 @@ public class ProductService(IApplicationDbContext context) : IProductService
             .Include(productDetail => productDetail.Subcategory)
                 .ThenInclude(subcategory => subcategory!.Category)
             .Include(productDetail => productDetail.ProductImages)
+                .ThenInclude(productImage => productImage.MediaAsset)
+                    .ThenInclude(mediaAsset => mediaAsset!.Variants)
             .Include(productDetail => productDetail.DiscountCampaignProducts)
                 .ThenInclude(discount => discount.DiscountCampaign)
             .Include(productDetail => productDetail.Products)
@@ -172,7 +176,7 @@ public class ProductService(IApplicationDbContext context) : IProductService
         return query;
     }
 
-    private static ProductDetailDTO MapProductDetail(ProductDetail productDetail, ProductQueryDTO query, DateTime now)
+    private ProductDetailDTO MapProductDetail(ProductDetail productDetail, ProductQueryDTO query, DateTime now)
     {
         return new ProductDetailDTO
         {
@@ -184,11 +188,7 @@ public class ProductService(IApplicationDbContext context) : IProductService
             SubcategoryName = productDetail.Subcategory?.Name,
             CategoryId = productDetail.Subcategory?.CategoryId,
             CategoryName = productDetail.Subcategory?.Category?.Name,
-            PrimaryImageUrl = productDetail.ProductImages
-                .OrderByDescending(image => image.IsPrimary)
-                .ThenBy(image => image.SortOrder)
-                .Select(image => image.ImageUrl)
-                .FirstOrDefault(),
+            PrimaryImageUrl = GetPrimaryImageUrl(productDetail),
             Products = productDetail.Products
                 .Where(product =>
                     (!query.SizeId.HasValue || product.SizeId == query.SizeId.Value) &&
@@ -201,6 +201,20 @@ public class ProductService(IApplicationDbContext context) : IProductService
                 .Select(product => MapProductVariant(productDetail, product, now))
                 .ToList()
         };
+    }
+
+    private string? GetPrimaryImageUrl(ProductDetail productDetail)
+    {
+        var primaryImage = productDetail.ProductImages
+            .OrderByDescending(image => image.IsPrimary)
+            .ThenBy(image => image.SortOrder)
+            .FirstOrDefault();
+
+        var storageKey = primaryImage?.MediaAsset?.Variants
+            .FirstOrDefault(variant => variant.Type == MediaVariantType.Web)
+            ?.StorageKey;
+
+        return storageKey is null ? null : mediaUrlResolver.GetPublicUrl(storageKey);
     }
 
     private static ProductVariantDTO MapProductVariant(ProductDetail productDetail, Product product, DateTime now)

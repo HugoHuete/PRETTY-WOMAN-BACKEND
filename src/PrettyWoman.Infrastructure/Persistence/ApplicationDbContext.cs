@@ -60,6 +60,10 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
 
 
     // Orders
+    public DbSet<MediaAsset> MediaAssets { get; set; }
+    public DbSet<MediaAssetVariant> MediaAssetVariants { get; set; }
+
+    // Orders
     public DbSet<Supplier> Suppliers { get; set; }
     public DbSet<ShippingCompany> ShippingCompanies { get; set; }
     public DbSet<OrderStatus> OrderStatuses { get; set; }

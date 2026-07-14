@@ -3,6 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using PrettyWoman.Application.Interfaces;
 using PrettyWoman.Infrastructure.Authentication;
+using PrettyWoman.Infrastructure.Media;
 using PrettyWoman.Infrastructure.Persistence;
 
 namespace PrettyWoman.Infrastructure;
@@ -17,6 +18,9 @@ public static class DependencyInjection
         services.AddScoped<IApplicationDbContext>(provider => provider.GetRequiredService<ApplicationDbContext>());
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ICurrentUserService, CurrentUserService>();
+        services.Configure<R2MediaOptions>(configuration.GetSection(R2MediaOptions.SectionName));
+        services.AddSingleton<IMediaObjectStorage, R2MediaObjectStorage>();
+        services.AddSingleton<IMediaUrlResolver, R2MediaUrlResolver>();
 
         return services;
     }

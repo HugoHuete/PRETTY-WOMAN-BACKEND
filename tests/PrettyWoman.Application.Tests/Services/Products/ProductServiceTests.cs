@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.DTOs.Products;
 using PrettyWoman.Application.Exceptions;
+using PrettyWoman.Application.Interfaces;
 using PrettyWoman.Application.Services;
 using PrettyWoman.Domain.Entities;
 using PrettyWoman.Domain.Enums;
@@ -206,7 +207,7 @@ public class ProductServiceTests
 
     private static ProductService CreateService(ApplicationDbContext context)
     {
-        return new ProductService(context);
+        return new ProductService(context, new TestMediaUrlResolver());
     }
 
     private static async Task SeedProductsAsync(ApplicationDbContext context)
@@ -232,8 +233,8 @@ public class ProductServiceTests
             SubcategoryId = 1,
             ProductImages =
             [
-                new ProductImage { ImageUrl = "pantalon-secondary.jpg", SortOrder = 0, IsPrimary = false },
-                new ProductImage { ImageUrl = "pantalon-primary.jpg", SortOrder = 1, IsPrimary = true }
+                new ProductImage { MediaAsset = CreateMediaAsset("pantalon-secondary.jpg"), SortOrder = 0, IsPrimary = false },
+                new ProductImage { MediaAsset = CreateMediaAsset("pantalon-primary.jpg"), SortOrder = 1, IsPrimary = true }
             ],
             Products =
             [
@@ -351,6 +352,39 @@ public class ProductServiceTests
             });
 
         await context.SaveChangesAsync();
+    }
+
+    private static MediaAsset CreateMediaAsset(string webStorageKey) => new()
+    {
+        Id = Guid.NewGuid(),
+        StorageKey = $"products/test/{Guid.NewGuid():N}",
+        OriginalBucket = MediaBucket.Private,
+        Visibility = MediaVisibility.Public,
+        OriginalContentType = "image/jpeg",
+        OriginalSizeBytes = 1,
+        Width = 1,
+        Height = 1,
+        Status = MediaAssetStatus.Ready,
+        CreatedAt = DateTime.UtcNow,
+        Variants =
+        [
+            new MediaAssetVariant
+            {
+                Id = Guid.NewGuid(),
+                Type = MediaVariantType.Web,
+                Bucket = MediaBucket.Public,
+                StorageKey = webStorageKey,
+                ContentType = "image/webp",
+                SizeBytes = 1,
+                Width = 1,
+                Height = 1
+            }
+        ]
+    };
+
+    private sealed class TestMediaUrlResolver : IMediaUrlResolver
+    {
+        public string GetPublicUrl(string storageKey) => storageKey;
     }
 
     private static ApplicationDbContext CreateContext()

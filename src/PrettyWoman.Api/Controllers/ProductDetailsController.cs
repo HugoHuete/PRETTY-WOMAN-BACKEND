@@ -10,9 +10,10 @@ namespace PrettyWoman.Api.Controllers;
 [ApiController]
 [Route("api/v1/product-details")]
 [Authorize(Policy = AppPolicies.RequireEmployeeRole)]
-public class ProductDetailsController(IProductService productService) : ControllerBase
+public class ProductDetailsController(IProductService productService, IProductImageService productImageService) : ControllerBase
 {
     private readonly IProductService _productService = productService;
+    private readonly IProductImageService _productImageService = productImageService;
 
     [HttpGet]
     public async Task<ActionResult<PaginatedResult<ProductDetailDTO>>> GetAll([FromQuery] ProductQueryDTO query)
@@ -26,6 +27,16 @@ public class ProductDetailsController(IProductService productService) : Controll
     {
         var product = await _productService.GetByIdAsync(productDetailId);
         return Ok(product);
+    }
+
+    [HttpPost("{productDetailId:int}/images")]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(8 * 1024 * 1024)]
+    public async Task<ActionResult<ProductImageDTO>> UploadImage(int productDetailId, [FromForm] IFormFile file, CancellationToken cancellationToken)
+    {
+        await using var content = file.OpenReadStream();
+        var image = await _productImageService.UploadAsync(productDetailId, content, file.ContentType, cancellationToken);
+        return Ok(image);
     }
 
     [HttpGet("{productDetailId:int}/inventory-movements")]
