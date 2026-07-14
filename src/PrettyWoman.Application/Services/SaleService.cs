@@ -372,7 +372,9 @@ public class SaleService(
             .Include(sale => sale.ProductHolds).ThenInclude(hold => hold.ProductHoldStatus)
             .Include(sale => sale.PaymentMovements).ThenInclude(payment => payment.PaymentMethod)
             .Include(sale => sale.PaymentMovements).ThenInclude(payment => payment.PaymentTerminal)
-            .Include(sale => sale.Deliveries)
+            .Include(sale => sale.Deliveries).ThenInclude(delivery => delivery.Municipality)
+            .Include(sale => sale.Deliveries).ThenInclude(delivery => delivery.DeliveryAgency)
+            .Include(sale => sale.Deliveries).ThenInclude(delivery => delivery.DeliveryStatus)
             .AsQueryable();
 
         if (asNoTracking) query = query.AsNoTracking();
@@ -829,6 +831,29 @@ public class SaleService(
                 IncomeTaxPercentage = payment.IncomeTaxPercentage,
                 IncomeTaxAmount = payment.IncomeTaxAmount,
                 NetReceivedAmount = payment.NetReceivedAmount
+            }).ToList(),
+            Deliveries = sale.Deliveries.Select(delivery => new SaleDeliveryDTO
+            {
+                Id = delivery.Id,
+                CreatedAt = delivery.CreatedAt,
+                Code = delivery.Code,
+                MunicipalityId = delivery.MunicipalityId,
+                MunicipalityName = delivery.Municipality?.Name,
+                DeliveryAgencyId = delivery.DeliveryAgencyId,
+                DeliveryAgencyName = delivery.DeliveryAgency?.Name,
+                DeliveryAgencyCanCollectCashOnDelivery = delivery.DeliveryAgency?.CanCollectCashOnDelivery ?? false,
+                DeliveryStatusId = delivery.DeliveryStatusId,
+                DeliveryStatusName = delivery.DeliveryStatus?.Name,
+                ClientId = delivery.ClientId,
+                AmountToCollect = delivery.AmountToCollect,
+                AmountCollectedNio = delivery.AmountCollectedNio,
+                AmountCollectedUsd = delivery.AmountCollectedUsd,
+                ChangeGivenNio = delivery.ChangeGivenNio,
+                CollectionExchangeRate = delivery.CollectionExchangeRate,
+                ShippingChargedToClient = delivery.ShippingChargedToClient,
+                ShippingPaidToAgency = delivery.ShippingPaidToAgency,
+                DeliveryAddress = delivery.DeliveryAddress,
+                Comments = delivery.Comments
             }).ToList()
         };
     }

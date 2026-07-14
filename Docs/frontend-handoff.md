@@ -56,7 +56,7 @@ Puede trabajar con:
 | Compras | Crear ordenes, tracking y recepcion de productos | Admin | Necesario para inventario |
 | Inventario | Ver disponibilidad y problemas de inventario | Admin, Vendedor | Necesario para operacion |
 | Ventas | Crear ventas, detalles, pagos y entregas | Admin, Vendedor | Necesario para MVP |
-| Reservas | Apartar productos, liberar o convertir en venta | Admin, Vendedor | Necesario para operacion |
+| Reservas | Registrar ventas confirmadas para retiro o envío futuro | Admin, Vendedor | Necesario para operacion |
 | Descuentos | Gestionar campanas y descuentos manuales | Admin, Vendedor con permisos | Necesario para ventas |
 | Finanzas | Ver balance, movimientos, gastos y prestamos | Admin | Posterior al MVP si se prioriza ventas primero |
 | Configuracion | Agencias, terminales, proveedores y categorias de gasto | Admin | Segun necesidad operativa |
@@ -88,25 +88,50 @@ Puede trabajar con:
 | Configuracion | Terminales de pago | Admin | Listar, crear, editar | Terminales POS | `GET /api/v1/paymentterminals`, `POST /api/v1/paymentterminals`, `PUT /api/v1/paymentterminals/{id}` |
 | Configuracion | Categorias de gasto | Admin | Listar, crear, editar | Categorias de gasto | `GET /api/v1/expensecategories`, `POST /api/v1/expensecategories`, `PUT /api/v1/expensecategories/{id}` |
 
-## Pantallas planeadas que dependen de endpoints por confirmar
+## Contratos operativos confirmados
 
-Estas pantallas aparecen en las reglas de negocio y casos de uso, pero deben confirmarse contra controladores/endpoints finales antes de implementar el frontend.
+Los endpoints siguientes ya están implementados y son la base de las pantallas críticas. Todos requieren JWT. `Employee` es el rol técnico de Vendedor.
 
-| Modulo | Pantalla/flujo | Documentacion fuente |
-|---|---|---|
-| Ventas | Crear venta | `Docs/use-cases/create-sale.md`, `Docs/business-rules/sales.md` |
-| Ventas | Crear pago de venta | `Docs/use-cases/create-sale-payment.md`, `Docs/business-rules/payments.md` |
-| Ventas | Crear entrega/envio | `Docs/use-cases/create-sale-delivery.md`, `Docs/business-rules/deliveries.md` |
-| Ventas | Cancelar venta | `Docs/use-cases/cancel-sale.md`, `Docs/business-rules/returns-and-exchanges.md` |
-| Ventas | Cancelar detalle de venta | `Docs/use-cases/cancel-sale-detail.md`, `Docs/business-rules/returns-and-exchanges.md` |
-| Reservas | Crear reserva | `Docs/use-cases/create-product-hold.md`, `Docs/business-rules/product-holds.md` |
-| Reservas | Liberar reserva | `Docs/use-cases/release-product-hold.md`, `Docs/business-rules/product-holds.md` |
-| Reservas | Convertir reserva en venta | `Docs/use-cases/convert-product-hold-to-sale.md`, `Docs/business-rules/product-holds.md` |
-| Descuentos | Aplicar descuento manual | `Docs/use-cases/apply-manual-discount.md`, `Docs/business-rules/discounts.md` |
-| Descuentos | Aplicar descuento de campana | `Docs/use-cases/apply-campaign-discount.md`, `Docs/business-rules/discounts.md` |
-| Inventario | Registrar producto danado | `Docs/use-cases/register-damaged-product.md`, `Docs/business-rules/product-inventory-issues.md` |
-| Inventario | Registrar producto perdido | `Docs/use-cases/register-lost-product.md`, `Docs/business-rules/product-inventory-issues.md` |
-| Inventario | Registrar producto descartado | `Docs/use-cases/register-discarded-product.md`, `Docs/business-rules/product-inventory-issues.md` |
+### Ventas, pagos y envíos
+
+| Flujo | Endpoint | Rol | Resultado |
+|---|---|---|---|
+| Listar / abrir venta | `GET /api/v1/sales`, `GET /api/v1/sales/{id}` | Admin, Vendedor | La consulta individual incluye productos, pagos, prendas en selección y `deliveries`. |
+| Crear venta o reserva | `POST /api/v1/sales` | Admin, Vendedor | Devuelve `201` y el id. Para una reserva confirmada enviar `saleStatusId: 2` (`Reserved`). |
+| Registrar abono o pago | `POST /api/v1/sales/{id}/payment-movements` | Admin, Vendedor | Devuelve `201` y el id. El backend calcula el total y estado de pago. |
+| Crear envío | `POST /api/v1/sales/{id}/deliveries` | Admin, Vendedor | Devuelve `201` y el id; deja la venta `ReadyForDelivery`. |
+| Despachar | `POST /api/v1/sales/{id}/deliveries/{deliveryId}/send` | Admin, Vendedor | Cambia el envío a `Sent`. |
+| Completar, fallar o cancelar envío | `.../complete`, `.../fail`, `.../cancel` | Admin | Son transiciones posteriores o sensibles. |
+| Conciliar cobro COD | `GET /api/v1/deliveryagencyreconciliations/pending-deliveries`, `POST /api/v1/deliveryagencyreconciliations` | Admin | Un envío `Sent` solo se completa si la agencia recauda el saldo total. |
+| Corregir o cancelar venta | `PATCH /api/v1/sales/{id}`, `PUT /api/v1/sales/{id}/products`, `POST /api/v1/sales/{id}/cancel` | Admin | No mostrar estas acciones a Vendedor. |
+
+Para crear una venta, `products` y `selectionProducts` son listas distintas. Cada elemento de `products` requiere `productId`, `quantity`, `discountAmount` y `discountSourceId`. El pago inicial es opcional en `paymentMovements`; cada pago requiere `paymentMethodId`, `productAmount` y `shippingAmount`.
+
+`shippingAmount` mayor que cero exige `saleDeliveryId`; primero debe existir el envío. Para pago con tarjeta (`paymentMethodId: 3`) también es obligatorio `paymentTerminalId`; en efectivo o transferencia no debe enviarse terminal. La respuesta de detalle expone el total calculado y cada `paymentMovement.grossAmount`; la UI no debe recalcularlos.
+
+Una reserva con pago no usa `ProductHold`: es una venta con `saleStatusId: 2` (`Reserved`). Permanece activa hasta que el negocio la cancele. `selectionHolds` representa únicamente prendas enviadas para prueba, talla o selección.
+
+### Incidencias de inventario
+
+| Flujo | Endpoint | Rol | Resultado |
+|---|---|---|---|
+| Listar / consultar | `GET /api/v1/product-inventory-issues`, `GET /api/v1/product-inventory-issues/{id}` | Admin, Vendedor | Filtros: producto, detalle, tipo y estado. |
+| Abrir incidencia | `POST /api/v1/product-inventory-issues` | Admin | Devuelve `201` y el id; mueve la cantidad de disponible a no disponible. |
+| Resolver | `PATCH /api/v1/product-inventory-issues/{id}/resolution` | Admin | Devuelve la incidencia resuelta. |
+| Cancelar incidencia abierta | `DELETE /api/v1/product-inventory-issues/{id}` | Admin | La deja en estado `Cancelled` y repone disponibilidad. |
+
+Al crear una incidencia se envían `productId`, `productInventoryIssueTypeId`, `quantity`, `issueDate` opcional y `comments` opcional. Los tipos son `Damaged=1`, `Dirty=2`, `Missing=3`, `UnderReview=4` y `Repairing=5`. Mientras esté `Open=1`, la cantidad queda automáticamente fuera de disponibilidad. Al resolver, usar `ResolvedToAvailable=2`, `Discarded=3`, `ConfirmedLost=4` o `Cancelled=5`.
+
+### Errores y estados que debe manejar la UI
+
+- Un `400` devuelve `ProblemDetails`: usar `title` y `detail` para el mensaje, no asumir un texto fijo. Suele indicar regla de negocio: saldo insuficiente, envío inválido o monto incorrecto.
+- Un `404` indica que el id enviado no existe o ya no pertenece al recurso indicado. Un `401`/`403` implica sesión expirada o falta de permiso.
+- Tras cualquier `POST`, `PATCH` o transición, recargar `GET /api/v1/sales/{id}` o actualizar con su resultado. Así la interfaz refleja los estados que calcula el backend.
+- Swagger ya muestra los resúmenes, DTOs y respuestas principales de estos endpoints en desarrollo mediante `/swagger`.
+
+## Pendiente que no bloquea estas pantallas
+
+No existe todavía una ruta específica para cancelar una sola línea de venta. Por ahora, el frontend no debe mostrar esa acción; puede usar cancelación completa de venta o los flujos administrativos de devolución/cambio cuando correspondan.
 
 ## Reglas que el frontend debe respetar
 

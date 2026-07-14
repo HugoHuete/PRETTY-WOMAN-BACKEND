@@ -24,6 +24,7 @@ public class SalesController(
 
     /// <summary>Consulta ventas paginadas y permite filtrar por estado, pago, canal, clienta y fechas.</summary>
     [HttpGet]
+    [ProducesResponseType(typeof(PaginatedResult<SaleDTO>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PaginatedResult<SaleDTO>>> GetAll([FromQuery] SaleQueryDTO query)
     {
         var sales = await _saleService.GetAllAsync(query);
@@ -32,6 +33,8 @@ public class SalesController(
 
     /// <summary>Obtiene el detalle de una venta cuando se necesita consultar o gestionar una venta específica.</summary>
     [HttpGet("{id:int}")]
+    [ProducesResponseType(typeof(SaleDTO), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<SaleDTO>> GetById(int id)
     {
         var sale = await _saleService.GetByIdAsync(id);
@@ -40,6 +43,8 @@ public class SalesController(
 
     /// <summary>Registra una nueva venta al confirmar una compra del cliente.</summary>
     [HttpPost]
+    [ProducesResponseType(typeof(int), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<int>> Create([FromBody] CreateSaleDTO createSaleDTO)
     {
         var id = await _saleService.CreateAsync(createSaleDTO);
@@ -176,6 +181,8 @@ public class SalesController(
 
     /// <summary>Registra un abono, pago o ajuste de cobro aplicado a una venta.</summary>
     [HttpPost("{id:int}/payment-movements")]
+    [ProducesResponseType(typeof(int), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<int>> AddPaymentMovement(int id, [FromBody] CreateSalePaymentMovementDTO paymentMovement)
     {
         var paymentMovementId = await _saleService.AddPaymentMovementAsync(id, paymentMovement);
@@ -204,6 +211,8 @@ public class SalesController(
 
     /// <summary>Crea el envío de una venta cuando sus productos deben entregarse a domicilio o por agencia.</summary>
     [HttpPost("{id:int}/deliveries")]
+    [ProducesResponseType(typeof(int), StatusCodes.Status201Created)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<int>> CreateDelivery(int id, [FromBody] CreateSaleDeliveryDTO delivery)
     {
         var deliveryId = await _saleService.CreateDeliveryAsync(id, delivery);

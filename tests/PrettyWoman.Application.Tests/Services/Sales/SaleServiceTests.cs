@@ -41,6 +41,49 @@ public class SaleServiceTests
     }
 
     [Fact]
+    public async Task GetByIdAsync_IncludesDeliveryDataNeededByTheOperationsScreen()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        var sale = new Sale
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.SentForDelivery,
+            SalePaymentStatusId = (int)SalePaymentStatusOption.PartiallyPaid,
+            UserId = "seller",
+            Subtotal = 100m,
+            Total = 100m
+        };
+        context.Sales.Add(sale);
+        await context.SaveChangesAsync();
+
+        context.SaleDeliveries.Add(new SaleDelivery
+        {
+            Code = "ENV-001",
+            SaleId = sale.Id,
+            MunicipalityId = 1,
+            DeliveryAgencyId = 1,
+            DeliveryStatusId = (int)DeliveryStatusCode.Sent,
+            AmountToCollect = 110m,
+            ShippingChargedToClient = 10m,
+            DeliveryAddress = "Barrio Centro",
+            UserId = "seller"
+        });
+        await context.SaveChangesAsync();
+
+        var result = await CreateService(context).GetByIdAsync(sale.Id);
+
+        var delivery = Assert.Single(result.Deliveries);
+        Assert.Equal("ENV-001", delivery.Code);
+        Assert.Equal((int)DeliveryStatusCode.Sent, delivery.DeliveryStatusId);
+        Assert.Equal("Agencia COD", delivery.DeliveryAgencyName);
+        Assert.True(delivery.DeliveryAgencyCanCollectCashOnDelivery);
+        Assert.Equal("Managua", delivery.MunicipalityName);
+        Assert.Equal(110m, delivery.AmountToCollect);
+    }
+
+    [Fact]
     public async Task CreateAsync_CreatesInStoreSaleWithMultipleFullPayments()
     {
         await using var context = CreateContext();
