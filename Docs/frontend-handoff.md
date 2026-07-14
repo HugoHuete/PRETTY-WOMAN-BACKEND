@@ -125,11 +125,16 @@ Estas pantallas aparecen en las reglas de negocio y casos de uso, pero deben con
   Vendedor puede usar cualquier endpoint autenticado: cada modulo y accion se valida en el backend.
 - El Vendedor puede consultar productos, inventario e incidencias; consultar categorias, subcategorias
   y tallas para filtrar el catalogo; crear y editar clientes; consultar agencias de envio y terminales
-  de pago; y consultar o crear ventas, pagos y entregas. Un descuento manual se aplica como parte de
+  de pago; y consultar o crear ventas, pagos y entregas. Puede crear envios (`ReadyForDelivery`) y
+  marcar como enviados los envios pendientes (`Sent`). Un descuento manual se aplica como parte de
   la creacion de una venta.
 - El Vendedor no puede crear ni actualizar catalogos, compras, configuracion, campanas de descuento,
   finanzas, incidencias de inventario, ni bloquear clientes. Las correcciones, cancelaciones,
-  devoluciones, reembolsos, cambios y transiciones posteriores de una venta son exclusivas de Admin.
+  devoluciones, reembolsos, cambios y transiciones posteriores a `Sent` de una venta son exclusivas
+  de Admin.
+- Una venta con pago parcial no se entrega a la clienta. Una agencia con cobro contra entrega puede
+  transportar el pedido, pero solo se completa cuando recauda el total pendiente; de lo contrario el
+  envio se marca fallido, sin cobro parcial.
 - Admin conserva acceso completo a todos los modulos.
 - La tienda publica para clientas, si se construye, ira en otro proyecto.
 - El mapa de pantallas puede empezar en este backend como handoff y moverse al repo frontend cuando exista.

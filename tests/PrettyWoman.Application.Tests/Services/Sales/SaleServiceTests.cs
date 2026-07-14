@@ -708,7 +708,8 @@ public class SaleServiceTests
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Transfer, ProductAmount = 500m }]
         });
 
         var pendingDeliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
@@ -1202,7 +1203,6 @@ public class SaleServiceTests
             ShippingChargedToClient = 50m
         });
         await saleService.MarkDeliveryAsSentAsync(saleId, deliveryId);
-        await saleService.MarkDeliveryAsCompletedAsync(saleId, deliveryId);
 
         var reconciliationId = await reconciliationService.CreateAsync(new CreateDeliveryAgencyReconciliationDTO
         {
@@ -1278,7 +1278,6 @@ public class SaleServiceTests
             Products = [new CreateSaleProductDTO { ProductId = cheaperProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         await saleService.MarkDeliveryAsSentAsync(saleId, deliveryId);
-        await saleService.MarkDeliveryAsCompletedAsync(saleId, deliveryId);
 
         var reconciliationId = await reconciliationService.CreateAsync(new CreateDeliveryAgencyReconciliationDTO
         {

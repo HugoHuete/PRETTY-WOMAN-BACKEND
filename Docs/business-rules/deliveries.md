@@ -21,7 +21,7 @@ A delivery is active while its status is neither `Completed`, `Cancelled`, nor `
 - The update recalculates `amount_to_collect` and applies the selected agency collection rule.
 - A delivery can be edited only while it is `Pending`.
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/send` transitions a delivery from `Pending` to `Sent` and sets the sale to `SentForDelivery`.
-- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/complete` transitions a sent delivery to `Completed` and completes the sale.
+- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/complete` transitions a sent delivery to `Completed` only when los productos y el envio ya estan pagados completamente.
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/fail` transitions a sent delivery to `Failed` and returns the sale to `ReadyForDelivery` for a new attempt.
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/cancel` transitions a pending delivery to `Cancelled` and returns the sale to `ReadyForDelivery`.
 - A completed or cancelled sale must not retain an active delivery.
@@ -41,6 +41,13 @@ For an agency with `can_collect_cash_on_delivery = false`:
 - `amount_to_collect` is zero because the agency cannot collect on delivery.
 
 The amount collected by the agency is not a sale payment until its delivery is included in an agency reconciliation.
+
+For cash-on-delivery deliveries, a `Sent` delivery is reconciled only when the agency reports the full outstanding amount. The reconciliation records that payment and completes both the delivery and the sale. If the client cannot pay the full amount, the agency must not deliver the products: the delivery is marked `Failed` and no partial collection is recorded.
+
+## Roles operativos
+
+- Vendedor (`Employee`) puede crear un envio, lo que deja la venta en `ReadyForDelivery`, y marcar un envio pendiente como `Sent`.
+- Admin gestiona correcciones, cancelaciones, entregas fallidas, completadas, entregadas con seleccion pendiente y conciliaciones.
 
 ## Agency reconciliation
 

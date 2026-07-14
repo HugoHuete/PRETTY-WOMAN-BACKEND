@@ -24,7 +24,8 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             .Include(item => item.Sale)
             .Where(item =>
                 !item.DeliveryAgencyReconciliationId.HasValue &&
-                (item.DeliveryStatusId == (int)DeliveryStatusCode.Completed ||
+                (item.DeliveryStatusId == (int)DeliveryStatusCode.Sent ||
+                 item.DeliveryStatusId == (int)DeliveryStatusCode.Completed ||
                  item.DeliveryStatusId == (int)DeliveryStatusCode.Failed) &&
                 !_context.ProductHolds.Any(hold =>
                     hold.SaleId == item.SaleId &&
@@ -112,7 +113,7 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             ValidateDeliveryForReconciliation(delivery, deliveryRequest, agency.Id, collectedAmount);
             ApplyDeliveryCollection(delivery, deliveryRequest, reconciliation);
 
-            if (delivery.DeliveryStatusId == (int)DeliveryStatusCode.Completed && collectedAmount > 0)
+            if (delivery.DeliveryStatusId is (int)DeliveryStatusCode.Sent or (int)DeliveryStatusCode.Completed && collectedAmount > 0)
             {
                 var payment = CreateAgencyCollectionPayment(delivery.Sale!, delivery, collectedAmount, reconciliation, ResolveUserId());
                 delivery.Sale!.PaymentMovements.Add(payment);
@@ -129,6 +130,13 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
                 productPaymentTotal,
                 allowOverpayment: sale.SalePaymentStatusId == (int)SalePaymentStatusOption.RefundPending);
             sale.SalePaymentStatusId = SalePaymentMovementRules.ResolveStatus(sale.Total, productPaymentTotal);
+        }
+
+        foreach (var delivery in deliveries.Where(item => item.DeliveryStatusId == (int)DeliveryStatusCode.Sent))
+        {
+            // Para COD, la conciliación que registra el cobro completo es la que confirma la entrega.
+            delivery.DeliveryStatusId = (int)DeliveryStatusCode.Completed;
+            delivery.Sale!.SaleStatusId = (int)SaleStatusOption.Completed;
         }
 
         foreach (var delivery in deliveries)
@@ -245,8 +253,8 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             throw new AppBadRequestException("Todos los envios de una conciliacion deben pertenecer a la misma agencia.");
         if (delivery.DeliveryAgencyReconciliationId.HasValue)
             throw new AppBadRequestException("Un envio no puede incluirse en mas de una conciliacion.");
-        if (delivery.DeliveryStatusId is not ((int)DeliveryStatusCode.Completed or (int)DeliveryStatusCode.Failed))
-            throw new AppBadRequestException("Solo se pueden conciliar envios completados o fallidos.");
+        if (delivery.DeliveryStatusId is not ((int)DeliveryStatusCode.Sent or (int)DeliveryStatusCode.Completed or (int)DeliveryStatusCode.Failed))
+            throw new AppBadRequestException("Solo se pueden conciliar envios enviados, completados o fallidos.");
         if (delivery.Sale!.ProductHolds.Any(hold => hold.ProductHoldStatusId == (int)ProductHoldStatusOption.Active))
             throw new AppBadRequestException("No se puede conciliar un envio con prendas enviadas para seleccion sin resolver.");
 
@@ -255,6 +263,17 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             throw new AppBadRequestException("Un envio fallido no puede registrar cobros de la clienta.");
         if (collectedAmount > delivery.AmountToCollect)
             throw new AppBadRequestException("El monto recolectado no puede exceder el monto indicado para cobrar en el envio.");
+
+        if (delivery.DeliveryStatusId == (int)DeliveryStatusCode.Sent)
+        {
+            var outstandingProductAmount = Math.Max(0, delivery.Sale!.Total - SalePaymentMovementRules.CalculateProductTotal(delivery.Sale.PaymentMovements));
+            var outstandingShippingAmount = Math.Max(0, delivery.ShippingChargedToClient - SalePaymentMovementRules.CalculateShippingTotal(delivery.Sale.PaymentMovements, delivery.Id));
+            var outstandingTotal = Math.Round(outstandingProductAmount + outstandingShippingAmount, 2);
+            if (collectedAmount != outstandingTotal)
+            {
+                throw new AppBadRequestException("Un envio enviado solo puede completarse si la clienta paga el saldo total.");
+            }
+        }
     }
 
     // El efectivo neto recaudado excluye el vuelto entregado en cordobas.

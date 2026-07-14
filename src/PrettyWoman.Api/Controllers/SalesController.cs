@@ -220,7 +220,6 @@ public class SalesController(
     }
 
     /// <summary>Marca el envío como despachado cuando los productos salen hacia el cliente o la agencia.</summary>
-    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/deliveries/{deliveryId:int}/send")]
     public async Task<IActionResult> MarkDeliveryAsSent(int id, int deliveryId)
     {

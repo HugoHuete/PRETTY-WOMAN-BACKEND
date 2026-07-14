@@ -239,6 +239,7 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
     {
         return await _context.SaleDeliveries
             .Include(item => item.Sale)
+                .ThenInclude(sale => sale!.PaymentMovements)
             .FirstOrDefaultAsync(item => item.Id == deliveryId && item.SaleId == saleId)
             ?? throw new AppNotFoundException($"El envio con id {deliveryId} no existe para la venta indicada.");
     }
@@ -319,6 +320,14 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
     {
         if (delivery.DeliveryStatusId is not ((int)DeliveryStatusCode.Sent or (int)DeliveryStatusCode.DeliveredPendingSelection))
             throw new AppBadRequestException("Solo se puede completar un envio enviado a la agencia.");
+
+        var payments = delivery.Sale!.PaymentMovements;
+        var productPaymentTotal = SalePaymentMovementRules.CalculateProductTotal(payments);
+        var shippingPaymentTotal = SalePaymentMovementRules.CalculateShippingTotal(payments, delivery.Id);
+        if (productPaymentTotal < delivery.Sale.Total || shippingPaymentTotal < delivery.ShippingChargedToClient)
+        {
+            throw new AppBadRequestException("La venta y el envio deben estar pagados completamente antes de completar la entrega.");
+        }
     }
 
     private static void EnsureDeliveryCanBeSent(SaleDelivery delivery)

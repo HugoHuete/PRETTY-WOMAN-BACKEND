@@ -138,7 +138,7 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
     }
 
     [Fact]
-    public async Task AdminCanReconcileCompletedCashOnDelivery_AndRecordsTheCollection()
+    public async Task AdminCanReconcileSentCashOnDelivery_AndCompletesTheSaleWhenFullyCollected()
     {
         var product = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
         var location = await _factory.SeedDeliveryLocationAsync();
@@ -161,7 +161,6 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
         Assert.Equal(HttpStatusCode.Created, delivery.StatusCode);
         var deliveryId = await delivery.Content.ReadFromJsonAsync<int>();
         Assert.Equal(HttpStatusCode.NoContent, (await admin.PostAsync($"/api/v1/sales/{saleId}/deliveries/{deliveryId}/send", null)).StatusCode);
-        Assert.Equal(HttpStatusCode.NoContent, (await admin.PostAsync($"/api/v1/sales/{saleId}/deliveries/{deliveryId}/complete", null)).StatusCode);
 
         var reconciliation = await admin.PostAsJsonAsync("/api/v1/deliveryagencyreconciliations", new CreateDeliveryAgencyReconciliationDTO
         {
@@ -174,6 +173,69 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
         Assert.True(await reconciliation.Content.ReadFromJsonAsync<int>() > 0);
         var completedSale = await GetSaleAsync(admin, saleId);
         Assert.Equal((int)SalePaymentStatusOption.Paid, completedSale.SalePaymentStatusId);
+        Assert.Equal((int)SaleStatusOption.Completed, completedSale.SaleStatusId);
+    }
+
+    [Fact]
+    public async Task Employee_CanCreateAndSendDelivery()
+    {
+        var product = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        var location = await _factory.SeedDeliveryLocationAsync();
+        using var employee = await CreateEmployeeClientAsync();
+
+        var sale = await employee.PostAsJsonAsync("/api/v1/sales", new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            Products = [new CreateSaleProductDTO { ProductId = product.ProductId, Quantity = 1 }]
+        });
+        var saleId = await sale.Content.ReadFromJsonAsync<int>();
+        var delivery = await employee.PostAsJsonAsync($"/api/v1/sales/{saleId}/deliveries", new CreateSaleDeliveryDTO
+        {
+            Code = $"EMP-{Guid.NewGuid():N}"[..20],
+            MunicipalityId = location.MunicipalityId,
+            DeliveryAgencyId = location.DeliveryAgencyId,
+            ShippingChargedToClient = 50m
+        });
+        var deliveryId = await delivery.Content.ReadFromJsonAsync<int>();
+
+        var send = await employee.PostAsync($"/api/v1/sales/{saleId}/deliveries/{deliveryId}/send", null);
+
+        Assert.Equal(HttpStatusCode.Created, sale.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, delivery.StatusCode);
+        Assert.Equal(HttpStatusCode.NoContent, send.StatusCode);
+    }
+
+    [Fact]
+    public async Task Reconciliation_RejectsPartialCashOnDeliveryCollection()
+    {
+        var product = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        var location = await _factory.SeedDeliveryLocationAsync();
+        using var admin = await CreateAdminClientAsync();
+
+        var sale = await admin.PostAsJsonAsync("/api/v1/sales", new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            Products = [new CreateSaleProductDTO { ProductId = product.ProductId, Quantity = 1 }]
+        });
+        var saleId = await sale.Content.ReadFromJsonAsync<int>();
+        var delivery = await admin.PostAsJsonAsync($"/api/v1/sales/{saleId}/deliveries", new CreateSaleDeliveryDTO
+        {
+            Code = $"PARTIAL-{Guid.NewGuid():N}"[..20],
+            MunicipalityId = location.MunicipalityId,
+            DeliveryAgencyId = location.DeliveryAgencyId,
+            ShippingChargedToClient = 50m
+        });
+        var deliveryId = await delivery.Content.ReadFromJsonAsync<int>();
+        await admin.PostAsync($"/api/v1/sales/{saleId}/deliveries/{deliveryId}/send", null);
+
+        var reconciliation = await admin.PostAsJsonAsync("/api/v1/deliveryagencyreconciliations", new CreateDeliveryAgencyReconciliationDTO
+        {
+            DeliveryAgencyId = location.DeliveryAgencyId,
+            SettlementExchangeRate = 36m,
+            Deliveries = [new ReconcileSaleDeliveryDTO { SaleDeliveryId = deliveryId, AmountCollectedNio = 200m }]
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, reconciliation.StatusCode);
     }
 
     [Fact]
