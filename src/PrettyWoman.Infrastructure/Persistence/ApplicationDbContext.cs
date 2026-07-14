@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using PrettyWoman.Application.Interfaces;
 using PrettyWoman.Domain.Entities;
 
@@ -24,6 +25,9 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
         ApplyAuditValues();
         return base.SaveChangesAsync(cancellationToken);
     }
+
+    public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default) =>
+        Database.BeginTransactionAsync(cancellationToken);
 
     private void ApplyAuditValues()
     {

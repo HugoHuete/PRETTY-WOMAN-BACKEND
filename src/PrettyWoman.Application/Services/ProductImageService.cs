@@ -154,6 +154,112 @@ public class ProductImageService(
         }
     }
 
+    public async Task<IReadOnlyCollection<ProductImageDTO>> UpdateAsync(
+        int productDetailId,
+        UpdateProductImagesDTO request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.ImageIdsInOrder is null)
+        {
+            throw new AppBadRequestException("Debe enviar la lista ordenada de imágenes.");
+        }
+
+        if (!await context.ProductDetails.AnyAsync(product => product.Id == productDetailId, cancellationToken))
+        {
+            throw new AppNotFoundException($"El producto con id '{productDetailId}' no existe.");
+        }
+
+        var images = await context.ProductImages
+            .Where(image => image.ProductDetailId == productDetailId)
+            .Include(image => image.MediaAsset)
+                .ThenInclude(asset => asset!.Variants)
+            .ToListAsync(cancellationToken);
+        var orderedIds = request.ImageIdsInOrder;
+
+        if (orderedIds.Count != images.Count || orderedIds.Distinct().Count() != orderedIds.Count ||
+            !orderedIds.All(imageId => images.Any(image => image.Id == imageId)))
+        {
+            throw new AppBadRequestException("La lista debe contener exactamente una vez cada imagen del producto.");
+        }
+
+        if (!orderedIds.Contains(request.PrimaryImageId))
+        {
+            throw new AppBadRequestException("La imagen principal debe pertenecer a la lista enviada.");
+        }
+
+        var response = orderedIds
+            .Select(imageId => MapProductImage(images.Single(image => image.Id == imageId)))
+            .ToList();
+
+        await using var transaction = await context.BeginTransactionAsync(cancellationToken);
+        foreach (var image in images)
+        {
+            image.IsPrimary = false;
+        }
+        await context.SaveChangesAsync(cancellationToken);
+
+        for (var index = 0; index < orderedIds.Count; index++)
+        {
+            var image = images.Single(item => item.Id == orderedIds[index]);
+            image.SortOrder = index;
+            image.IsPrimary = image.Id == request.PrimaryImageId;
+        }
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        for (var index = 0; index < response.Count; index++)
+        {
+            response[index].IsPrimary = response[index].Id == request.PrimaryImageId;
+            response[index].SortOrder = index;
+        }
+
+        return response;
+    }
+
+    public async Task DeleteAsync(int productDetailId, int imageId, CancellationToken cancellationToken = default)
+    {
+        var image = await context.ProductImages
+            .Where(item => item.Id == imageId && item.ProductDetailId == productDetailId)
+            .Include(item => item.MediaAsset)
+                .ThenInclude(asset => asset!.Variants)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new AppNotFoundException($"La imagen con id '{imageId}' no existe para el producto con id '{productDetailId}'.");
+        var objectsToDelete = image.MediaAsset?.Variants
+            .Select(variant => (variant.Bucket, variant.StorageKey))
+            .ToList() ?? [];
+
+        await using var transaction = await context.BeginTransactionAsync(cancellationToken);
+        if (image.IsPrimary)
+        {
+            image.IsPrimary = false;
+            await context.SaveChangesAsync(cancellationToken);
+
+            var nextImage = await context.ProductImages
+                .Where(item => item.ProductDetailId == productDetailId && item.Id != imageId)
+                .OrderBy(item => item.SortOrder)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (nextImage is not null)
+            {
+                nextImage.IsPrimary = true;
+            }
+        }
+
+        context.ProductImages.Remove(image);
+        if (image.MediaAsset is not null)
+        {
+            context.MediaAssets.Remove(image.MediaAsset);
+        }
+        await context.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+
+        foreach (var item in objectsToDelete)
+        {
+            try { await objectStorage.DeleteAsync(item.Bucket, item.StorageKey, cancellationToken); }
+            catch { /* The database no longer references the object; a storage cleanup can retry later. */ }
+        }
+    }
+
     private async Task SaveProductImageAsync(ProductImage productImage, CancellationToken cancellationToken)
     {
         try
@@ -176,6 +282,29 @@ public class ProductImageService(
                 .MaxAsync(cancellationToken) ?? -1) + 1;
             await context.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    private ProductImageDTO MapProductImage(ProductImage image)
+    {
+        var mediaAsset = image.MediaAsset
+            ?? throw new InvalidOperationException("La imagen no tiene un recurso multimedia asociado.");
+        var thumbnailKey = mediaAsset.Variants
+            .FirstOrDefault(variant => variant.Type == MediaVariantType.Thumbnail)
+            ?.StorageKey
+            ?? throw new InvalidOperationException("La imagen no tiene variante thumbnail.");
+        var webKey = mediaAsset.Variants
+            .FirstOrDefault(variant => variant.Type == MediaVariantType.Web)
+            ?.StorageKey
+            ?? throw new InvalidOperationException("La imagen no tiene variante web.");
+
+        return new ProductImageDTO
+        {
+            Id = image.Id,
+            ThumbnailUrl = mediaUrlResolver.GetPublicUrl(thumbnailKey),
+            WebUrl = mediaUrlResolver.GetPublicUrl(webKey),
+            IsPrimary = image.IsPrimary,
+            SortOrder = image.SortOrder
+        };
     }
 
     private static async Task<GeneratedVariant> CreateWebpAsync(Image image, int maxWidth, CancellationToken cancellationToken)

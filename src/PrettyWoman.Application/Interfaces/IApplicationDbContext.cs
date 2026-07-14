@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using PrettyWoman.Domain.Entities;
 
 namespace PrettyWoman.Application.Interfaces;
@@ -81,5 +82,6 @@ public interface IApplicationDbContext
     DbSet<InventoryMovement> InventoryMovements { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+    Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
 }
 

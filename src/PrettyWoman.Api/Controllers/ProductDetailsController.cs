@@ -39,6 +39,23 @@ public class ProductDetailsController(IProductService productService, IProductIm
         return Ok(image);
     }
 
+    [HttpPut("{productDetailId:int}/images")]
+    public async Task<ActionResult<IReadOnlyCollection<ProductImageDTO>>> UpdateImages(
+        int productDetailId,
+        UpdateProductImagesDTO request,
+        CancellationToken cancellationToken)
+    {
+        var images = await _productImageService.UpdateAsync(productDetailId, request, cancellationToken);
+        return Ok(images);
+    }
+
+    [HttpDelete("{productDetailId:int}/images/{imageId:int}")]
+    public async Task<IActionResult> DeleteImage(int productDetailId, int imageId, CancellationToken cancellationToken)
+    {
+        await _productImageService.DeleteAsync(productDetailId, imageId, cancellationToken);
+        return NoContent();
+    }
+
     [HttpGet("{productDetailId:int}/inventory-movements")]
     public async Task<ActionResult<IEnumerable<ProductInventoryMovementDTO>>> GetInventoryMovements(int productDetailId)
     {
