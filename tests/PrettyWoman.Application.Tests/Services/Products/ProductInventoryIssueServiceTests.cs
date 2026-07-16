@@ -214,7 +214,7 @@ public class ProductInventoryIssueServiceTests
 
     private static ProductInventoryIssueService CreateService(ApplicationDbContext context)
     {
-        return new ProductInventoryIssueService(context);
+        return new ProductInventoryIssueService(context, new InventoryService(context));
     }
 
     private static async Task SeedAsync(ApplicationDbContext context)

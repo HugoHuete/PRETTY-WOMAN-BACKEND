@@ -9,9 +9,12 @@ using PrettyWoman.Domain.Enums;
 
 namespace PrettyWoman.Application.Services;
 
-public class ProductInventoryIssueService(IApplicationDbContext context) : IProductInventoryIssueService
+public class ProductInventoryIssueService(
+    IApplicationDbContext context,
+    IInventoryService inventoryService) : IProductInventoryIssueService
 {
     private readonly IApplicationDbContext _context = context;
+    private readonly IInventoryService _inventoryService = inventoryService;
 
     public async Task<PaginatedResult<ProductInventoryIssueDTO>> GetAllAsync(ProductInventoryIssueQueryDTO query)
     {
@@ -60,11 +63,6 @@ public class ProductInventoryIssueService(IApplicationDbContext context) : IProd
             .FirstOrDefaultAsync(product => product.Id == createIssueDTO.ProductId)
             ?? throw new AppNotFoundException($"La variante con id '{createIssueDTO.ProductId}' no existe.");
 
-        if (product.AvailableQuantity < createIssueDTO.Quantity)
-        {
-            throw new AppBadRequestException($"La variante con id '{product.Id}' no tiene suficiente inventario disponible.");
-        }
-
         var issueDate = createIssueDTO.IssueDate.NormalizeToUtc() ?? DateTime.UtcNow;
         var issue = new ProductInventoryIssue
         {
@@ -76,19 +74,14 @@ public class ProductInventoryIssueService(IApplicationDbContext context) : IProd
             Comments = createIssueDTO.Comments
         };
 
-        product.AvailableQuantity -= createIssueDTO.Quantity;
-        product.UnavailableQuantity += createIssueDTO.Quantity;
-
-        issue.InventoryMovements.Add(new InventoryMovement
-        {
-            Product = product,
-            InventoryMovementTypeId = (int)InventoryMovementTypeOption.IssueOpened,
-            FromStockBucketId = (int)InventoryStockBucketOption.Available,
-            ToStockBucketId = (int)InventoryStockBucketOption.Unavailable,
-            Quantity = createIssueDTO.Quantity,
-            MovementDate = issueDate,
-            Comments = createIssueDTO.Comments
-        });
+        issue.InventoryMovements.Add(_inventoryService.Move(
+            product,
+            InventoryStockBucketOption.Available,
+            InventoryStockBucketOption.Unavailable,
+            createIssueDTO.Quantity,
+            InventoryMovementTypeOption.IssueOpened,
+            issueDate,
+            createIssueDTO.Comments));
 
         await _context.ProductInventoryIssues.AddAsync(issue);
         await _context.SaveChangesAsync();
@@ -102,11 +95,6 @@ public class ProductInventoryIssueService(IApplicationDbContext context) : IProd
         var issue = await GetOpenIssueForUpdateAsync(id);
         var product = issue.Product!;
 
-        if (product.UnavailableQuantity < issue.Quantity)
-        {
-            throw new AppBadRequestException($"La variante con id '{product.Id}' no tiene suficiente inventario no disponible.");
-        }
-
         var status = (ProductInventoryIssueStatusOption)resolveIssueDTO.ProductInventoryIssueStatusId;
         var resolvedAt = resolveIssueDTO.ResolvedAt.NormalizeToUtc() ?? DateTime.UtcNow;
         var movementType = ResolveClosingMovementType(status);
@@ -116,22 +104,14 @@ public class ProductInventoryIssueService(IApplicationDbContext context) : IProd
         issue.ResolvedAt = resolvedAt;
         issue.Comments = resolveIssueDTO.Comments ?? issue.Comments;
 
-        product.UnavailableQuantity -= issue.Quantity;
-        if (toStockBucketId == (int)InventoryStockBucketOption.Available)
-        {
-            product.AvailableQuantity += issue.Quantity;
-        }
-
-        issue.InventoryMovements.Add(new InventoryMovement
-        {
-            Product = product,
-            InventoryMovementTypeId = movementType,
-            FromStockBucketId = (int)InventoryStockBucketOption.Unavailable,
-            ToStockBucketId = toStockBucketId,
-            Quantity = issue.Quantity,
-            MovementDate = resolvedAt,
-            Comments = resolveIssueDTO.Comments,
-        });
+        issue.InventoryMovements.Add(_inventoryService.Move(
+            product,
+            InventoryStockBucketOption.Unavailable,
+            (InventoryStockBucketOption)toStockBucketId,
+            issue.Quantity,
+            (InventoryMovementTypeOption)movementType,
+            resolvedAt,
+            resolveIssueDTO.Comments));
 
         await _context.SaveChangesAsync();
 
