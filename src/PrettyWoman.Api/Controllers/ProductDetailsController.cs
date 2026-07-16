@@ -29,6 +29,13 @@ public class ProductDetailsController(IProductService productService, IProductIm
         return Ok(product);
     }
 
+    [HttpGet("{productDetailId:int}/images/{imageId:int}")]
+    public async Task<ActionResult<ProductImageDTO>> GetImageById(int productDetailId, int imageId, CancellationToken cancellationToken)
+    {
+        var image = await _productImageService.GetByIdAsync(productDetailId, imageId, cancellationToken);
+        return Ok(image);
+    }
+
     [HttpPost("{productDetailId:int}/images")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(8 * 1024 * 1024)]
@@ -36,7 +43,7 @@ public class ProductDetailsController(IProductService productService, IProductIm
     {
         await using var content = file.OpenReadStream();
         var image = await _productImageService.UploadAsync(productDetailId, content, file.ContentType, cancellationToken);
-        return Ok(image);
+        return CreatedAtAction(nameof(GetImageById), new { productDetailId, imageId = image.Id }, image);
     }
 
     [HttpPut("{productDetailId:int}/images")]

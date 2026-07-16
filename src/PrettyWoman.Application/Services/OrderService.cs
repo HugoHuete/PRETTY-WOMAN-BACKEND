@@ -129,7 +129,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         {
             NormalizeTrackingFields(trackingItem);
             await EnsureShippingCompanyExistsAsync(trackingItem.ShippingCompanyId);
-            await EnsureProductReceiptExistsAsync(trackingItem.ProductReceiptId);
+            await EnsureProductReceiptBelongsToOrderAsync(orderId, trackingItem.ProductReceiptId);
             await EnsureTrackingNumberIsUniqueAsync(trackingItem.TrackingNumber);
         }
 
@@ -175,7 +175,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
 
         NormalizeTrackingFields(updateTrackingDTO);
         await EnsureShippingCompanyExistsAsync(updateTrackingDTO.ShippingCompanyId);
-        await EnsureProductReceiptExistsAsync(updateTrackingDTO.ProductReceiptId);
+        await EnsureProductReceiptBelongsToOrderAsync(orderId, updateTrackingDTO.ProductReceiptId);
         await EnsureTrackingNumberIsUniqueAsync(updateTrackingDTO.TrackingNumber, trackingId);
 
         _mapper.Map(updateTrackingDTO, trackingNumber);
@@ -617,18 +617,20 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         }
     }
 
-    private async Task EnsureProductReceiptExistsAsync(int? productReceiptId)
+    private async Task EnsureProductReceiptBelongsToOrderAsync(int orderId, int? productReceiptId)
     {
         if (!productReceiptId.HasValue)
         {
             return;
         }
 
-        var exists = await _context.ProductReceipts.AnyAsync(productReceipt => productReceipt.Id == productReceiptId.Value);
-
-        if (!exists)
+        var receipt = await _context.ProductReceipts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(productReceipt => productReceipt.Id == productReceiptId.Value)
+            ?? throw new AppNotFoundException($"La recepción de productos con id '{productReceiptId.Value}' no existe.");
+        if (receipt.OrderId != orderId)
         {
-            throw new AppNotFoundException($"La recepción de productos con id '{productReceiptId.Value}' no existe.");
+            throw new AppBadRequestException($"La recepción de productos con id '{productReceiptId.Value}' no pertenece a la orden '{orderId}'.");
         }
     }
 

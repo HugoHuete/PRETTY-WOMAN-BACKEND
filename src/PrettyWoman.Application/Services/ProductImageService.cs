@@ -22,6 +22,18 @@ public class ProductImageService(
         "image/jpeg", "image/png", "image/webp"
     };
 
+    public async Task<ProductImageDTO> GetByIdAsync(int productDetailId, int imageId, CancellationToken cancellationToken = default)
+    {
+        var image = await context.ProductImages
+            .Where(item => item.Id == imageId && item.ProductDetailId == productDetailId)
+            .Include(item => item.MediaAsset)
+                .ThenInclude(asset => asset!.Variants)
+            .SingleOrDefaultAsync(cancellationToken)
+            ?? throw new AppNotFoundException($"La imagen con id '{imageId}' no existe para el producto con id '{productDetailId}'.");
+
+        return MapProductImage(image);
+    }
+
     public async Task<ProductImageDTO> UploadAsync(
         int productDetailId,
         Stream content,

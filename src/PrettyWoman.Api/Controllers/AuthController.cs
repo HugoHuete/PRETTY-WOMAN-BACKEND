@@ -23,6 +23,14 @@ public class AuthController(IAuthService authService, ILogger<AuthController> lo
     }
 
     [Authorize(Policy = AppPolicies.RequireAdminRole)]
+    [HttpGet("users/{id}")]
+    public async Task<ActionResult<UserDTO>> GetUserById(string id)
+    {
+        var user = await _authService.GetUserByIdAsync(id);
+        return Ok(user);
+    }
+
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("users")]
     public async Task<ActionResult<UserDTO>> CreateUser([FromBody] CreateUserDTO createUserRequest)
     {
@@ -32,7 +40,7 @@ public class AuthController(IAuthService authService, ILogger<AuthController> lo
             user.Id,
             createUserRequest.Role,
             GetUserId());
-        return CreatedAtAction(nameof(CreateUser), new { id = user.Id }, user);
+        return CreatedAtAction(nameof(GetUserById), new { id = user.Id }, user);
     }
 
     [Authorize(Policy = AppPolicies.RequireAdminRole)]

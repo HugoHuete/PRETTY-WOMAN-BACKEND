@@ -82,6 +82,14 @@ public class AuthService(
         return await CreateUserDtoAsync(user);
     }
 
+    public async Task<UserDTO> GetUserByIdAsync(string id)
+    {
+        var user = await _userManager.FindByIdAsync(id)
+            ?? throw new AppNotFoundException($"El usuario con id '{id}' no existe.");
+
+        return await CreateUserDtoAsync(user);
+    }
+
     public async Task<UserDTO> UnlockUserAsync(string id)
     {
         var user = await _userManager.FindByIdAsync(id)

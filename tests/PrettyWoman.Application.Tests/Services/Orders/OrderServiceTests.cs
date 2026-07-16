@@ -319,6 +319,32 @@ public class OrderServiceTests
         Assert.Equal($"El producto detalle con id '{otherOrderProductDetail.Id}' no pertenece a la orden.", exception.Message);
     }
 
+    [Fact]
+    public async Task AddTrackingNumbersAsync_RejectsReceiptFromAnotherOrder()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.ShippingCompanies.Add(new ShippingCompany { Id = 1, Name = "Cargo Express" });
+        var service = CreateService(context);
+        var orderId = await service.CreateAsync(CreateOrderRequest("SOHO25122", "Vestido"));
+        var otherOrderId = await service.CreateAsync(CreateOrderRequest("SOHO25123", "Blusa"));
+        var receipt = new ProductReceipt { OrderId = otherOrderId, ReceivedDate = DateTime.UtcNow };
+        context.ProductReceipts.Add(receipt);
+        await context.SaveChangesAsync();
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.AddTrackingNumbersAsync(orderId,
+        [
+            new CreateOrderTrackingNumberDTO
+            {
+                ShippingCompanyId = 1,
+                TrackingNumber = "TRACK-OTHER-ORDER",
+                ProductReceiptId = receipt.Id
+            }
+        ]));
+
+        Assert.Equal($"La recepción de productos con id '{receipt.Id}' no pertenece a la orden '{orderId}'.", exception.Message);
+    }
+
     private static OrderService CreateService(ApplicationDbContext context)
     {
         return new OrderService(context, Mapper);
