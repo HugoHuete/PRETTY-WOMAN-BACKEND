@@ -827,7 +827,6 @@ public class SaleServiceTests
             item.InventoryMovementTypeId == (int)InventoryMovementTypeOption.SaleCancelled);
 
         Assert.Equal((int)SaleStatusOption.Cancelled, sale.SaleStatusId);
-        Assert.Equal((int)SaleProductStatusOption.Cancelled, sale.Products.Single().SaleProductStatusId);
         Assert.Equal((int)DeliveryStatusCode.Cancelled, delivery.DeliveryStatusId);
         Assert.Equal(2, updatedProduct.AvailableQuantity);
         Assert.Equal((int)InventoryStockBucketOption.OutOfInventory, inventoryMovement.FromStockBucketId);
@@ -1561,10 +1560,6 @@ var currentUser = new TestCurrentUserService();
             new SalePaymentStatus { Id = (int)SalePaymentStatusOption.PartiallyPaid, Name = nameof(SalePaymentStatusOption.PartiallyPaid) },
             new SalePaymentStatus { Id = (int)SalePaymentStatusOption.Paid, Name = nameof(SalePaymentStatusOption.Paid) },
             new SalePaymentStatus { Id = (int)SalePaymentStatusOption.RefundPending, Name = nameof(SalePaymentStatusOption.RefundPending) });
-        context.SaleProductStatuses.AddRange(
-            new SaleProductStatus { Id = (int)SaleProductStatusOption.Pending, Name = nameof(SaleProductStatusOption.Pending) },
-            new SaleProductStatus { Id = (int)SaleProductStatusOption.Completed, Name = nameof(SaleProductStatusOption.Completed) },
-            new SaleProductStatus { Id = (int)SaleProductStatusOption.Cancelled, Name = nameof(SaleProductStatusOption.Cancelled) });
         context.DeliveryStatuses.AddRange(
             new DeliveryStatus { Id = (int)DeliveryStatusCode.Pending, Name = nameof(DeliveryStatusCode.Pending) },
             new DeliveryStatus { Id = (int)DeliveryStatusCode.Completed, Name = nameof(DeliveryStatusCode.Completed) },

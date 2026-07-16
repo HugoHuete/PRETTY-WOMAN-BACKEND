@@ -15,14 +15,10 @@ public class SaleProduct
     public decimal LineTotal { get; set; } // FinalSalePrice * Quantity
     public decimal TotalCostAtSale { get; set; }
     public decimal GrossProfit { get; set; } // LineTotal - TotalCostAtSale
-    public int SaleProductStatusId { get; set; }
-
-
 
     public Sale? Sale { get; set; }
     public Product? Product { get; set; }
     public DiscountSource? DiscountSource { get; set; }
     public DiscountCampaign? DiscountCampaign { get; set; }
-    public SaleProductStatus? SaleProductStatus { get; set; }
 }
 

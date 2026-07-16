@@ -36,17 +36,6 @@ Paid
 
 Estos estados describen cuanto se ha pagado de una venta y se guardan en `sales.sale_payment_status_id`.
 
-## sale_product_statuses
-
-```txt
-Active
-Cancelled
-Refunded
-Exchanged
-```
-
-Una venta completa puede seguir activa aunque una linea se haya cambiado o reembolsado.
-
 ## delivery_statuses
 
 ```txt

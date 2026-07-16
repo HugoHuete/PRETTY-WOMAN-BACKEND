@@ -9,7 +9,6 @@ Registrar ventas, líneas vendidas, estados, descuentos aplicados, costos histó
 * `sales`
 * `sale_details`
 * `sale_statuses`
-* `sale_detail_statuses`
 * `sales_channels`
 * `clients`
 * `products`
@@ -45,7 +44,6 @@ Debe guardar:
 * costo unitario histórico
 * costo total histórico
 * ganancia bruta
-* estado de la línea
 * campaña de descuento si aplica
 * fuente del descuento
 * comentarios
@@ -127,33 +125,6 @@ Una venta reservada debe usar `Reserved` cuando la clienta ya confirmó la compr
 
 Una venta en local puede crearse sin pago o con pago parcial; por sí sola queda pendiente y no descuenta inventario. Cuando sus pagos de productos alcanzan el total, el sistema la marca `Completed` y registra la salida de inventario. Si posteriormente se corrige o reembolsa un pago que impide mantenerla completada, queda `Reserved` para conservar el inventario apartado y permitir su cancelación o corrección.
 
-## Regla: estados por línea de venta
-
-Estados sugeridos para `sale_detail_statuses`:
-
-* `Active`
-* `Cancelled`
-* `Refunded`
-* `Exchanged`
-
-Esto permite cancelar, devolver o cambiar un producto sin cancelar toda la venta.
-
-Solo las líneas que correspondan según las reglas del reporte deben incluirse en los totales de unidades vendidas y ganancia.
-
-Las líneas canceladas, reembolsadas o cambiadas deben conservarse como historial y no eliminarse físicamente.
-
-## Regla: cancelación de una línea
-
-Al cancelar una línea activa:
-
-1. Cambiar su estado a `Cancelled`.
-2. Revertir el inventario correspondiente.
-3. Crear el movimiento de inventario correspondiente.
-4. Ajustar los totales de la venta.
-5. Revertir o registrar los movimientos financieros necesarios si ya se había recibido un pago.
-
-No se debe eliminar la línea original.
-
 ## Regla: devolución de un producto
 
 Las devoluciones posteriores se registran como `SaleReturn` y `SaleReturnItem`; no cambian los productos ni los pagos históricos de la venta. Cada ítem conserva el monto reconocido y `OriginalUnitCost` de la línea original.
@@ -164,15 +135,15 @@ El reembolso crea un movimiento financiero independiente `CustomerRefund`, sin c
 
 Si una clienta cambia un producto por otra talla o producto:
 
-1. La línea original debe cambiar a estado `Exchanged`.
-2. La nueva línea debe agregarse en la misma venta con estado `Active`.
+1. La línea original permanece inmutable como historial de la venta.
+2. El cambio se registra en `SaleExchange`, `ExchangeReturnItem` y `ExchangeOutboundItem`.
 3. El producto original debe regresar al inventario si está en condiciones de venderse.
-4. El producto nuevo debe salir del inventario como una venta.
+4. El producto nuevo se reserva y sale del inventario al entregarse como reemplazo.
 5. Inventario y finanzas deben reflejar cualquier diferencia de precio.
 
 No se debe crear una nueva venta automáticamente si el cambio forma parte de la misma transacción original.
 
-La nueva línea debe copiar el costo actual del nuevo producto hacia `unit_cost_at_sale`.
+Los ítems de salida del cambio conservan el costo y precio aplicados al reemplazo.
 
 ## Regla: productos enviados para escoger talla
 

@@ -15,6 +15,4 @@ public class SaleProductDTO
     public decimal LineTotal { get; set; }
     public decimal TotalCostAtSale { get; set; }
     public decimal GrossProfit { get; set; }
-    public int SaleProductStatusId { get; set; }
-    public string? SaleProductStatusName { get; set; }
 }

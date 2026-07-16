@@ -329,11 +329,6 @@ public class SaleService(
 
         ReleaseActiveSelectionHoldsForCancelledSale(sale);
 
-        foreach (var saleProduct in sale.Products)
-        {
-            saleProduct.SaleProductStatusId = (int)SaleProductStatusOption.Cancelled;
-        }
-
         sale.SaleStatusId = (int)SaleStatusOption.Cancelled;
         await _context.SaveChangesAsync();
     }
@@ -367,7 +362,6 @@ public class SaleService(
             .Include(sale => sale.Client)
             .Include(sale => sale.Products).ThenInclude(saleProduct => saleProduct.Product)
             .Include(sale => sale.Products).ThenInclude(saleProduct => saleProduct.DiscountSource)
-            .Include(sale => sale.Products).ThenInclude(saleProduct => saleProduct.SaleProductStatus)
             .Include(sale => sale.ProductHolds).ThenInclude(hold => hold.Product)
             .Include(sale => sale.ProductHolds).ThenInclude(hold => hold.ProductHoldStatus)
             .Include(sale => sale.PaymentMovements).ThenInclude(payment => payment.PaymentMethod)
@@ -518,8 +512,7 @@ public class SaleService(
                 FinalUnitPrice = finalUnitPrice,
                 LineTotal = lineTotal,
                 TotalCostAtSale = totalCostAtSale,
-                GrossProfit = lineTotal - totalCostAtSale,
-                SaleProductStatusId = (int)SaleProductStatusOption.Completed
+                GrossProfit = lineTotal - totalCostAtSale
             };
         }).ToList();
     }
@@ -796,9 +789,7 @@ public class SaleService(
                 FinalUnitPrice = product.FinalUnitPrice,
                 LineTotal = product.LineTotal,
                 TotalCostAtSale = product.TotalCostAtSale,
-                GrossProfit = product.GrossProfit,
-                SaleProductStatusId = product.SaleProductStatusId,
-                SaleProductStatusName = product.SaleProductStatus?.Name
+                GrossProfit = product.GrossProfit
             }).ToList(),
             SelectionHolds = sale.ProductHolds.Select(hold => new SaleSelectionHoldDTO
             {

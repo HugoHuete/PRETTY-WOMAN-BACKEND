@@ -8,7 +8,8 @@ Manejar cancelaciones, reembolsos y cambios de productos sin inflar ventas ni pe
 
 - `sales`
 - `sale_details`
-- `sale_detail_statuses`
+- `sale_returns` y `sale_return_items`
+- `sale_exchanges`, `exchange_return_items` y `exchange_outbound_items`
 - `inventory_movements`
 - `financial_movements`
 - `sale_payments`
@@ -16,28 +17,22 @@ Manejar cancelaciones, reembolsos y cambios de productos sin inflar ventas ni pe
 
 ## Regla: no borrar ventas ni líneas
 
-Si una venta o línea se cancela, devuelve o cambia, no debe eliminarse.
+Si una venta se cancela, no debe eliminarse: cambia a `Cancelled`. Las líneas de venta permanecen como el registro histórico de la operación.
 
-Debe cambiar de estado.
+Las devoluciones y cambios se registran en sus propios agregados y no cambian el estado de la línea original.
 
 ## Regla: cancelación total de venta
 
 Cuando se cancela una venta completa:
 
 1. Cambiar `sales.sale_status_id` a `Cancelled`.
-2. Cambiar líneas activas a `Cancelled`.
-3. Revertir inventario de líneas que ya habían descontado stock.
-4. Crear movimientos de inventario de reversión.
-5. Si ya hubo pago, registrar devolución o movimiento financiero de egreso.
+2. Revertir inventario de líneas que ya habían descontado stock.
+3. Crear movimientos de inventario de reversión.
+4. Si hubo pagos, exigir que se reembolsen antes de completar la cancelación.
 
-## Regla: cancelación de producto específico
+## Regla: corrección parcial posterior a la venta
 
-Si se cancela solo un producto dentro de una venta:
-
-1. Cambiar `sale_details.sale_detail_status_id` a `Cancelled`.
-2. Regresar inventario si ya había sido descontado.
-3. Recalcular totales de la venta si aplica.
-4. Registrar movimiento financiero si hay devolución de dinero.
+El sistema no cancela líneas de venta individualmente. Una devolución parcial usa `SaleReturn` y un cambio usa `SaleExchange`; ambos conservan la línea original y registran cantidades, inventario y dinero por separado.
 
 ## Regla: devolución posterior a una venta
 
@@ -56,22 +51,19 @@ Ver `Docs/use-cases/return-products-after-sale.md`.
 
 Si una clienta cambia talla:
 
-1. Cambiar línea original a `Exchanged`.
-2. Crear nueva línea en la misma venta con la nueva talla.
-3. Regresar inventario de la talla original si vuelve disponible.
-4. Descontar inventario de la nueva talla.
-5. Registrar movimientos de inventario.
-6. Si no hay diferencia de precio, no crear movimiento financiero.
+1. Registrar el retorno en `ExchangeReturnItem` y la prenda de salida en `ExchangeOutboundItem`.
+2. Reservar la prenda de salida y registrar los movimientos de inventario al entregarla y recibir el retorno.
+3. Mantener la venta y su línea original inmutables.
+4. Si no hay diferencia de precio, no crear movimiento financiero.
 
 ## Regla: cambio por otro producto
 
 Si una clienta cambia por un producto diferente:
 
-1. Cambiar línea original a `Exchanged`.
-2. Crear nueva línea en la misma venta.
-3. Ajustar inventario de ambos productos.
-4. Si el nuevo producto cuesta más, registrar pago adicional.
-5. Si el nuevo producto cuesta menos, registrar devolución o saldo según la política del negocio.
+1. Crear un `SaleExchange` con sus ítems de retorno y salida.
+2. Ajustar el inventario de ambos productos mediante los movimientos del cambio.
+3. Si el nuevo producto cuesta más, registrar pago adicional.
+4. Si el nuevo producto cuesta menos, registrar devolución o saldo según la política del negocio.
 
 No se debe crear una nueva venta si el cambio es parte de la misma operación de postventa.
 
@@ -88,6 +80,4 @@ Mantener en la misma venta si:
 
 ## Regla: ganancia en cambios
 
-Al cambiar líneas, la ganancia debe recalcularse o registrarse en las líneas afectadas según el precio final y costo histórico de cada producto.
-
-La venta debe conservar trazabilidad de qué producto fue reemplazado mediante estado, comentarios o campo adicional si se implementa.
+Los ítems del cambio conservan sus precios y costos históricos. La trazabilidad entre la línea original y el reemplazo se mantiene en los ítems de `SaleExchange`.

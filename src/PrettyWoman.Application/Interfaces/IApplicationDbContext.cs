@@ -43,7 +43,6 @@ public interface IApplicationDbContext
     DbSet<Client> Clients { get; }
     DbSet<SaleChannel> SaleChannels { get; }
     DbSet<SaleStatus> SaleStatuses { get; }
-    DbSet<SaleProductStatus> SaleProductStatuses { get; }
     DbSet<Sale> Sales { get; }
     DbSet<SaleProduct> SaleProducts { get; }
     DbSet<SaleExchange> SaleExchanges { get; }

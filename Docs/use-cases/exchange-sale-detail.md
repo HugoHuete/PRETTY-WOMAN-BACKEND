@@ -15,8 +15,9 @@ Registrar el cambio de un producto vendido por otra talla u otro producto.
 ## Tablas involucradas
 
 - `sales`
-- `sale_details`
-- `sale_detail_statuses`
+- `sale_exchanges`
+- `exchange_return_items`
+- `exchange_outbound_items`
 - `products`
 - `inventory_movements`
 - `financial_movements`
@@ -24,25 +25,17 @@ Registrar el cambio de un producto vendido por otra talla u otro producto.
 
 ## Flujo esperado
 
-1. Buscar venta.
-2. Buscar línea original.
-3. Cambiar estado de línea original a `Exchanged`.
-4. Devolver inventario del producto original si regresa en buen estado.
-5. Crear movimiento de inventario tipo `ExchangeReturn`.
-6. Crear nueva línea en `sale_details` con el nuevo producto.
-7. Descontar inventario del nuevo producto.
-8. Crear movimiento de inventario tipo `ExchangeSale`.
-9. Calcular diferencia de precio:
-   - si nuevo producto cuesta más, crear pago adicional
-   - si nuevo producto cuesta menos, registrar reembolso o crédito
-10. Recalcular totales y ganancia de la venta.
+1. Buscar venta y línea original.
+2. Crear un `SaleExchange` con sus ítems de retorno y salida.
+3. Reservar las prendas de salida.
+4. Al completar la entrega, registrar el retorno original como pendiente de llegada física y entregar las prendas de reemplazo.
+5. Al recibir el retorno en tienda, actualizar el estado del ítem de retorno y registrar su movimiento de inventario.
 
 ## Reglas de negocio
 
 - No crear una venta nueva si el cambio pertenece a la misma transacción comercial.
-- La venta original debe conservar todo el historial.
-- El producto original debe quedar con estado `Exchanged`.
-- El producto nuevo debe quedar como línea activa.
+- La venta y sus líneas originales conservan todo el historial y no se modifican.
+- El estado del cambio se mantiene en `SaleExchange` y sus ítems, no en `SaleProduct`.
 - Si el producto original vuelve dañado, no debe regresar a stock disponible.
 
 ## Errores esperados

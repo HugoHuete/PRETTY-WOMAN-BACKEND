@@ -157,7 +157,6 @@ Aquí deben quedar congelados:
 - precio final
 - costo histórico
 - ganancia por línea
-- estado de la línea
 
 
 ## sale_payment_statuses
@@ -171,17 +170,6 @@ Ejemplos:
 - Paid
 
 Debe mantenerse separado de `sale_statuses`, que representa la etapa operativa.
-
-## sale_detail_statuses
-
-Estados para cada línea de venta.
-
-Ejemplos:
-
-- Active
-- Cancelled
-- Refunded
-- Exchanged
 
 ## sale_payments
 

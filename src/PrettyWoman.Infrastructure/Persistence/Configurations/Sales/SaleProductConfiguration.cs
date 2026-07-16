@@ -20,15 +20,12 @@ public class SaleProductConfiguration : IEntityTypeConfiguration<SaleProduct>
         builder.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.DiscountSource).WithMany().HasForeignKey(x => x.DiscountSourceId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.DiscountCampaign).WithMany().HasForeignKey(x => x.DiscountCampaignId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne(x => x.SaleProductStatus).WithMany().HasForeignKey(x => x.SaleProductStatusId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => x.SaleId);
         builder.HasIndex(x => new { x.SaleId, x.ProductId });
-        builder.HasIndex(x => new { x.SaleId, x.SaleProductStatusId });
         builder.HasIndex(x => x.ProductId);
         builder.HasIndex(x => x.DiscountSourceId);
         builder.HasIndex(x => x.DiscountCampaignId);
-        builder.HasIndex(x => x.SaleProductStatusId);
 
         builder.ToTable(t =>
         {

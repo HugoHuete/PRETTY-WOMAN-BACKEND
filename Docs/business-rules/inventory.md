@@ -133,7 +133,7 @@ El movimiento debe registrar una cantidad positiva. El tipo del movimiento deter
 
 Si una linea vendida es cancelada y el producto puede volver al inventario:
 
-1. Cambiar el estado de la linea de venta.
+1. Cambiar el estado de la venta a `Cancelled`.
 2. Aumentar `available_quantity`.
 3. Crear un `inventory_movement` de tipo `SaleCancelled`.
 4. Relacionar el movimiento con la linea de venta original.
@@ -144,10 +144,10 @@ No se debe eliminar el movimiento de venta original.
 
 Cuando una clienta devuelve un producto en condiciones de volver a venderse:
 
-1. Cambiar el estado de la linea original.
-2. Aumentar `available_quantity`.
+1. Registrar el ítem en `sale_return_items`, vinculado a la línea original.
+2. Aumentar `available_quantity` al recibirlo si está en condiciones de venta.
 3. Crear un `inventory_movement` de tipo `CustomerReturn`.
-4. Relacionar el movimiento con la linea de venta original.
+4. Relacionar el movimiento con el ítem de devolución y conservar la referencia a la línea original.
 
 Si el producto devuelto no puede volver a venderse, no debe aumentar directamente `available_quantity`. Debe abrirse un `product_inventory_issue` o registrarse como `Discarded`, segun corresponda.
 
@@ -155,13 +155,10 @@ Si el producto devuelto no puede volver a venderse, no debe aumentar directament
 
 Cuando una clienta cambia un producto:
 
-1. El producto original entra mediante un movimiento `ExchangeReturn`, siempre que pueda volver a venderse.
-2. El producto nuevo sale mediante un movimiento `Sale`.
-3. La linea original cambia a estado `Exchanged`.
-4. La nueva linea se agrega a la misma venta.
-5. Cada movimiento debe relacionarse con la linea de venta correspondiente.
-
-No se necesita un tipo `ExchangeSale`, porque la salida del producto nuevo representa una venta.
+1. El producto original se registra en `exchange_return_items` y entra mediante un movimiento `ExchangeReturnReceivedByAgency` cuando la agencia lo recibe.
+2. El producto nuevo se registra en `exchange_outbound_items`: se reserva y luego sale mediante `ExchangeReplacementDelivered`.
+3. La venta y sus líneas originales permanecen inmutables; el estado del cambio se conserva en `sale_exchanges` y el de cada retorno en `exchange_return_items`.
+4. Cada movimiento se relaciona con el ítem de cambio correspondiente.
 
 ## Regla: holds de seleccion
 

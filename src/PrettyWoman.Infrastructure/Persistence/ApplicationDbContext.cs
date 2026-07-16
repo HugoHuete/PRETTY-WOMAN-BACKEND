@@ -10,11 +10,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
 {
     private readonly ICurrentUserService? _currentUserService;
 
-    public ApplicationDbContext(DbContextOptions options) : base(options)
-    {
-    }
-
-    public ApplicationDbContext(DbContextOptions options, ICurrentUserService currentUserService) : base(options)
+    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options, ICurrentUserService? currentUserService = null) : base(options)
     {
         _currentUserService = currentUserService;
     }
@@ -102,7 +98,6 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public DbSet<Client> Clients { get; set; }
     public DbSet<SaleChannel> SaleChannels { get; set; }
     public DbSet<SaleStatus> SaleStatuses { get; set; }
-    public DbSet<SaleProductStatus> SaleProductStatuses { get; set; }
     public DbSet<Sale> Sales { get; set; }
     public DbSet<SaleProduct> SaleProducts { get; set; }
     public DbSet<SaleExchange> SaleExchanges { get; set; }

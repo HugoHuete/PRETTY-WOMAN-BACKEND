@@ -50,7 +50,6 @@ Cada línea debe conservar:
 - precio final
 - costo histórico
 - ganancia de línea
-- estado de línea
 
 ## Sale payments
 
@@ -105,8 +104,8 @@ y ajustar inventario/finanzas según corresponda.
 
 Si una clienta cambia producto o talla:
 
-- línea original queda `Exchanged`
-- nueva línea se agrega a la misma venta
+- la línea original permanece como historial
+- el cambio se registra en `sale_exchanges` y sus ítems
 - inventario se ajusta con movimientos
 - diferencia de dinero se registra como pago o reembolso
 
@@ -116,7 +115,6 @@ No crear una venta nueva si pertenece al mismo proceso de venta.
 
 Una devolución parcial debe afectar:
 
-- estado de la línea
 - inventario, si el producto regresa disponible
 - movimiento financiero, si hay reembolso
 
