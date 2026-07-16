@@ -8,9 +8,12 @@ using PrettyWoman.Domain.Enums;
 
 namespace PrettyWoman.Application.Services;
 
-public class SaleReturnService(IApplicationDbContext context) : ISaleReturnService
+public class SaleReturnService(
+    IApplicationDbContext context,
+    IInventoryService inventoryService) : ISaleReturnService
 {
     private readonly IApplicationDbContext _context = context;
+    private readonly IInventoryService _inventoryService = inventoryService;
 
     public async Task<IEnumerable<SaleReturnDTO>> GetBySaleIdAsync(int saleId)
     {
@@ -191,14 +194,14 @@ public class SaleReturnService(IApplicationDbContext context) : ISaleReturnServi
         else result.RefundedAt = request.ProcessedAt.NormalizeToUtc() ?? DateTime.UtcNow;
     }
 
-    private static void ReceiveItem(SaleReturnItem item, bool isDamaged, DateTime receivedAt, string? comments)
+    private void ReceiveItem(SaleReturnItem item, bool isDamaged, DateTime receivedAt, string? comments)
     {
         var product = item.Product!;
         item.ReceivedAt = receivedAt;
         item.Comments = comments ?? item.Comments;
+
         if (isDamaged)
         {
-            product.UnavailableQuantity += item.Quantity;
             var issue = new ProductInventoryIssue
             {
                 Product = product,
@@ -209,26 +212,31 @@ public class SaleReturnService(IApplicationDbContext context) : ISaleReturnServi
                 Comments = item.Comments
             };
             item.ProductInventoryIssue = issue;
-            issue.InventoryMovements.Add(CreateInventoryMovement(product, item, receivedAt, InventoryStockBucketOption.Unavailable, issue, "Devolución recibida dañada; pendiente de resolución de inventario."));
+
+            var movement = _inventoryService.Move(
+                product,
+                InventoryStockBucketOption.OutOfInventory,
+                InventoryStockBucketOption.Unavailable,
+                item.Quantity,
+                InventoryMovementTypeOption.CustomerReturn,
+                receivedAt,
+                "Devolución recibida dañada; pendiente de resolución de inventario.");
+            movement.SaleReturnItem = item;
+            movement.ProductInventoryIssue = issue;
+            issue.InventoryMovements.Add(movement);
             return;
         }
-        product.AvailableQuantity += item.Quantity;
-        product.InventoryMovements.Add(CreateInventoryMovement(product, item, receivedAt, InventoryStockBucketOption.Available, null, "Devolución recibida y disponible para venta."));
-    }
 
-    private static InventoryMovement CreateInventoryMovement(Product product, SaleReturnItem item, DateTime date, InventoryStockBucketOption destination, ProductInventoryIssue? issue, string comments)
-        => new()
-        {
-            Product = product,
-            SaleReturnItem = item,
-            ProductInventoryIssue = issue,
-            InventoryMovementTypeId = (int)InventoryMovementTypeOption.CustomerReturn,
-            FromStockBucketId = (int)InventoryStockBucketOption.OutOfInventory,
-            ToStockBucketId = (int)destination,
-            Quantity = item.Quantity,
-            MovementDate = date,
-            Comments = comments
-        };
+        var availableMovement = _inventoryService.Move(
+            product,
+            InventoryStockBucketOption.OutOfInventory,
+            InventoryStockBucketOption.Available,
+            item.Quantity,
+            InventoryMovementTypeOption.CustomerReturn,
+            receivedAt,
+            "Devolución recibida y disponible para venta.");
+        availableMovement.SaleReturnItem = item;
+    }
 
     private async Task<SaleReturn> GetForUpdateAsync(int saleId, int returnId)
         => await _context.SaleReturns

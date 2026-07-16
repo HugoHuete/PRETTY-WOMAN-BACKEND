@@ -1382,7 +1382,7 @@ public class SaleServiceTests
         originalSale.SaleStatusId = (int)SaleStatusOption.SentForDelivery;
         await context.SaveChangesAsync();
         var originalLineId = await context.SaleProducts.Where(item => item.SaleId == saleId).Select(item => item.Id).SingleAsync();
-        var service = new SaleExchangeService(context);
+        var service = CreateExchangeService(context);
 
         var exchangeId = await service.CreateAsync(saleId, new CreateSaleExchangeDTO
         {
@@ -1390,7 +1390,10 @@ public class SaleServiceTests
             OutboundItems = [new CreateExchangeOutboundItemDTO { ProductId = replacementProduct.Id, Quantity = 1, ItemTypeId = (int)ExchangeOutboundItemTypeOption.Replacement }]
         });
 
-        var exchange = await context.SaleExchanges.Include(item => item.ReturnItems).SingleAsync(item => item.Id == exchangeId);
+        var exchange = await context.SaleExchanges
+            .Include(item => item.ReturnItems)
+            .Include(item => item.OutboundItems)
+            .SingleAsync(item => item.Id == exchangeId);
         await service.CompleteHandoverAsync(saleId, exchangeId);
         await service.MarkReturnReceivedAsync(saleId, exchangeId, exchange.ReturnItems.Single().Id);
 
@@ -1402,6 +1405,20 @@ public class SaleServiceTests
         Assert.Equal(1, updatedReplacement.AvailableQuantity);
         Assert.Equal(0, updatedReplacement.ReservedQuantity);
         Assert.Single(await context.SaleProducts.Where(item => item.SaleId == saleId).ToListAsync());
+
+        var returnMovement = await context.InventoryMovements
+            .SingleAsync(item => item.ExchangeReturnItemId == exchange.ReturnItems.Single().Id);
+        Assert.Equal((int)InventoryMovementTypeOption.ExchangeReturnReceivedByAgency, returnMovement.InventoryMovementTypeId);
+        Assert.Equal((int)InventoryStockBucketOption.OutOfInventory, returnMovement.FromStockBucketId);
+        Assert.Equal((int)InventoryStockBucketOption.Available, returnMovement.ToStockBucketId);
+
+        var outboundMovements = await context.InventoryMovements
+            .Where(item => item.ExchangeOutboundItemId == exchange.OutboundItems.Single().Id)
+            .OrderBy(item => item.Id)
+            .ToListAsync();
+        Assert.Equal(2, outboundMovements.Count);
+        Assert.Equal((int)InventoryMovementTypeOption.ExchangeReplacementReserved, outboundMovements[0].InventoryMovementTypeId);
+        Assert.Equal((int)InventoryMovementTypeOption.ExchangeReplacementDelivered, outboundMovements[1].InventoryMovementTypeId);
     }
 
     [Fact]
@@ -1413,7 +1430,7 @@ public class SaleServiceTests
         var replacement = await AddProductAsync(context, 1, 900m, 300m);
         var saleId = await CreateSaleWithProductAsync(context, original.Id, SaleStatusOption.SentForDelivery);
         var originalLineId = await context.SaleProducts.Where(item => item.SaleId == saleId).Select(item => item.Id).SingleAsync();
-        var service = new SaleExchangeService(context);
+        var service = CreateExchangeService(context);
         var exchangeId = await service.CreateAsync(saleId, new CreateSaleExchangeDTO
         {
             ReturnItems = [new CreateExchangeReturnItemDTO { OriginalSaleProductId = originalLineId, Quantity = 1, RecognizedUnitAmount = 1000m }],
@@ -1425,6 +1442,13 @@ public class SaleServiceTests
 
         Assert.Equal(0, (await context.Products.SingleAsync(item => item.Id == original.Id)).AvailableQuantity);
         Assert.Equal(1, (await context.Products.SingleAsync(item => item.Id == replacement.Id)).AvailableQuantity);
+        var outboundMovements = await context.InventoryMovements
+            .Where(item => item.ExchangeOutboundItemId.HasValue)
+            .OrderBy(item => item.Id)
+            .ToListAsync();
+        Assert.Equal(2, outboundMovements.Count);
+        Assert.Equal((int)InventoryMovementTypeOption.ExchangeReplacementReserved, outboundMovements[0].InventoryMovementTypeId);
+        Assert.Equal((int)InventoryMovementTypeOption.ExchangeReplacementReservationReleased, outboundMovements[1].InventoryMovementTypeId);
     }
 
     [Fact]
@@ -1437,7 +1461,7 @@ public class SaleServiceTests
         var saleId = await CreateSaleWithProductAsync(context, original.Id, SaleStatusOption.Reserved);
         var originalLineId = await context.SaleProducts.Where(item => item.SaleId == saleId).Select(item => item.Id).SingleAsync();
 
-        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => new SaleExchangeService(context).CreateAsync(saleId, new CreateSaleExchangeDTO
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => CreateExchangeService(context).CreateAsync(saleId, new CreateSaleExchangeDTO
         {
             ReturnItems = [new CreateExchangeReturnItemDTO { OriginalSaleProductId = originalLineId, Quantity = 1, RecognizedUnitAmount = 1000m }],
             OutboundItems = [new CreateExchangeOutboundItemDTO { ProductId = replacement.Id, Quantity = 1, ItemTypeId = (int)ExchangeOutboundItemTypeOption.Replacement }]
@@ -1521,6 +1545,11 @@ var currentUser = new TestCurrentUserService();
         var deliveryService = new SaleDeliveryService(context, currentUser);
         var paymentService = new SalePaymentMovementService(context, currentUser, deliveryService);
         return new SaleService(context, currentUser, paymentService, deliveryService);
+    }
+
+    private static SaleExchangeService CreateExchangeService(ApplicationDbContext context)
+    {
+        return new SaleExchangeService(context, new InventoryService(context));
     }
 
     private static async Task<Product> AddProductAsync(ApplicationDbContext context, int availableQuantity, decimal salePrice, decimal unitCostNio)

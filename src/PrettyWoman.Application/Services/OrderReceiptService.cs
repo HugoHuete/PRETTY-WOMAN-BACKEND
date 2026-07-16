@@ -8,9 +8,12 @@ using PrettyWoman.Domain.Enums;
 
 namespace PrettyWoman.Application.Services;
 
-public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptService
+public class OrderReceiptService(
+    IApplicationDbContext context,
+    IInventoryService inventoryService) : IOrderReceiptService
 {
     private readonly IApplicationDbContext _context = context;
+    private readonly IInventoryService _inventoryService = inventoryService;
 
     public async Task<OrderReceiptDTO> ReceiveAsync(int orderId, ReceiveOrderDTO receiveOrderDTO)
     {
@@ -40,8 +43,16 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
 
         foreach (var item in receivedProducts)
         {
-            item.Product.ReceivedQuantity += item.Quantity;
-            item.Product.AvailableQuantity += item.Quantity;
+            var inventoryMovement = _inventoryService.Move(
+                item.Product,
+                InventoryStockBucketOption.External,
+                InventoryStockBucketOption.Available,
+                item.Quantity,
+                InventoryMovementTypeOption.PurchaseReceived,
+                receiptDate,
+                receiveOrderDTO.Comments);
+            inventoryMovement.OrderId = order.Id;
+
             item.Product.AllocatedShippingCostNio += warehouseShippingAllocations[item.Product.Id];
             item.Product.TotalCostNio = item.Product.MerchandiseTotalCostNio + item.Product.AllocatedShippingCostNio;
             item.Product.UnitCostNio = Math.Round(item.Product.TotalCostNio / item.Product.Quantity, 6);
@@ -53,18 +64,6 @@ public class OrderReceiptService(IApplicationDbContext context) : IOrderReceiptS
             {
                 Product = item.Product,
                 Quantity = item.Quantity
-            });
-
-            await _context.InventoryMovements.AddAsync(new InventoryMovement
-            {
-                MovementDate = receiptDate,
-                Product = item.Product,
-                InventoryMovementTypeId = (int)InventoryMovementTypeOption.PurchaseReceived,
-                FromStockBucketId = (int)InventoryStockBucketOption.External,
-                ToStockBucketId = (int)InventoryStockBucketOption.Available,
-                Quantity = item.Quantity,
-                OrderId = order.Id,
-                Comments = receiveOrderDTO.Comments
             });
         }
 

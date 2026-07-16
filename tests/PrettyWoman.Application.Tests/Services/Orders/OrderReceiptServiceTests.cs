@@ -24,13 +24,14 @@ public class OrderReceiptServiceTests
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
         var orderService = new OrderService(context, Mapper);
-        var receiptService = new OrderReceiptService(context);
+        var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 4));
         var product = await context.Products.SingleAsync();
 
         var receipt = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 10m,
+            Comments = "Recepción parcial",
             Products =
             [
                 new ReceiveOrderProductDTO
@@ -67,6 +68,8 @@ public class OrderReceiptServiceTests
         Assert.Equal((int)InventoryStockBucketOption.External, inventoryMovement.FromStockBucketId);
         Assert.Equal((int)InventoryStockBucketOption.Available, inventoryMovement.ToStockBucketId);
         Assert.Equal(2, inventoryMovement.Quantity);
+        Assert.Equal(orderId, inventoryMovement.OrderId);
+        Assert.Equal("Recepción parcial", inventoryMovement.Comments);
         Assert.Equal(365m, warehouseShippingMovement.Amount);
         Assert.Equal(productReceipt.Id, warehouseShippingMovement.ProductReceiptId);
         Assert.Equal(orderId, warehouseShippingMovement.OrderId);
@@ -79,7 +82,7 @@ public class OrderReceiptServiceTests
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
         var orderService = new OrderService(context, Mapper);
-        var receiptService = new OrderReceiptService(context);
+        var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var product = await context.Products.SingleAsync();
         var receivedDate = new DateTime(2025, 11, 24, 0, 0, 0, DateTimeKind.Unspecified);
@@ -117,7 +120,7 @@ public class OrderReceiptServiceTests
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
         var orderService = new OrderService(context, Mapper);
-        var receiptService = new OrderReceiptService(context);
+        var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var product = await context.Products.SingleAsync();
 
@@ -173,7 +176,7 @@ public class OrderReceiptServiceTests
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
         var orderService = new OrderService(context, Mapper);
-        var receiptService = new OrderReceiptService(context);
+        var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var product = await context.Products.SingleAsync();
 
@@ -207,7 +210,7 @@ public class OrderReceiptServiceTests
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
         var orderService = new OrderService(context, Mapper);
-        var receiptService = new OrderReceiptService(context);
+        var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var product = await context.Products.SingleAsync();
 
@@ -240,7 +243,7 @@ public class OrderReceiptServiceTests
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
         var orderService = new OrderService(context, Mapper);
-        var receiptService = new OrderReceiptService(context);
+        var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateTwoProductOrderRequest());
         var products = await context.Products.OrderBy(product => product.Id).ToListAsync();
         var lightProduct = products[0];
@@ -398,5 +401,10 @@ public class OrderReceiptServiceTests
             .Options;
 
         return new ApplicationDbContext(options);
+    }
+
+    private static OrderReceiptService CreateReceiptService(ApplicationDbContext context)
+    {
+        return new OrderReceiptService(context, new InventoryService(context));
     }
 }

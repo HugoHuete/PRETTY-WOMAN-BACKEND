@@ -8,9 +8,12 @@ using PrettyWoman.Domain.Enums;
 
 namespace PrettyWoman.Application.Services;
 
-public class SaleExchangeService(IApplicationDbContext context) : ISaleExchangeService
+public class SaleExchangeService(
+    IApplicationDbContext context,
+    IInventoryService inventoryService) : ISaleExchangeService
 {
     private readonly IApplicationDbContext _context = context;
+    private readonly IInventoryService _inventoryService = inventoryService;
 
     public async Task<IEnumerable<SaleExchangeDTO>> GetBySaleIdAsync(int saleId)
     {
@@ -184,86 +187,76 @@ public class SaleExchangeService(IApplicationDbContext context) : ISaleExchangeS
             throw new AppBadRequestException("No se puede modificar un cambio cancelado.");
     }
 
-    private static void HandReturnToAgency(ExchangeReturnItem item)
+    private void HandReturnToAgency(ExchangeReturnItem item)
     {
         var product = item.Product!;
-        product.AvailableQuantity += item.Quantity;
         item.StatusId = (int)ExchangeReturnItemStatusOption.AwaitingReturn;
         item.HandedToAgencyAt = DateTime.UtcNow;
-        product.InventoryMovements.Add(new InventoryMovement
-        {
-            Product = product,
-            ExchangeReturnItem = item,
-            InventoryMovementTypeId = (int)InventoryMovementTypeOption.ExchangeReturnReceivedByAgency,
-            FromStockBucketId = (int)InventoryStockBucketOption.OutOfInventory,
-            ToStockBucketId = (int)InventoryStockBucketOption.Available,
-            Quantity = item.Quantity,
-            MovementDate = item.HandedToAgencyAt.Value,
-            Comments = "Prenda de cambio recibida por agencia; disponible y pendiente de retorno fisico."
-        });
+
+        var movement = _inventoryService.Move(
+            product,
+            InventoryStockBucketOption.OutOfInventory,
+            InventoryStockBucketOption.Available,
+            item.Quantity,
+            InventoryMovementTypeOption.ExchangeReturnReceivedByAgency,
+            item.HandedToAgencyAt.Value,
+            "Prenda de cambio recibida por agencia; disponible y pendiente de retorno fisico.");
+        movement.ExchangeReturnItem = item;
     }
 
-    private static void DeliverOutboundItems(IEnumerable<ExchangeOutboundItem> items)
+    private void DeliverOutboundItems(IEnumerable<ExchangeOutboundItem> items)
     {
         foreach (var item in items.Where(item => !item.Delivered))
         {
             var product = item.Product!;
-            product.ReservedQuantity -= item.Quantity;
             item.Delivered = true;
             item.DeliveredAt = DateTime.UtcNow;
-            product.InventoryMovements.Add(new InventoryMovement
-            {
-                Product = product,
-                ExchangeOutboundItem = item,
-                InventoryMovementTypeId = (int)InventoryMovementTypeOption.ExchangeReplacementDelivered,
-                FromStockBucketId = (int)InventoryStockBucketOption.Reserved,
-                ToStockBucketId = (int)InventoryStockBucketOption.OutOfInventory,
-                Quantity = item.Quantity,
-                MovementDate = item.DeliveredAt.Value,
-                Comments = "Prenda entregada como parte de un cambio."
-            });
+
+            var movement = _inventoryService.Move(
+                product,
+                InventoryStockBucketOption.Reserved,
+                InventoryStockBucketOption.OutOfInventory,
+                item.Quantity,
+                InventoryMovementTypeOption.ExchangeReplacementDelivered,
+                item.DeliveredAt.Value,
+                "Prenda entregada como parte de un cambio.");
+            movement.ExchangeOutboundItem = item;
         }
     }
 
-    private static void ReserveOutboundItems(IEnumerable<ExchangeOutboundItem> items)
+    private void ReserveOutboundItems(IEnumerable<ExchangeOutboundItem> items)
     {
         foreach (var item in items)
         {
             var product = item.Product!;
-            product.AvailableQuantity -= item.Quantity;
-            product.ReservedQuantity += item.Quantity;
-            product.InventoryMovements.Add(new InventoryMovement
-            {
-                Product = product,
-                ExchangeOutboundItem = item,
-                InventoryMovementTypeId = (int)InventoryMovementTypeOption.ExchangeReplacementReserved,
-                FromStockBucketId = (int)InventoryStockBucketOption.Available,
-                ToStockBucketId = (int)InventoryStockBucketOption.Reserved,
-                Quantity = item.Quantity,
-                MovementDate = DateTime.UtcNow,
-                Comments = "Prenda reservada para cambio."
-            });
+
+            var movement = _inventoryService.Move(
+                product,
+                InventoryStockBucketOption.Available,
+                InventoryStockBucketOption.Reserved,
+                item.Quantity,
+                InventoryMovementTypeOption.ExchangeReplacementReserved,
+                DateTime.UtcNow,
+                "Prenda reservada para cambio.");
+            movement.ExchangeOutboundItem = item;
         }
     }
 
-    private static void ReleaseOutboundReservations(IEnumerable<ExchangeOutboundItem> items)
+    private void ReleaseOutboundReservations(IEnumerable<ExchangeOutboundItem> items)
     {
         foreach (var item in items.Where(item => !item.Delivered))
         {
             var product = item.Product!;
-            product.ReservedQuantity -= item.Quantity;
-            product.AvailableQuantity += item.Quantity;
-            product.InventoryMovements.Add(new InventoryMovement
-            {
-                Product = product,
-                ExchangeOutboundItem = item,
-                InventoryMovementTypeId = (int)InventoryMovementTypeOption.ExchangeReplacementReservationReleased,
-                FromStockBucketId = (int)InventoryStockBucketOption.Reserved,
-                ToStockBucketId = (int)InventoryStockBucketOption.Available,
-                Quantity = item.Quantity,
-                MovementDate = DateTime.UtcNow,
-                Comments = "Reserva de cambio liberada por cancelacion."
-            });
+
+            var movement = _inventoryService.Move(
+                product,
+                InventoryStockBucketOption.Reserved,
+                InventoryStockBucketOption.Available,
+                item.Quantity,
+                InventoryMovementTypeOption.ExchangeReplacementReservationReleased,
+                DateTime.UtcNow,
+                "Reserva de cambio liberada por cancelacion.");
+            movement.ExchangeOutboundItem = item;
         }
     }
 
