@@ -30,9 +30,15 @@ A delivery is active while its status is neither `Completed`, `Cancelled`, nor `
 
 For an agency with `can_collect_cash_on_delivery = true`:
 
-`amount_to_collect = max(0, sale.total - net_payment_total) + shipping_charged_to_client`
+```text
+amount_to_collect =
+  max(0, sale.total - paid_products)
+  + max(0, shipping_charged_to_client - paid_shipping_for_delivery)
+```
 
-`net_payment_total` includes payments and refunds. The amount is recalculated when payments, refunds, grouped payment adjustments, or sale products change while the delivery is active.
+`paid_products` is the net total of payments and refunds allocated to products. `paid_shipping_for_delivery` is the net total allocated to this specific delivery's shipping. Payments for shipping never reduce the product balance, and payments for products never reduce the shipping balance.
+
+The amount is recalculated when payments, refunds, grouped payment adjustments, the sale products, or the delivery shipping charge change while the delivery is active. The API response's `amountToCollect` is the authoritative cash-on-delivery instruction; clients must display that value rather than recalculate it locally.
 
 For an agency with `can_collect_cash_on_delivery = false`:
 

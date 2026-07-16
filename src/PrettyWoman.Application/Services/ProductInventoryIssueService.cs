@@ -254,7 +254,7 @@ public class ProductInventoryIssueService(IApplicationDbContext context) : IProd
     {
         if (!Enum.IsDefined(typeof(ProductInventoryIssueStatusOption), resolveIssueDTO.ProductInventoryIssueStatusId))
         {
-            throw new AppBadRequestException("El estado de resoluciÃ³n del issue no es vÃ¡lido.");
+            throw new AppBadRequestException("El estado de resolución del issue no es válido.");
         }
 
         if (resolveIssueDTO.ProductInventoryIssueStatusId == (int)ProductInventoryIssueStatusOption.Open)
