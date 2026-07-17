@@ -14,12 +14,14 @@ public class SaleService(
     IApplicationDbContext context,
     ICurrentUserService currentUserService,
     ISalePaymentMovementService paymentMovementService,
-    ISaleDeliveryService deliveryService) : ISaleService
+    ISaleDeliveryService deliveryService,
+    IInventoryService inventoryService) : ISaleService
 {
     private readonly IApplicationDbContext _context = context;
     private readonly ICurrentUserService _currentUserService = currentUserService;
     private readonly ISalePaymentMovementService _paymentMovementService = paymentMovementService;
     private readonly ISaleDeliveryService _deliveryService = deliveryService;
+    private readonly IInventoryService _inventoryService = inventoryService;
 
     public async Task<PaginatedResult<SaleDTO>> GetAllAsync(SaleQueryDTO query)
     {
@@ -149,16 +151,15 @@ public class SaleService(
         var sale = await GetSaleWithDetailsAsync(id, asNoTracking: false);
         EnsureSaleProductsCanBeReplaced(sale);
 
-        // Se revierte la salida anterior antes de reemplazar lineas para no duplicar movimientos.
-        if (SaleAffectsInventory(sale.SaleStatusId))
-        {
-            RevertInventoryOutput(sale);
-        }
-
         var saleProductIds = sale.Products.Select(product => product.Id).ToList();
         var inventoryMovements = await _context.InventoryMovements
             .Where(movement => movement.SaleProductId.HasValue && saleProductIds.Contains(movement.SaleProductId.Value))
             .ToListAsync();
+
+        // Se revierten únicamente las salidas realmente registradas. El estado de una venta puede
+        // cambiar antes de que el inventario haya salido y no debe usarse como prueba del movimiento.
+        RevertInventoryOutput(sale, inventoryMovements);
+
         _context.InventoryMovements.RemoveRange(inventoryMovements);
         _context.SaleProducts.RemoveRange(sale.Products);
 
@@ -237,36 +238,29 @@ public class SaleService(
                 [product]).Single();
             sale.Products.Add(saleProduct);
             hold.ProductHoldStatusId = (int)ProductHoldStatusOption.ConvertedToSale;
-            product.UnavailableQuantity -= hold.Quantity;
-            product.InventoryMovements.Add(new InventoryMovement
-            {
-                Product = product,
-                ProductHold = hold,
-                SaleProduct = saleProduct,
-                InventoryMovementTypeId = (int)InventoryMovementTypeOption.SelectionConvertedToSale,
-                FromStockBucketId = (int)InventoryStockBucketOption.Unavailable,
-                ToStockBucketId = (int)InventoryStockBucketOption.OutOfInventory,
-                Quantity = hold.Quantity,
-                MovementDate = DateTime.UtcNow,
-                Comments = "Prenda de seleccion convertida a venta."
-            });
+            var movement = _inventoryService.Move(
+                product,
+                InventoryStockBucketOption.Unavailable,
+                InventoryStockBucketOption.OutOfInventory,
+                hold.Quantity,
+                InventoryMovementTypeOption.SelectionConvertedToSale,
+                DateTime.UtcNow,
+                "Prenda de seleccion convertida a venta.");
+            movement.ProductHold = hold;
+            movement.SaleProduct = saleProduct;
         }
         else
         {
             hold.ProductHoldStatusId = (int)ProductHoldStatusOption.AwaitingReturn;
-            product.UnavailableQuantity -= hold.Quantity;
-            product.AvailableQuantity += hold.Quantity;
-            product.InventoryMovements.Add(new InventoryMovement
-            {
-                Product = product,
-                ProductHold = hold,
-                InventoryMovementTypeId = (int)InventoryMovementTypeOption.SelectionReturned,
-                FromStockBucketId = (int)InventoryStockBucketOption.Unavailable,
-                ToStockBucketId = (int)InventoryStockBucketOption.Available,
-                Quantity = hold.Quantity,
-                MovementDate = DateTime.UtcNow,
-                Comments = "Prenda no seleccionada; pendiente de retorno fisico."
-            });
+            var movement = _inventoryService.Move(
+                product,
+                InventoryStockBucketOption.Unavailable,
+                InventoryStockBucketOption.Available,
+                hold.Quantity,
+                InventoryMovementTypeOption.SelectionReturned,
+                DateTime.UtcNow,
+                "Prenda no seleccionada; pendiente de retorno fisico.");
+            movement.ProductHold = hold;
         }
 
         RecalculateSaleTotals(sale);
@@ -324,7 +318,11 @@ public class SaleService(
 
         if (SaleAffectsInventory(sale.SaleStatusId))
         {
-            RevertInventoryForCancelledSale(sale);
+            var saleProductIds = sale.Products.Select(product => product.Id).ToList();
+            var inventoryMovements = await _context.InventoryMovements
+                .Where(movement => movement.SaleProductId.HasValue && saleProductIds.Contains(movement.SaleProductId.Value))
+                .ToListAsync();
+            RevertInventoryForCancelledSale(sale, inventoryMovements);
         }
 
         ReleaseActiveSelectionHoldsForCancelledSale(sale);
@@ -528,24 +526,20 @@ public class SaleService(
             ProductHoldStatusId = (int)ProductHoldStatusOption.Active
         }).ToList();
 
-    private static void ApplySelectionHoldsInventory(IEnumerable<ProductHold> holds)
+    private void ApplySelectionHoldsInventory(IEnumerable<ProductHold> holds)
     {
         foreach (var hold in holds)
         {
             var product = hold.Product!;
-            product.AvailableQuantity -= hold.Quantity;
-            product.UnavailableQuantity += hold.Quantity;
-            product.InventoryMovements.Add(new InventoryMovement
-            {
-                Product = product,
-                ProductHold = hold,
-                InventoryMovementTypeId = (int)InventoryMovementTypeOption.SelectionSent,
-                FromStockBucketId = (int)InventoryStockBucketOption.Available,
-                ToStockBucketId = (int)InventoryStockBucketOption.Unavailable,
-                Quantity = hold.Quantity,
-                MovementDate = hold.HoldDate,
-                Comments = "Prenda enviada para seleccion."
-            });
+            var movement = _inventoryService.Move(
+                product,
+                InventoryStockBucketOption.Available,
+                InventoryStockBucketOption.Unavailable,
+                hold.Quantity,
+                InventoryMovementTypeOption.SelectionSent,
+                hold.HoldDate,
+                "Prenda enviada para seleccion.");
+            movement.ProductHold = hold;
         }
     }
 
@@ -609,70 +603,88 @@ public class SaleService(
         return status is SaleStatusOption.Reserved or SaleStatusOption.ReadyForDelivery or SaleStatusOption.SentForDelivery or SaleStatusOption.Completed;
     }
 
-    private static void ApplyInventoryOutput(Sale sale)
+    private void ApplyInventoryOutput(Sale sale)
     {
         foreach (var saleProduct in sale.Products)
         {
-            saleProduct.Product!.AvailableQuantity -= saleProduct.Quantity;
-            saleProduct.Product.InventoryMovements.Add(new InventoryMovement
-            {
-                Product = saleProduct.Product,
-                InventoryMovementTypeId = (int)InventoryMovementTypeOption.Sale,
-                FromStockBucketId = (int)InventoryStockBucketOption.Available,
-                ToStockBucketId = (int)InventoryStockBucketOption.OutOfInventory,
-                Quantity = saleProduct.Quantity,
-                SaleProduct = saleProduct,
-                MovementDate = sale.SaleDate,
-                Comments = "Venta registrada."
-            });
+            var movement = _inventoryService.Move(
+                saleProduct.Product!,
+                InventoryStockBucketOption.Available,
+                InventoryStockBucketOption.OutOfInventory,
+                saleProduct.Quantity,
+                InventoryMovementTypeOption.Sale,
+                sale.SaleDate,
+                "Venta registrada.");
+            movement.SaleProduct = saleProduct;
         }
     }
 
-    private static void RevertInventoryOutput(Sale sale)
-    {
-        foreach (var saleProduct in sale.Products) saleProduct.Product!.AvailableQuantity += saleProduct.Quantity;
-    }
-
-    private static void RevertInventoryForCancelledSale(Sale sale)
+    private void RevertInventoryOutput(Sale sale, IReadOnlyCollection<InventoryMovement> inventoryMovements)
     {
         foreach (var saleProduct in sale.Products)
         {
+            var quantityToRestore = inventoryMovements
+                .Where(movement => movement.SaleProductId == saleProduct.Id &&
+                    movement.ToStockBucketId == (int)InventoryStockBucketOption.OutOfInventory)
+                .Sum(movement => movement.Quantity);
+            if (quantityToRestore == 0) continue;
+
+            var movement = _inventoryService.Move(
+                saleProduct.Product!,
+                InventoryStockBucketOption.OutOfInventory,
+                InventoryStockBucketOption.Available,
+                quantityToRestore,
+                InventoryMovementTypeOption.SaleCancelled,
+                DateTime.UtcNow,
+                "Reversion interna por reemplazo de productos de la venta.");
+
+            // Reemplazar productos elimina el historial de las lineas anteriores; esta reversión
+            // solo restablece las cantidades antes de aplicar la nueva composición de la venta.
+            _context.InventoryMovements.Remove(movement);
+        }
+    }
+
+    private void RevertInventoryForCancelledSale(
+        Sale sale,
+        IReadOnlyCollection<InventoryMovement> inventoryMovements)
+    {
+        foreach (var saleProduct in sale.Products)
+        {
+            var quantityToRestore = inventoryMovements
+                .Where(movement => movement.SaleProductId == saleProduct.Id &&
+                    movement.ToStockBucketId == (int)InventoryStockBucketOption.OutOfInventory)
+                .Sum(movement => movement.Quantity);
+            if (quantityToRestore == 0) continue;
+
             var product = saleProduct.Product!;
-            product.AvailableQuantity += saleProduct.Quantity;
-            product.InventoryMovements.Add(new InventoryMovement
-            {
-                Product = product,
-                InventoryMovementTypeId = (int)InventoryMovementTypeOption.SaleCancelled,
-                FromStockBucketId = (int)InventoryStockBucketOption.OutOfInventory,
-                ToStockBucketId = (int)InventoryStockBucketOption.Available,
-                Quantity = saleProduct.Quantity,
-                SaleProduct = saleProduct,
-                MovementDate = DateTime.UtcNow,
-                Comments = "Venta cancelada."
-            });
+            var movement = _inventoryService.Move(
+                product,
+                InventoryStockBucketOption.OutOfInventory,
+                InventoryStockBucketOption.Available,
+                quantityToRestore,
+                InventoryMovementTypeOption.SaleCancelled,
+                DateTime.UtcNow,
+                "Venta cancelada.");
+            movement.SaleProduct = saleProduct;
         }
     }
 
-    private static void ReleaseActiveSelectionHoldsForCancelledSale(Sale sale)
+    private void ReleaseActiveSelectionHoldsForCancelledSale(Sale sale)
     {
         foreach (var hold in sale.ProductHolds.Where(hold => hold.ProductHoldStatusId == (int)ProductHoldStatusOption.Active))
         {
             var product = hold.Product!;
-            product.UnavailableQuantity -= hold.Quantity;
-            product.AvailableQuantity += hold.Quantity;
             hold.ProductHoldStatusId = (int)ProductHoldStatusOption.NotSelected;
             hold.ResolvedAt = DateTime.UtcNow;
-            product.InventoryMovements.Add(new InventoryMovement
-            {
-                Product = product,
-                ProductHold = hold,
-                InventoryMovementTypeId = (int)InventoryMovementTypeOption.SelectionReturned,
-                FromStockBucketId = (int)InventoryStockBucketOption.Unavailable,
-                ToStockBucketId = (int)InventoryStockBucketOption.Available,
-                Quantity = hold.Quantity,
-                MovementDate = DateTime.UtcNow,
-                Comments = "Seleccion liberada por cancelacion de venta."
-            });
+            var movement = _inventoryService.Move(
+                product,
+                InventoryStockBucketOption.Unavailable,
+                InventoryStockBucketOption.Available,
+                hold.Quantity,
+                InventoryMovementTypeOption.SelectionReturned,
+                DateTime.UtcNow,
+                "Seleccion liberada por cancelacion de venta.");
+            movement.ProductHold = hold;
         }
     }
 
