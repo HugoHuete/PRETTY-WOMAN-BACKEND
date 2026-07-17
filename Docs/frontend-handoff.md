@@ -107,6 +107,8 @@ Los endpoints siguientes ya están implementados y son la base de las pantallas 
 
 Para crear una venta, `products` y `selectionProducts` son listas distintas. Cada elemento de `products` requiere `productId`, `quantity`, `discountAmount` y `discountSourceId`. El pago inicial es opcional en `paymentMovements`; cada pago requiere `paymentMethodId`, `productAmount` y `shippingAmount`.
 
+`PUT /api/v1/sales/{id}/products` recibe la composición final completa. Cada línea existente que se desee conservar debe incluir su `saleProductId`, obtenido de `GET /api/v1/sales/{id}`; omitir una línea existente la elimina y enviar una línea sin `saleProductId` agrega un producto nuevo. El backend conserva los precios y costos congelados de las líneas identificadas y mueve inventario únicamente por la diferencia de cantidad.
+
 `shippingAmount` mayor que cero exige `saleDeliveryId`; primero debe existir el envío. Para pago con tarjeta (`paymentMethodId: 3`) también es obligatorio `paymentTerminalId`; en efectivo o transferencia no debe enviarse terminal. La respuesta de detalle expone el total calculado y cada `paymentMovement.grossAmount`; la UI no debe recalcularlos.
 
 Una reserva con pago no usa `ProductHold`: es una venta con `saleStatusId: 2` (`Reserved`). Permanece activa hasta que el negocio la cancele. `selectionHolds` representa únicamente prendas enviadas para prueba, talla o selección.

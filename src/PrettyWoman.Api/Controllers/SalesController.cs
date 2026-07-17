@@ -61,7 +61,7 @@ public class SalesController(
         return NoContent();
     }
 
-    /// <summary>Reemplaza los productos de una venta para corregir su contenido antes de finalizarla.</summary>
+    /// <summary>Sincroniza la lista final de productos conservando las líneas identificadas por saleProductId.</summary>
     [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPut("{id:int}/products")]
     public async Task<IActionResult> ReplaceProducts(int id, [FromBody] ReplaceSaleProductsDTO replaceSaleProductsDTO)

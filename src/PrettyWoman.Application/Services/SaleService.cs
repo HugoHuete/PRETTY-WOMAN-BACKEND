@@ -147,41 +147,135 @@ public class SaleService(
         NormalizeSaleFields(replaceSaleProductsDTO);
         await ValidateSaleProductsReplacementAsync(replaceSaleProductsDTO);
 
-        // Reemplazar lineas rehace sus totales e inventario, pero conserva pagos y envios existentes.
         var sale = await GetSaleWithDetailsAsync(id, asNoTracking: false);
         EnsureSaleProductsCanBeReplaced(sale);
+        ValidateReplacementLineReferences(sale, replaceSaleProductsDTO.Products);
+        await ValidateReplacementPostSaleReferencesAsync(sale, replaceSaleProductsDTO.Products);
 
+        // El request representa el estado final completo de la venta. Las líneas existentes que
+        // no aparezcan mediante SaleProductId se consideran eliminadas.
         var saleProductIds = sale.Products.Select(product => product.Id).ToList();
         var inventoryMovements = await _context.InventoryMovements
             .Where(movement => movement.SaleProductId.HasValue && saleProductIds.Contains(movement.SaleProductId.Value))
             .ToListAsync();
+        var requestedProducts = replaceSaleProductsDTO.Products.Cast<CreateSaleProductDTO>().ToList();
+        var products = await LoadProductsByIdsAsync(requestedProducts.Select(product => product.ProductId));
 
-        // Se revierten únicamente las salidas realmente registradas. El estado de una venta puede
-        // cambiar antes de que el inventario haya salido y no debe usarse como prueba del movimiento.
-        RevertInventoryOutput(sale, inventoryMovements);
+        var existingLines = sale.Products.ToDictionary(product => product.Id);
+        var retainedLineIds = replaceSaleProductsDTO.Products
+            .Where(product => product.SaleProductId.HasValue)
+            .Select(product => product.SaleProductId!.Value)
+            .ToHashSet();
+        var removedLines = sale.Products.Where(product => !retainedLineIds.Contains(product.Id)).ToList();
+        var finalLines = new List<SaleProduct>();
+        var requestedLineStates = new List<(SaleProduct Line, ReplaceSaleProductDTO Request, int CurrentQuantityOut)>();
 
-        _context.InventoryMovements.RemoveRange(inventoryMovements);
-        _context.SaleProducts.RemoveRange(sale.Products);
+        // Una línea con SaleProductId conserva su identidad y sus valores históricos de precio y costo.
+        // Una línea sin SaleProductId es un producto nuevo y toma snapshots desde el catálogo actual.
+        foreach (var request in replaceSaleProductsDTO.Products)
+        {
+            SaleProduct line;
+            var currentQuantityOut = 0;
+            if (request.SaleProductId.HasValue)
+            {
+                line = existingLines[request.SaleProductId.Value];
 
-        var products = await LoadSaleProductsAsync(replaceSaleProductsDTO.Products, []);
-        var saleProducts = CreateSaleProducts(replaceSaleProductsDTO.Products, products);
-        // Los nuevos totales se validan contra pagos ya aplicados; un exceso queda como reembolso pendiente.
-        var totals = CalculateSaleTotals(saleProducts);
+                // Se usa la salida neta registrada, no solo la cantidad anterior de la línea, porque
+                // una corrección previa pudo haber devuelto parte de esas unidades al inventario.
+                currentQuantityOut = CalculateQuantityOutOfInventory(line.Id, inventoryMovements);
+                UpdateExistingSaleProduct(line, request);
+            }
+            else
+            {
+                line = CreateSaleProducts([request], products).Single();
+            }
+
+            finalLines.Add(line);
+            requestedLineStates.Add((line, request, currentQuantityOut));
+        }
+
+        var totals = CalculateSaleTotals(finalLines);
         var paymentTotal = SalePaymentMovementRules.CalculateProductTotal(sale.PaymentMovements);
         SalePaymentMovementRules.EnsureAllowedProductTotal(sale.SaleChannelId, totals.Total, paymentTotal, allowOverpayment: true);
+
+        // La disponibilidad se valida con el cambio neto: las unidades que se liberarán en esta
+        // operación también pueden cubrir aumentos o productos nuevos de la misma variante.
+        ValidateReplacementInventoryAvailability(
+            sale,
+            products,
+            requestedLineStates,
+            removedLines,
+            inventoryMovements);
+
+        // Primero se liberan las cantidades reducidas o eliminadas para que puedan cubrir aumentos
+        // y líneas nuevas de la misma variante dentro de esta unidad de trabajo.
+        foreach (var state in requestedLineStates.Where(state =>
+                     SaleAffectsInventory(sale.SaleStatusId) && state.CurrentQuantityOut > state.Request.Quantity))
+        {
+            var movement = _inventoryService.Move(
+                state.Line.Product!,
+                InventoryStockBucketOption.OutOfInventory,
+                InventoryStockBucketOption.Available,
+                state.CurrentQuantityOut - state.Request.Quantity,
+                InventoryMovementTypeOption.SaleCancelled,
+                DateTime.UtcNow,
+                "Cantidad de la linea de venta reducida.");
+            movement.SaleProduct = state.Line;
+        }
+
+        // Se identifica cuantas unidades hay que devolver a inventario de los productos eliminados, si es que ya habían salido.
+        foreach (var removedLine in removedLines)
+        {
+            var quantityOut = CalculateQuantityOutOfInventory(removedLine.Id, inventoryMovements);
+            if (quantityOut > 0)
+            {
+                // Se hace un movimiento para reponer unidades disponibles, pero luego se elimina el movimiento porque la línea ya no existe.
+                var movement = _inventoryService.Move(
+                    removedLine.Product!,
+                    InventoryStockBucketOption.OutOfInventory,
+                    InventoryStockBucketOption.Available,
+                    quantityOut,
+                    InventoryMovementTypeOption.SaleCancelled,
+                    DateTime.UtcNow,
+                    "Linea eliminada al corregir los productos de la venta.");
+
+                // La línea y su historial se eliminan juntos; este movimiento solo aplica la
+                // transición validada antes de retirar las entidades anteriores.
+                _context.InventoryMovements.Remove(movement);
+            }
+        }
+
+        var removedLineIds = removedLines.Select(line => line.Id).ToHashSet();
+        _context.InventoryMovements.RemoveRange(inventoryMovements.Where(movement =>
+            movement.SaleProductId.HasValue && removedLineIds.Contains(movement.SaleProductId.Value)));
+        _context.SaleProducts.RemoveRange(removedLines);
+        sale.Products = finalLines;
+
+        // Después de liberar inventario, ahora falta restar disponibilidad de los productos nuevos o con mayor cantidad. Las líneas que no
+        // cambiaron tienen diferencia cero y, por tanto, no generan movimientos nuevos.
+        foreach (var state in requestedLineStates.Where(state => SaleAffectsInventory(sale.SaleStatusId)))
+        {
+            var quantityToMove = state.Request.Quantity - state.CurrentQuantityOut;
+            if (quantityToMove <= 0) continue;
+
+            var movement = _inventoryService.Move(
+                state.Line.Product!,
+                InventoryStockBucketOption.Available,
+                InventoryStockBucketOption.OutOfInventory,
+                quantityToMove,
+                InventoryMovementTypeOption.Sale,
+                sale.SaleDate,
+                state.Request.SaleProductId.HasValue
+                    ? "Cantidad de la linea de venta aumentada."
+                    : "Producto agregado a la venta.");
+            movement.SaleProduct = state.Line;
+        }
 
         sale.SalePaymentStatusId = SalePaymentMovementRules.ResolveStatus(totals.Total, paymentTotal);
         sale.Subtotal = totals.Subtotal;
         sale.TotalDiscount = totals.TotalDiscount;
         sale.Total = totals.Total;
-        sale.Products = saleProducts;
         await _deliveryService.SyncActiveAmountToCollectAsync(sale.Id, sale.Total, sale.PaymentMovements);
-
-        // El inventario sale solo para estados que ya comprometen existencias.
-        if (SaleAffectsInventory(sale.SaleStatusId))
-        {
-            ApplyInventoryOutput(sale);
-        }
 
         await _context.SaveChangesAsync();
     }
@@ -398,7 +492,84 @@ public class SaleService(
     }
 
     private async Task ValidateSaleProductsReplacementAsync(ReplaceSaleProductsDTO saleDTO)
-        => await ValidateProductRequestAsync(saleDTO.Products, [], requireAtLeastOne: true);
+        => await ValidateProductRequestAsync(
+            saleDTO.Products.Cast<CreateSaleProductDTO>().ToList(),
+            [],
+            requireAtLeastOne: true);
+
+    private static void ValidateReplacementLineReferences(Sale sale, List<ReplaceSaleProductDTO> requests)
+    {
+        var duplicatedLineId = requests
+            .Where(request => request.SaleProductId.HasValue)
+            .GroupBy(request => request.SaleProductId!.Value)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicatedLineId is not null)
+            throw new AppBadRequestException($"La linea de venta con id {duplicatedLineId.Key} está repetida.");
+
+        foreach (var request in requests.Where(request => request.SaleProductId.HasValue))
+        {
+            var saleProductId = request.SaleProductId!.Value;
+            var line = sale.Products.SingleOrDefault(product => product.Id == saleProductId)
+                ?? throw new AppNotFoundException($"La linea de venta con id {saleProductId} no existe para la venta indicada.");
+            if (line.ProductId != request.ProductId)
+                throw new AppBadRequestException("No se puede cambiar la variante de una linea existente; elimine la linea y agregue otra.");
+        }
+    }
+
+    private async Task ValidateReplacementPostSaleReferencesAsync(
+        Sale sale,
+        List<ReplaceSaleProductDTO> requests)
+    {
+        var saleProductIds = sale.Products.Select(product => product.Id).ToList();
+        var returnItems = await _context.SaleReturnItems
+            .AsNoTracking()
+            .Include(item => item.SaleReturn)
+            .Where(item => saleProductIds.Contains(item.OriginalSaleProductId))
+            .ToListAsync();
+        var exchangeItems = await _context.ExchangeReturnItems
+            .AsNoTracking()
+            .Include(item => item.SaleExchange)
+            .Where(item => saleProductIds.Contains(item.OriginalSaleProductId))
+            .ToListAsync();
+
+        var requestsByLineId = requests
+            .Where(request => request.SaleProductId.HasValue)
+            .ToDictionary(request => request.SaleProductId!.Value);
+
+        // Incluso una operación cancelada conserva la referencia histórica y evita eliminar la línea.
+        var removedReferencedLineId = returnItems.Select(item => item.OriginalSaleProductId)
+            .Concat(exchangeItems.Select(item => item.OriginalSaleProductId))
+            .FirstOrDefault(lineId => !requestsByLineId.ContainsKey(lineId));
+        if (removedReferencedLineId != 0)
+            throw new AppBadRequestException(
+                $"No se puede eliminar la linea de venta con id {removedReferencedLineId} porque tiene devoluciones o cambios asociados.");
+
+        foreach (var (lineId, request) in requestsByLineId)
+        {
+            var activeReturnItems = returnItems.Where(item =>
+                item.OriginalSaleProductId == lineId &&
+                item.SaleReturn!.StatusId != (int)SaleReturnStatusOption.Cancelled);
+            var activeExchangeItems = exchangeItems.Where(item =>
+                item.OriginalSaleProductId == lineId &&
+                item.SaleExchange!.StatusId != (int)SaleExchangeStatusOption.Cancelled);
+
+            var referencedQuantity = activeReturnItems.Sum(item => item.Quantity) +
+                                     activeExchangeItems.Sum(item => item.Quantity);
+            if (request.Quantity < referencedQuantity)
+                throw new AppBadRequestException(
+                    $"La cantidad de la linea de venta con id {lineId} no puede ser menor que las {referencedQuantity} unidades incluidas en devoluciones o cambios activos.");
+
+            var highestRecognizedUnitAmount = activeReturnItems.Select(item => item.RecognizedUnitAmount)
+                .Concat(activeExchangeItems.Select(item => item.RecognizedUnitAmount))
+                .DefaultIfEmpty()
+                .Max();
+            var line = sale.Products.Single(product => product.Id == lineId);
+            var requestedFinalUnitPrice = Math.Round(line.OriginalUnitPrice - request.DiscountAmount, 2);
+            if (requestedFinalUnitPrice < highestRecognizedUnitAmount)
+                throw new AppBadRequestException(
+                    $"El precio final de la linea de venta con id {lineId} no puede ser menor que el monto unitario ya reconocido en una devolución o cambio activo.");
+        }
+    }
 
     private async Task ValidateOptionalReferencesAsync(int? clientId)
     {
@@ -470,9 +641,7 @@ public class SaleService(
         var productIds = productRequests.Select(product => product.ProductId)
             .Concat(selectionProducts.Select(product => product.ProductId))
             .Distinct().ToList();
-        var products = await _context.Products.Where(product => productIds.Contains(product.Id)).ToListAsync();
-        var missingProductId = productIds.FirstOrDefault(id => products.All(product => product.Id != id));
-        if (missingProductId != 0) throw new AppNotFoundException($"El producto con id {missingProductId} no existe.");
+        var products = await LoadProductsByIdsAsync(productIds);
 
         var requestedQuantities = productRequests.Select(product => new { product.ProductId, product.Quantity })
             .Concat(selectionProducts.GroupBy(product => product.ProductId).Select(group => new { ProductId = group.Key, Quantity = group.Sum(product => product.Quantity) }))
@@ -484,6 +653,15 @@ public class SaleService(
                 throw new AppBadRequestException($"El producto con id {product.Id} no tiene stock disponible suficiente.");
         }
 
+        return products;
+    }
+
+    private async Task<List<Product>> LoadProductsByIdsAsync(IEnumerable<int> productIds)
+    {
+        var ids = productIds.Distinct().ToList();
+        var products = await _context.Products.Where(product => ids.Contains(product.Id)).ToListAsync();
+        var missingProductId = ids.FirstOrDefault(id => products.All(product => product.Id != id));
+        if (missingProductId != 0) throw new AppNotFoundException($"El producto con id {missingProductId} no existe.");
         return products;
     }
 
@@ -515,6 +693,75 @@ public class SaleService(
         }).ToList();
     }
 
+    private static void UpdateExistingSaleProduct(SaleProduct line, CreateSaleProductDTO request)
+    {
+        if (request.DiscountAmount > line.OriginalUnitPrice)
+            throw new AppBadRequestException("El descuento no puede ser mayor que el precio original de la linea.");
+
+        line.Quantity = request.Quantity;
+        line.DiscountSourceId = request.DiscountSourceId;
+        line.DiscountCampaignId = request.DiscountCampaignId;
+        line.DiscountAmount = request.DiscountAmount;
+        line.FinalUnitPrice = Math.Round(line.OriginalUnitPrice - request.DiscountAmount, 2);
+        line.LineTotal = Math.Round(line.FinalUnitPrice * request.Quantity, 2);
+        line.TotalCostAtSale = Math.Round(line.UnitCostAtSale * request.Quantity, 6);
+        line.GrossProfit = line.LineTotal - line.TotalCostAtSale;
+    }
+
+    /// <summary>
+    /// Valida que el inventario disponible pueda soportar el estado final solicitado para la venta.
+    /// Si la venta todavía no ha afectado inventario, valida las cantidades completas; si ya lo
+    /// afectó, valida únicamente el cambio neto después de considerar las unidades que se liberarán.
+    /// </summary>
+    private static void ValidateReplacementInventoryAvailability(
+        Sale sale,
+        List<Product> requestedProducts,
+        List<(SaleProduct Line, ReplaceSaleProductDTO Request, int CurrentQuantityOut)> requestedLineStates,
+        List<SaleProduct> removedLines,
+        IReadOnlyCollection<InventoryMovement> inventoryMovements)
+    {
+        // En estos estados todavía no existe una salida de inventario asociada a la venta.
+        // Por eso debe estar disponible la cantidad final completa solicitada por producto.
+        if (!SaleAffectsInventory(sale.SaleStatusId))
+        {
+            var requestedQuantities = requestedLineStates
+                .GroupBy(state => state.Request.ProductId)
+                .ToDictionary(group => group.Key, group => group.Sum(state => state.Request.Quantity));
+            foreach (var product in requestedProducts)
+            {
+                if (product.AvailableQuantity < requestedQuantities[product.Id])
+                    throw new AppBadRequestException($"El producto con id {product.Id} no tiene stock disponible suficiente.");
+            }
+
+            return;
+        }
+
+        // Cuando la venta ya afectó inventario, solo interesa la diferencia respecto a la salida
+        // neta registrada. También se incluyen los productos eliminados porque liberarán unidades.
+        var products = requestedProducts
+            .Concat(removedLines.Select(line => line.Product!))
+            .DistinctBy(product => product.Id);
+        foreach (var product in products)
+        {
+            // Unidades que volverán a Available por reducir una línea o eliminarla completamente.
+            var releasedQuantity = requestedLineStates
+                    .Where(state => state.Line.ProductId == product.Id && state.CurrentQuantityOut > state.Request.Quantity)
+                    .Sum(state => state.CurrentQuantityOut - state.Request.Quantity) +
+                removedLines
+                    .Where(line => line.ProductId == product.Id)
+                    .Sum(line => CalculateQuantityOutOfInventory(line.Id, inventoryMovements));
+
+            // Unidades adicionales que deben salir por aumentar una línea o agregar un producto.
+            var requiredQuantity = requestedLineStates
+                .Where(state => state.Line.ProductId == product.Id && state.Request.Quantity > state.CurrentQuantityOut)
+                .Sum(state => state.Request.Quantity - state.CurrentQuantityOut);
+
+            // Las unidades liberadas en esta misma operación pueden reutilizarse inmediatamente.
+            if (product.AvailableQuantity + releasedQuantity < requiredQuantity)
+                throw new AppBadRequestException($"El producto con id {product.Id} no tiene stock disponible suficiente.");
+        }
+    }
+
     private static List<ProductHold> CreateSelectionHolds(List<CreateSaleSelectionProductDTO> requests, List<Product> products)
         => requests.Select(request => new ProductHold
         {
@@ -542,7 +789,11 @@ public class SaleService(
             movement.ProductHold = hold;
         }
     }
-
+    /// <summary>
+    /// Calculates the subtotal, total discount, and total for a sale based on its products.
+    /// </summary>
+    /// <param name="products">The list of sale products.</param>
+    /// <returns>The calculated sale totals.</returns>
     private static SaleTotals CalculateSaleTotals(List<SaleProduct> products)
     {
         return new SaleTotals(
@@ -619,41 +870,13 @@ public class SaleService(
         }
     }
 
-    private void RevertInventoryOutput(Sale sale, IReadOnlyCollection<InventoryMovement> inventoryMovements)
-    {
-        foreach (var saleProduct in sale.Products)
-        {
-            var quantityToRestore = inventoryMovements
-                .Where(movement => movement.SaleProductId == saleProduct.Id &&
-                    movement.ToStockBucketId == (int)InventoryStockBucketOption.OutOfInventory)
-                .Sum(movement => movement.Quantity);
-            if (quantityToRestore == 0) continue;
-
-            var movement = _inventoryService.Move(
-                saleProduct.Product!,
-                InventoryStockBucketOption.OutOfInventory,
-                InventoryStockBucketOption.Available,
-                quantityToRestore,
-                InventoryMovementTypeOption.SaleCancelled,
-                DateTime.UtcNow,
-                "Reversion interna por reemplazo de productos de la venta.");
-
-            // Reemplazar productos elimina el historial de las lineas anteriores; esta reversión
-            // solo restablece las cantidades antes de aplicar la nueva composición de la venta.
-            _context.InventoryMovements.Remove(movement);
-        }
-    }
-
     private void RevertInventoryForCancelledSale(
         Sale sale,
         IReadOnlyCollection<InventoryMovement> inventoryMovements)
     {
         foreach (var saleProduct in sale.Products)
         {
-            var quantityToRestore = inventoryMovements
-                .Where(movement => movement.SaleProductId == saleProduct.Id &&
-                    movement.ToStockBucketId == (int)InventoryStockBucketOption.OutOfInventory)
-                .Sum(movement => movement.Quantity);
+            var quantityToRestore = CalculateQuantityOutOfInventory(saleProduct.Id, inventoryMovements);
             if (quantityToRestore == 0) continue;
 
             var product = saleProduct.Product!;
@@ -667,6 +890,25 @@ public class SaleService(
                 "Venta cancelada.");
             movement.SaleProduct = saleProduct;
         }
+    }
+
+    private static int CalculateQuantityOutOfInventory(
+        int saleProductId,
+        IEnumerable<InventoryMovement> inventoryMovements)
+    {
+        var quantity = inventoryMovements
+            .Where(movement => movement.SaleProductId == saleProductId)
+            .Sum(movement =>
+                movement.ToStockBucketId == (int)InventoryStockBucketOption.OutOfInventory
+                    ? movement.Quantity
+                    : movement.FromStockBucketId == (int)InventoryStockBucketOption.OutOfInventory
+                        ? -movement.Quantity
+                        : 0);
+
+        if (quantity < 0)
+            throw new AppBadRequestException($"Los movimientos de la linea de venta con id {saleProductId} tienen una salida neta invalida.");
+
+        return quantity;
     }
 
     private void ReleaseActiveSelectionHoldsForCancelledSale(Sale sale)
