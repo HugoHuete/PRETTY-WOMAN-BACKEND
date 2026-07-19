@@ -33,7 +33,9 @@ Cantidad fisicamente recibida de la linea de compra.
 
 Debe cumplirse:
 
-`0 <= ReceivedQuantity <= Quantity`
+`ReceivedQuantity >= 0`
+
+Puede superar `Quantity` solamente cuando se registra un sobrante explícito en la recepción de compra. En ese caso, `Quantity` sigue representando lo comprado/pedido y `ReceivedQuantity` lo recibido físicamente.
 
 ### `available_quantity`
 
@@ -132,7 +134,7 @@ Los ajustes usan un unico tipo de movimiento:
 
 La causa del ajuste no se infiere del tipo de movimiento; vive en `inventory_adjustment_reasons`.
 
-Un ajuste positivo desde `External` aumenta `received_quantity` y no puede dejar `received_quantity > quantity`. Si el sobrante recibido supera la cantidad comprada, primero debe corregirse la compra/costo de la variante antes de registrar la entrada de inventario.
+Un ajuste positivo desde `External` aumenta `received_quantity`. No debe usarse para sobrantes de compra: si el sobrante viene de una orden, debe registrarse desde recepcion de compras marcando la linea como sobrante.
 
 No se debe usar ajuste manual cuando existe un flujo especifico:
 
@@ -146,16 +148,16 @@ No se debe usar ajuste manual cuando existe un flujo especifico:
 Cuando se recibe una cantidad de producto de una orden:
 
 1. Validar que la cantidad recibida sea mayor que cero.
-2. Validar que la nueva cantidad recibida no supere `quantity`.
+2. Validar que la recepción normal no supere la cantidad pendiente.
 3. Aumentar `received_quantity`.
 4. Aumentar `available_quantity`.
 5. Crear un `inventory_movement` de tipo `PurchaseReceived` con `External -> Available`.
 6. Relacionar el movimiento con el producto y la orden.
 7. Actualizar el estado de la orden cuando corresponda.
 
-Debe cumplirse:
+Para registrar sobrantes, la línea debe marcarse explícitamente como sobrante y enviar comentario. Solo en ese caso se permite:
 
-`ReceivedQuantity + QuantityToReceive <= Quantity`
+`ReceivedQuantity > Quantity`
 
 ## Regla: no vender productos no recibidos
 
@@ -408,7 +410,6 @@ Debe cumplirse:
 
 * `quantity > 0`
 * `received_quantity >= 0`
-* `received_quantity <= quantity`
 * `available_quantity >= 0`
 * `reserved_quantity >= 0`
 * `unavailable_quantity >= 0`

@@ -25,7 +25,7 @@ public class OrderReceiptService(
             .FirstOrDefaultAsync(order => order.Id == orderId)
             ?? throw new AppNotFoundException($"La orden con id '{orderId}' no existe.");
 
-        EnsureOrderCanReceive(order);
+        EnsureOrderCanReceive(order, receiveOrderDTO.Products);
         // Check quantities and productIds are valid
         var receivedProducts = ValidateAndGetProducts(order, receiveOrderDTO.Products);
         var receiptDate = receiveOrderDTO.ReceivedDate.NormalizeToUtc() ?? DateTime.UtcNow;
@@ -50,12 +50,12 @@ public class OrderReceiptService(
                 item.Quantity,
                 InventoryMovementTypeOption.PurchaseReceived,
                 receiptDate,
-                receiveOrderDTO.Comments);
+                item.Comments ?? receiveOrderDTO.Comments);
             inventoryMovement.OrderId = order.Id;
 
             item.Product.AllocatedShippingCostNio += warehouseShippingAllocations[item.Product.Id];
             item.Product.TotalCostNio = item.Product.MerchandiseTotalCostNio + item.Product.AllocatedShippingCostNio;
-            item.Product.UnitCostNio = Math.Round(item.Product.TotalCostNio / item.Product.Quantity, 6);
+            item.Product.UnitCostNio = CalculateUnitCostNio(item.Product);
             item.Product.UnitCostUsd = order.ExchangeRate == 0
                 ? 0
                 : Math.Round(item.Product.UnitCostNio / order.ExchangeRate, 2);
@@ -100,6 +100,7 @@ public class OrderReceiptService(
                 {
                     ProductId = item.Product.Id,
                     Quantity = item.Quantity,
+                    IsSurplus = item.IsSurplus,
                     AllocatedWarehouseShippingCostNio = warehouseShippingAllocations[item.Product.Id]
                 })
                 .ToList(),
@@ -109,14 +110,14 @@ public class OrderReceiptService(
         };
     }
 
-    private static void EnsureOrderCanReceive(Order order)
+    private static void EnsureOrderCanReceive(Order order, ICollection<ReceiveOrderProductDTO> products)
     {
         if (order.OrderStatusId == (int)OrderStatusCode.Cancelled)
         {
             throw new AppBadRequestException("No se puede recibir productos de una orden cancelada.");
         }
 
-        if (order.OrderStatusId == (int)OrderStatusCode.Received)
+        if (order.OrderStatusId == (int)OrderStatusCode.Received && products.Any(product => !product.IsSurplus))
         {
             throw new AppBadRequestException("La orden ya fue recibida completamente.");
         }
@@ -146,12 +147,22 @@ public class OrderReceiptService(
                 ?? throw new AppBadRequestException($"El producto con id '{productDTO.ProductId}' no pertenece a la orden.");
 
             var pendingQuantity = product.Quantity - product.ReceivedQuantity;
-            if (productDTO.Quantity > pendingQuantity)
+            if (!productDTO.IsSurplus && productDTO.Quantity > pendingQuantity)
             {
                 throw new AppBadRequestException($"La cantidad recibida del producto '{product.Id}' supera la cantidad pendiente.");
             }
 
-            receivedProducts.Add(new ReceivedProduct(product, productDTO.Quantity, productDTO.Weight));
+            if (productDTO.IsSurplus && string.IsNullOrWhiteSpace(productDTO.Comments))
+            {
+                throw new AppBadRequestException($"Debe indicar un comentario para registrar sobrante del producto '{product.Id}'.");
+            }
+
+            receivedProducts.Add(new ReceivedProduct(
+                product,
+                productDTO.Quantity,
+                productDTO.Weight,
+                productDTO.IsSurplus,
+                productDTO.Comments));
         }
 
         return receivedProducts;
@@ -262,14 +273,14 @@ public class OrderReceiptService(
     }
     private static int ResolveOrderStatus(Order order)
     {
-        return order.Products.All(product => product.ReceivedQuantity == product.Quantity)
+        return order.Products.All(product => product.ReceivedQuantity >= product.Quantity)
             ? (int)OrderStatusCode.Received
             : (int)OrderStatusCode.PartiallyReceived;
     }
 
     private static decimal CalculateReceivedAmountNio(Order order)
     {
-        if (order.Products.All(product => product.ReceivedQuantity == product.Quantity))
+        if (order.Products.All(product => product.ReceivedQuantity >= product.Quantity))
         {
             return order.MerchandiseTotalNio;
         }
@@ -277,7 +288,13 @@ public class OrderReceiptService(
         return Math.Round(order.Products.Sum(product =>
             product.Quantity == 0
                 ? 0
-                : product.MerchandiseTotalCostNio * product.ReceivedQuantity / product.Quantity), 2);
+                : product.MerchandiseTotalCostNio * Math.Min(product.ReceivedQuantity, product.Quantity) / product.Quantity), 2);
+    }
+
+    private static decimal CalculateUnitCostNio(Product product)
+    {
+        var receivedCostQuantity = Math.Max(product.Quantity, product.ReceivedQuantity);
+        return receivedCostQuantity == 0 ? 0 : Math.Round(product.TotalCostNio / receivedCostQuantity, 6);
     }
 
     private static FinancialMovement CreateWarehouseShippingMovement(Order order, ProductReceipt receipt, decimal amountNio, string? comments, DateTime date)
@@ -301,7 +318,11 @@ public class OrderReceiptService(
         receiveOrderDTO.Comments = receiveOrderDTO.Comments.NormalizeOptional();
         receiveOrderDTO.TrackingNumbers ??= [];
         receiveOrderDTO.Products ??= [];
+        foreach (var product in receiveOrderDTO.Products)
+        {
+            product.Comments = product.Comments.NormalizeOptional();
+        }
     }
 
-    private sealed record ReceivedProduct(Product Product, int Quantity, decimal Weight);
+    private sealed record ReceivedProduct(Product Product, int Quantity, decimal Weight, bool IsSurplus, string? Comments);
 }

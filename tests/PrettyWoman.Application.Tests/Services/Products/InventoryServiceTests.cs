@@ -69,22 +69,21 @@ public class InventoryServiceTests : IDisposable
     }
 
     [Fact]
-    public void Move_ExternalToAvailable_RejectsReceivedQuantityAbovePurchasedQuantity()
+    public void Move_ExternalToAvailable_AllowsReceivedQuantityAbovePurchasedQuantity()
     {
         var product = CreateProduct();
 
-        var exception = Assert.Throws<AppBadRequestException>(() => _service.Move(
+        _service.Move(
             product,
             InventoryStockBucketOption.External,
             InventoryStockBucketOption.Available,
             1,
             InventoryMovementTypeOption.PurchaseReceived,
-            DateTime.UtcNow));
+            DateTime.UtcNow);
 
-        Assert.Equal("La transición dejaría más inventario recibido que comprado en la variante con id '1'.", exception.Message);
-        Assert.Equal(5, product.ReceivedQuantity);
-        Assert.Equal(5, product.AvailableQuantity);
-        Assert.Empty(_context.InventoryMovements.Local);
+        Assert.Equal(6, product.ReceivedQuantity);
+        Assert.Equal(6, product.AvailableQuantity);
+        Assert.Single(_context.InventoryMovements.Local);
     }
 
     [Fact]

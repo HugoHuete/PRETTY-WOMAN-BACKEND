@@ -107,6 +107,8 @@ Los endpoints siguientes ya están implementados y son la base de las pantallas 
 
 Para crear una venta, `products` y `selectionProducts` son listas distintas. Cada elemento de `products` requiere `productId`, `quantity`, `discountAmount` y `discountSourceId`. El pago inicial es opcional en `paymentMovements`; cada pago requiere `paymentMethodId`, `productAmount` y `shippingAmount`.
 
+En recepcion de compras, la UI debe bloquear cantidades mayores a lo pendiente salvo que el usuario marque explícitamente la línea como sobrante. Para sobrantes enviar `isSurplus: true` y `comments`; conviene mostrar confirmacion visual porque esa acción puede dejar `receivedQuantity` mayor que `quantity`.
+
 `PUT /api/v1/sales/{id}/products` recibe la composición final completa. Cada línea existente que se desee conservar debe incluir su `saleProductId`, obtenido de `GET /api/v1/sales/{id}`; omitir una línea existente la elimina y enviar una línea sin `saleProductId` agrega un producto nuevo. El backend conserva los precios y costos congelados de las líneas identificadas y mueve inventario únicamente por la diferencia de cantidad.
 
 La cantidad de una línea sigue representando lo vendido originalmente aun cuando parte haya sido devuelta. Al reemplazar productos, el backend excluye automáticamente del compromiso de inventario las unidades ya recibidas por devoluciones o cambios; el frontend no debe restarlas del `quantity` enviado.

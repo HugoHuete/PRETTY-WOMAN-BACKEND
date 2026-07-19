@@ -54,10 +54,6 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
                 "unavailable_quantity >= 0");
 
             t.HasCheckConstraint(
-                "ck_products_received_quantity_not_greater_than_quantity",
-                "received_quantity <= quantity");
-
-            t.HasCheckConstraint(
                 "ck_products_stock_not_greater_than_received",
                 "available_quantity + reserved_quantity + unavailable_quantity <= received_quantity");
 

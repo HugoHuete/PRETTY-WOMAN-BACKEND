@@ -163,6 +163,8 @@ La base de distribución del envío es:
 
 `products[].weight × products[].quantity`
 
+Para registrar unidades recibidas de más, la línea debe enviar `products[].isSurplus = true` y un `products[].comments` que explique el sobrante. Sin esa marca explícita, la recepción sigue rechazando cantidades mayores a la cantidad pendiente.
+
 ## Regla: recepción parcial de compra
 
 Si una orden llega en varias fechas, el sistema debe permitir recibir cantidades parciales por producto.
@@ -182,7 +184,8 @@ Flujo:
 4. Cuando se recibe un producto, aumentar `received_quantity`.
 5. Aumentar `available_quantity` en la misma cantidad.
 6. Crear un `inventory_movement` de tipo `PurchaseReceived` relacionado con la orden y el producto.
-7. No permitir que `received_quantity` supere `quantity`.
+7. No permitir que la recepción normal supere la cantidad pendiente.
+8. Permitir que `received_quantity` supere `quantity` solo cuando la línea se marca explícitamente como sobrante.
 
 Ejemplo:
 
@@ -202,6 +205,8 @@ Al recibir parcialmente una línea:
 * se recalculan `unit_cost_nio` y `unit_cost_usd`
 
 El costo de envío proveedor -> bodega se distribuye al crear o actualizar la orden usando la cantidad total comprada de la línea. El costo bodega -> Nicaragua se distribuye en cada recepción usando el peso físico estimado enviado para los productos recibidos.
+
+Si una línea recibe sobrantes, `quantity` sigue representando la cantidad comprada originalmente y `received_quantity` representa la cantidad física recibida. En ese caso, el costo unitario se calcula usando la mayor cantidad entre `quantity` y `received_quantity`, para no repartir el costo total entre menos unidades de las que realmente entraron al inventario.
 
 Si el proveedor confirma que una parte de la línea nunca será entregada, la cantidad final de la línea y sus costos deben ajustarse antes de cerrar definitivamente la orden.
 

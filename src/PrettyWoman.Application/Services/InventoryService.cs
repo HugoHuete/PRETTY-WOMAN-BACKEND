@@ -192,12 +192,6 @@ public class InventoryService(IApplicationDbContext context) : IInventoryService
             throw new AppBadRequestException($"La transición dejaría cantidades negativas en la variante con id '{product.Id}'.");
         }
 
-        if (inventory.ReceivedQuantity > product.Quantity)
-        {
-            throw new AppBadRequestException(
-                $"La transición dejaría más inventario recibido que comprado en la variante con id '{product.Id}'.");
-        }
-
         var activeQuantity =
             inventory.AvailableQuantity +
             inventory.ReservedQuantity +

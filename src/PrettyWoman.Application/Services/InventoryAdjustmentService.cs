@@ -83,6 +83,7 @@ public class InventoryAdjustmentService(
             var product = products.Single(product => product.Id == requestItem.ProductId);
             var fromStockBucket = (InventoryStockBucketOption)requestItem.FromStockBucketId;
             var toStockBucket = (InventoryStockBucketOption)requestItem.ToStockBucketId;
+            EnsureManualExternalIncreaseDoesNotRepresentPurchaseSurplus(product, fromStockBucket, requestItem.Quantity);
             var movement = _inventoryService.Move(
                 product,
                 fromStockBucket,
@@ -108,6 +109,19 @@ public class InventoryAdjustmentService(
         await _context.InventoryAdjustments.AddAsync(adjustment);
         await _context.SaveChangesAsync();
         return adjustment.Id;
+    }
+
+    private static void EnsureManualExternalIncreaseDoesNotRepresentPurchaseSurplus(
+        Product product,
+        InventoryStockBucketOption fromStockBucket,
+        int quantity)
+    {
+        if (fromStockBucket == InventoryStockBucketOption.External &&
+            product.ReceivedQuantity + quantity > product.Quantity)
+        {
+            throw new AppBadRequestException(
+                "Los sobrantes de compra deben registrarse desde la recepción de compras marcando la línea como sobrante.");
+        }
     }
 
     private async Task EnsureReasonExistsAsync(int reasonId)

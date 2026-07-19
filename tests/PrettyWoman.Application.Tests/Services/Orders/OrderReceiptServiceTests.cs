@@ -283,6 +283,146 @@ public class OrderReceiptServiceTests
         Assert.Equal(27.50m, heavyProduct.UnitCostUsd);
     }
 
+    [Fact]
+    public async Task ReceiveAsync_AllowsExplicitSurplusAndKeepsPurchaseReceivedMovement()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var orderService = new OrderService(context, Mapper);
+        var receiptService = CreateReceiptService(context);
+        var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
+        var product = await context.Products.SingleAsync();
+
+        var receipt = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            WarehouseShippingCostUsd = 10m,
+            Products =
+            [
+                new ReceiveOrderProductDTO
+                {
+                    ProductId = product.Id,
+                    Quantity = 3,
+                    IsSurplus = true,
+                    Comments = "Vino una unidad adicional no solicitada."
+                }
+            ]
+        });
+
+        var order = await context.Orders.SingleAsync(order => order.Id == orderId);
+        product = await context.Products.SingleAsync(storedProduct => storedProduct.Id == product.Id);
+        var inventoryMovement = await context.InventoryMovements.SingleAsync();
+        var receivedProduct = Assert.Single(receipt.Products);
+
+        Assert.Equal((int)OrderStatusCode.Received, order.OrderStatusId);
+        Assert.Equal(order.MerchandiseTotalNio, order.ReceivedAmountNio);
+        Assert.Equal(3, product.ReceivedQuantity);
+        Assert.Equal(3, product.AvailableQuantity);
+        Assert.True(receivedProduct.IsSurplus);
+        Assert.Equal((int)InventoryMovementTypeOption.PurchaseReceived, inventoryMovement.InventoryMovementTypeId);
+        Assert.Equal(3, inventoryMovement.Quantity);
+        Assert.Equal("Vino una unidad adicional no solicitada.", inventoryMovement.Comments);
+        Assert.Equal(12m, product.UnitCostUsd);
+    }
+
+    [Fact]
+    public async Task ReceiveAsync_AllowsSurplusOnlyReceiptAfterOrderWasFullyReceived()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var orderService = new OrderService(context, Mapper);
+        var receiptService = CreateReceiptService(context);
+        var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 1));
+        var product = await context.Products.SingleAsync();
+
+        await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            WarehouseShippingCostUsd = 0,
+            Products =
+            [
+                new ReceiveOrderProductDTO
+                {
+                    ProductId = product.Id,
+                    Quantity = 1
+                }
+            ]
+        });
+
+        await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            WarehouseShippingCostUsd = 0,
+            Products =
+            [
+                new ReceiveOrderProductDTO
+                {
+                    ProductId = product.Id,
+                    Quantity = 1,
+                    IsSurplus = true,
+                    Comments = "Unidad sobrante encontrada al cerrar el paquete."
+                }
+            ]
+        });
+
+        product = await context.Products.SingleAsync(storedProduct => storedProduct.Id == product.Id);
+        var movements = await context.InventoryMovements.OrderBy(movement => movement.Id).ToListAsync();
+
+        Assert.Equal(2, product.ReceivedQuantity);
+        Assert.Equal(2, product.AvailableQuantity);
+        Assert.All(movements, movement => Assert.Equal((int)InventoryMovementTypeOption.PurchaseReceived, movement.InventoryMovementTypeId));
+    }
+
+    [Fact]
+    public async Task ReceiveAsync_RejectsQuantityAbovePendingWhenLineIsNotMarkedAsSurplus()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var orderService = new OrderService(context, Mapper);
+        var receiptService = CreateReceiptService(context);
+        var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
+        var product = await context.Products.SingleAsync();
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            WarehouseShippingCostUsd = 0,
+            Products =
+            [
+                new ReceiveOrderProductDTO
+                {
+                    ProductId = product.Id,
+                    Quantity = 3
+                }
+            ]
+        }));
+
+        Assert.Contains("supera la cantidad pendiente", exception.Message);
+    }
+
+    [Fact]
+    public async Task ReceiveAsync_RejectsSurplusWithoutLineComment()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var orderService = new OrderService(context, Mapper);
+        var receiptService = CreateReceiptService(context);
+        var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
+        var product = await context.Products.SingleAsync();
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            WarehouseShippingCostUsd = 0,
+            Products =
+            [
+                new ReceiveOrderProductDTO
+                {
+                    ProductId = product.Id,
+                    Quantity = 3,
+                    IsSurplus = true
+                }
+            ]
+        }));
+
+        Assert.Contains("comentario", exception.Message);
+    }
+
     private static CreateOrderDTO CreateOrderRequest(int quantity)
     {
         return new CreateOrderDTO

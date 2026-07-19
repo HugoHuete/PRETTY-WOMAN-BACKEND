@@ -12,4 +12,8 @@ public class ReceiveOrderProductDTO
 
     [Range(typeof(decimal), "0.0001", "79228162514264337593543950335", ErrorMessage = "El peso estimado debe ser mayor que cero.")]
     public decimal Weight { get; set; } = 1;
+
+    public bool IsSurplus { get; set; }
+
+    public string? Comments { get; set; }
 }

@@ -59,7 +59,7 @@ Los endpoints `adjustment-reasons` y `stock-buckets` devuelven items con esta fo
 ```
 
 Estas sugerencias son ayuda de UI, no una regla cerrada. El backend sigue validando la transicion real con `InventoryService`.
-Para `PurchaseSurplus`, si la unidad sobrante no estaba contemplada en la compra, el endpoint no sugiere una transferencia automatica: primero se debe aumentar/corregir la cantidad comprada y luego recibir la unidad por el flujo de compras. Esto evita sugerir `External -> Available` cuando `received_quantity` ya es igual a `quantity`.
+Para `PurchaseSurplus`, si la unidad sobrante no estaba contemplada en la compra, el endpoint no sugiere una transferencia automatica: debe recibirse desde el flujo de recepcion de compras marcando la linea como sobrante. Esto evita que la UI use ajustes manuales para un evento que pertenece a la compra.
 
 ## Flujo esperado
 
@@ -77,7 +77,7 @@ Para `PurchaseSurplus`, si la unidad sobrante no estaba contemplada en la compra
 - Cada item del ajuste genera exactamente un movimiento de inventario.
 - Los ajustes no modifican cantidades directamente; siempre pasan por `InventoryService`.
 - Las transiciones deben estar permitidas por `InventoryService`.
-- Un ajuste desde `External` aumenta `received_quantity` y no puede superar `products.quantity`.
+- Un ajuste desde `External` aumenta `received_quantity`, pero no debe usarse para sobrantes de compra; esos sobrantes se registran desde recepcion de compras con `isSurplus`.
 - Si una diferencia pertenece a un flujo especifico, debe usarse ese flujo en vez de ajuste manual.
 - `reference` debe usarse como folio o identificador corto para buscar el ajuste despues.
 - `comments` debe usarse para explicar el contexto del ajuste en lenguaje humano.
@@ -128,4 +128,4 @@ Faltante detectado despues de recibir inventario:
 - Buckets invalidos o iguales.
 - Transicion no permitida.
 - Stock insuficiente en el bucket origen.
-- Entrada desde `External` que excede la cantidad comprada.
+- Sobrante de compra intentado como ajuste manual en vez de recepcion de compra.

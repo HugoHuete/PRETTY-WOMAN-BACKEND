@@ -83,6 +83,35 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
     }
 
     [Fact]
+    public async Task AdminCanReceiveExplicitPurchaseSurplus()
+    {
+        var product = await _factory.SeedProductAsync(quantity: 2, receivedQuantity: 0, availableQuantity: 0);
+        using var admin = await CreateAdminClientAsync();
+
+        var receipt = await admin.PostAsJsonAsync($"/api/v1/orders/{product.OrderId}/receipts", new ReceiveOrderDTO
+        {
+            WarehouseShippingCostUsd = 0,
+            Products =
+            [
+                new ReceiveOrderProductDTO
+                {
+                    ProductId = product.ProductId,
+                    Quantity = 3,
+                    Weight = 1,
+                    IsSurplus = true,
+                    Comments = "Vino una unidad adicional no solicitada."
+                }
+            ]
+        });
+
+        Assert.Equal(HttpStatusCode.OK, receipt.StatusCode);
+
+        var stock = await _factory.GetProductStockAsync(product.ProductId);
+        Assert.Equal(3, stock.ReceivedQuantity);
+        Assert.Equal(3, stock.AvailableQuantity);
+    }
+
+    [Fact]
     public async Task AdminCanReceiveInStoreReturn_AndRestoresAvailableInventory()
     {
         var product = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);

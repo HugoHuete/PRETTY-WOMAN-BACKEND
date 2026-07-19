@@ -81,9 +81,9 @@ Cuando la orden no tiene tracking numbers, el costo de envío bodega -> Nicaragu
 ## Flujo esperado
 
 1. Buscar la orden.
-2. Validar que la orden no esté cancelada ni completamente recibida.
+2. Validar que la orden no esté cancelada. Si ya está completamente recibida, solo permitir líneas marcadas como sobrante.
 3. Validar que los productos pertenezcan a la orden.
-4. Validar que las cantidades recibidas no superen la cantidad pendiente.
+4. Validar que las cantidades recibidas no superen la cantidad pendiente, excepto cuando la línea venga marcada explícitamente como sobrante.
 5. Si la orden tiene tracking numbers, actualizar peso, costo USD, fecha de entrega y relación con la recepción.
 6. Si la orden no tiene tracking numbers, tomar `warehouseShippingCostUsd` directamente del request.
 7. Crear `product_receipts`.
@@ -108,17 +108,18 @@ Cuando la orden no tiene tracking numbers, el costo de envío bodega -> Nicaragu
 - `orders.warehouse_shipping_cost_usd` acumula los costos de envío bodega -> Nicaragua de todas las recepciones.
 - El costo de envío bodega -> Nicaragua se convierte a córdobas con `orders.exchange_rate`.
 - `products[].weight` representa el peso físico estimado por unidad para distribuir el envío; si no se envía, el backend usa `1`.
+- `products[].isSurplus` permite registrar una unidad recibida de más. Debe marcarse por línea y requiere `products[].comments`.
 - El costo convertido se distribuye proporcionalmente a `products[].weight * products[].quantity`.
-- El costo convertido se suma a `products.allocated_shipping_cost_nio`, `products.total_cost_nio` y recalcula `products.unit_cost_nio` y `products.unit_cost_usd`.
+- El costo convertido se suma a `products.allocated_shipping_cost_nio`, `products.total_cost_nio` y recalcula `products.unit_cost_nio` y `products.unit_cost_usd`. Si hay sobrantes, el costo unitario se reparte entre la mayor cantidad entre unidades compradas y unidades recibidas.
 - `orders.received_amount_nio` refleja solamente mercadería recibida, sin envíos; en recepción completa debe quedar igual a `orders.merchandise_total_nio`.
 - Cada recepción crea un `ProductReceipt`.
 - Cada producto recibido crea un `ProductReceiptDetail`.
 - Cada producto recibido crea un `InventoryMovement` de tipo `PurchaseReceived` con dirección `In`.
 - Cada pago de envío mayor que cero crea un `FinancialMovement` de tipo `WarehouseShippingPayment` con dirección `Out`.
-- `received_quantity` no debe superar `quantity` comprada.
+- `received_quantity` puede superar `quantity` solamente cuando la recepción se marca explícitamente como sobrante.
 - El inventario disponible aumenta solamente por la cantidad recibida.
 - Una orden cancelada no permite recepciones.
-- Una orden completamente recibida no permite nuevas recepciones.
+- Una orden completamente recibida no permite nuevas recepciones normales; solo permite sobrantes explícitos.
 
 ## Cerrar faltantes confirmados
 

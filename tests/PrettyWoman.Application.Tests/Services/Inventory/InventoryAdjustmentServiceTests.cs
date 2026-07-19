@@ -96,7 +96,7 @@ public class InventoryAdjustmentServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_RejectsIncreaseBeyondPurchasedQuantity()
+    public async Task CreateAsync_RejectsPurchaseSurplusAsManualAdjustment()
     {
         await using var context = CreateContext();
         await SeedAsync(context);
@@ -117,7 +117,7 @@ public class InventoryAdjustmentServiceTests
             ]
         }));
 
-        Assert.Contains("más inventario recibido que comprado", exception.Message);
+        Assert.Contains("sobrantes de compra", exception.Message);
     }
 
     [Fact]
