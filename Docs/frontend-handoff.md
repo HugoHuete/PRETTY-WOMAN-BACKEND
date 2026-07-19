@@ -128,6 +128,8 @@ Para mostrar existencias, considerar que `Reserved` y `ReadyForDelivery` usan `r
 
 Al crear una incidencia se envían `productId`, `productInventoryIssueTypeId`, `quantity`, `issueDate` opcional y `comments` opcional. Los tipos son `Damaged=1`, `Dirty=2`, `Missing=3`, `UnderReview=4` y `Repairing=5`. Mientras esté `Open=1`, la cantidad queda automáticamente fuera de disponibilidad. Al resolver, usar `ResolvedToAvailable=2`, `Discarded=3`, `ConfirmedLost=4` o `Cancelled=5`.
 
+Para ajustes de inventario, cargar los catalogos con `GET /api/v1/inventory-catalogs/adjustment-reasons` y `GET /api/v1/inventory-catalogs/stock-buckets`. Ambos devuelven `{ id, name }` y evitan hardcodear motivos o buckets en la UI.
+
 ### Errores y estados que debe manejar la UI
 
 - Un `400` devuelve `ProblemDetails`: usar `title` y `detail` para el mensaje, no asumir un texto fijo. Suele indicar regla de negocio: saldo insuficiente, envío inválido o monto incorrecto.

@@ -22,6 +22,22 @@ Corregir diferencias de inventario que no pertenecen a un flujo especifico como 
 - `inventory_stock_buckets`
 - `products`
 
+## Catalogos para frontend
+
+La pantalla de creacion de ajustes no debe hardcodear motivos ni buckets. Debe consumir:
+
+- `GET /api/v1/inventory-catalogs/adjustment-reasons`
+- `GET /api/v1/inventory-catalogs/stock-buckets`
+
+Ambos endpoints devuelven items con esta forma:
+
+```json
+{
+  "id": 1,
+  "name": "ManualCorrection"
+}
+```
+
 ## Flujo esperado
 
 1. Validar que el motivo exista.
