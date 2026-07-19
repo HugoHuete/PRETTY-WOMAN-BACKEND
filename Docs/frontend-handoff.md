@@ -132,6 +132,149 @@ Al crear una incidencia se envían `productId`, `productInventoryIssueTypeId`, `
 
 Para ajustes de inventario, cargar los catalogos con `GET /api/v1/inventory-catalogs/adjustment-reasons` y `GET /api/v1/inventory-catalogs/stock-buckets`. Ambos devuelven `{ id, name }` y evitan hardcodear motivos o buckets en la UI. Para precargar origen/destino segun el motivo seleccionado, usar `GET /api/v1/inventory-catalogs/adjustment-reason-suggestions`; devuelve cada motivo con `description` y `suggestedMovements`, donde cada sugerencia incluye bucket origen, bucket destino y una descripcion corta. Estas sugerencias ayudan a la UI, pero el backend sigue validando la transicion final. Si un motivo viene sin sugerencias, como `PurchaseSurplus`, la UI debe mostrar la descripcion del flujo recomendado en vez de prellenar buckets.
 
+### Ajustes de inventario
+
+Los ajustes de inventario son correcciones administrativas. Solo Admin puede crearlos; Admin y Vendedor pueden consultarlos. No usarlos para ventas, envios, devoluciones, cambios, incidencias de inventario, recepciones normales de compra ni sobrantes de compra.
+
+Endpoints:
+
+| Flujo | Endpoint | Rol | Resultado |
+|---|---|---|---|
+| Listar ajustes | `GET /api/v1/inventory-adjustments` | Admin, Vendedor | Devuelve paginado con items de ajuste y movimientos ligados. |
+| Consultar ajuste | `GET /api/v1/inventory-adjustments/{id}` | Admin, Vendedor | Devuelve el ajuste completo. |
+| Crear ajuste | `POST /api/v1/inventory-adjustments` | Admin | Devuelve `201` y el id creado. |
+| Motivos | `GET /api/v1/inventory-catalogs/adjustment-reasons` | Admin, Vendedor | Devuelve `{ id, name }`. |
+| Buckets | `GET /api/v1/inventory-catalogs/stock-buckets` | Admin, Vendedor | Devuelve `{ id, name }`. |
+| Sugerencias | `GET /api/v1/inventory-catalogs/adjustment-reason-suggestions` | Admin, Vendedor | Devuelve motivos con `description` y transiciones sugeridas. |
+
+Filtros del listado:
+
+```http
+GET /api/v1/inventory-adjustments?page=1&pageSize=20&productId=123&inventoryAdjustmentReasonId=5&fromStockBucketId=2&toStockBucketId=5&adjustmentDateFrom=2026-07-01&adjustmentDateTo=2026-07-31
+```
+
+Todos los filtros son opcionales. `pageSize` se normaliza a máximo `100`.
+
+Respuesta paginada:
+
+```json
+{
+  "items": [
+    {
+      "id": 12,
+      "inventoryAdjustmentReasonId": 5,
+      "inventoryAdjustmentReasonName": "LostItem",
+      "adjustmentDate": "2026-07-19T18:00:00Z",
+      "reference": "CONTEO-JULIO-2026",
+      "comments": "Conteo fisico de cierre.",
+      "createdAt": "2026-07-19T18:05:00Z",
+      "updatedAt": null,
+      "items": [
+        {
+          "id": 33,
+          "productId": 123,
+          "productDetailId": 45,
+          "productName": "Vestido floral",
+          "productCode": 10045,
+          "sizeId": 2,
+          "sizeName": "M",
+          "color": "Rojo",
+          "fromStockBucketId": 2,
+          "fromStockBucketName": "Available",
+          "toStockBucketId": 5,
+          "toStockBucketName": "OutOfInventory",
+          "quantity": 1,
+          "inventoryMovementId": 880,
+          "comments": "No aparecio en conteo."
+        }
+      ]
+    }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "totalCount": 1,
+  "totalPages": 1,
+  "hasPreviousPage": false,
+  "hasNextPage": false
+}
+```
+
+Payload de creacion:
+
+```json
+{
+  "inventoryAdjustmentReasonId": 5,
+  "adjustmentDate": "2026-07-19T18:00:00Z",
+  "reference": "CONTEO-JULIO-2026",
+  "comments": "Conteo fisico de cierre.",
+  "items": [
+    {
+      "productId": 123,
+      "fromStockBucketId": 2,
+      "toStockBucketId": 5,
+      "quantity": 1,
+      "comments": "No aparecio en conteo."
+    }
+  ]
+}
+```
+
+Campos:
+
+- `inventoryAdjustmentReasonId`: obligatorio. Usar el catalogo de motivos.
+- `adjustmentDate`: opcional. Si no se envia, el backend usa fecha/hora actual.
+- `reference`: opcional. Folio corto o identificador buscable, por ejemplo `CONTEO-JULIO-2026`, `VENTA-456` o `ORDEN-123`.
+- `comments`: opcional. Explicacion general del ajuste.
+- `items`: obligatorio, al menos un item.
+- `items[].productId`: variante afectada.
+- `items[].fromStockBucketId` y `items[].toStockBucketId`: origen/destino. Deben ser distintos y pertenecer al catalogo de buckets.
+- `items[].quantity`: entero mayor que cero.
+- `items[].comments`: opcional. Explicacion especifica de esa variante; si existe, se copia al movimiento de inventario de ese item.
+
+Uso recomendado de sugerencias:
+
+1. Cargar motivos, buckets y sugerencias al abrir la pantalla.
+2. Al seleccionar motivo, buscar el registro de `adjustment-reason-suggestions` con el mismo `inventoryAdjustmentReasonId`.
+3. Mostrar `description` como ayuda contextual.
+4. Si `suggestedMovements` tiene una opcion, prellenar origen/destino y permitir editar si el Admin lo confirma.
+5. Si tiene varias opciones, mostrar cards/radio buttons con cada `description`.
+6. Si no tiene opciones, no prellenar buckets; mostrar la descripcion del flujo recomendado.
+7. Antes de enviar, mostrar resumen: producto, origen, destino, cantidad, motivo, referencia y comentarios.
+
+Ejemplos por motivo:
+
+| Motivo | Uso UI recomendado | Movimiento comun |
+|---|---|---|
+| `ManualCorrection` | Conteo fisico o revision que no pertenece a otro flujo. | `Available -> Unavailable`, `Unavailable -> Available`, `Available -> OutOfInventory` o `OutOfInventory -> Available`. |
+| `ProductCodeMixUp` | Cruce de codigo entre variantes. Pedir dos lineas: reponer variante incorrecta y sacar variante correcta. | Incorrecta: `OutOfInventory -> Available`; correcta: `Available -> OutOfInventory`. |
+| `PurchaseSurplus` | No crear ajuste manual. Mostrar mensaje para usar recepcion de compra con `isSurplus: true`. | Sin sugerencia automatica. |
+| `PurchaseShortage` | Faltante detectado despues de haber recibido inventario. | `Available -> OutOfInventory`. |
+| `LostItem` | Baja por perdida/no encontrada. | `Available -> OutOfInventory`. |
+| `FoundItem` | Producto encontrado despues de baja. | `OutOfInventory -> Available`. |
+| `Donation` | Salida no comercial de producto disponible. | `Available -> OutOfInventory`. |
+| `Other` | Caso excepcional. Pedir comentario mas explicito. | Depende del caso. |
+
+Errores esperados para mostrar en UI:
+
+| Caso | Status | Mensaje típico en `detail` |
+|---|---:|---|
+| Sin sesion | 401 | No autorizado. |
+| Vendedor intentando crear ajuste | 403 | Falta de permiso. |
+| Motivo invalido | 400 | `El motivo de ajuste de inventario no es válido.` |
+| Motivo inexistente | 404 | `El motivo de ajuste de inventario con id 'X' no existe.` |
+| Sin items | 400 | `Debe enviar al menos un item de ajuste.` |
+| Variante obligatoria | 400 | `La variante del item de ajuste es obligatoria.` |
+| Variante inexistente | 404 | `La variante con id 'X' no existe.` |
+| Cantidad invalida | 400 | `La cantidad de cada item de ajuste debe ser mayor que cero.` |
+| Buckets invalidos | 400 | `Los buckets del item de ajuste no son válidos.` |
+| Buckets iguales | 400 | `El bucket origen y destino del item de ajuste deben ser distintos.` |
+| Items duplicados | 400 | `No puede enviar items duplicados para la misma variante y transición de inventario.` |
+| Transicion no permitida | 400 | `La transición de inventario 'X -> Y' no está permitida.` |
+| Stock insuficiente | 400 | `La variante con id 'X' no tiene suficiente inventario disponible/reservado/no disponible.` |
+| Sobrante de compra como ajuste | 400 | `Los sobrantes de compra deben registrarse desde la recepción de compras marcando la línea como sobrante.` |
+
+La UI debe mostrar `ProblemDetails.detail` cuando venga disponible y no depender de textos exactos para controlar flujo. Los textos anteriores sirven como guia de mensajes, no como contrato de branching.
+
 ### Errores y estados que debe manejar la UI
 
 - Un `400` devuelve `ProblemDetails`: usar `title` y `detail` para el mensaje, no asumir un texto fijo. Suele indicar regla de negocio: saldo insuficiente, envío inválido o monto incorrecto.
