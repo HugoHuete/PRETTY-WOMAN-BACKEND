@@ -18,6 +18,8 @@ public interface IApplicationDbContext
     DbSet<Order> Orders { get; }
     DbSet<ProductReceipt> ProductReceipts { get; }
     DbSet<ProductReceiptDetail> ProductReceiptDetails { get; }
+    DbSet<PurchaseShortage> PurchaseShortages { get; }
+    DbSet<SupplierRefund> SupplierRefunds { get; }
 
     // Products
     DbSet<Category> Categories { get; }

@@ -28,4 +28,5 @@ public class Product
     public ICollection<ProductInventoryIssue> ProductInventoryIssues { get; set; } = [];
     public ICollection<ProductReceiptDetail> ProductReceiptDetails { get; set; } = [];
     public ICollection<InventoryAdjustmentItem> InventoryAdjustmentItems { get; set; } = [];
+    public ICollection<PurchaseShortage> PurchaseShortages { get; set; } = [];
 }

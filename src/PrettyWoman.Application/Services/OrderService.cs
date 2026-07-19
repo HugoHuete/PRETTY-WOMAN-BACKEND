@@ -113,6 +113,131 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         await _context.SaveChangesAsync();
     }
 
+    public async Task<OrderDTO> CloseShortagesAsync(int id, CloseOrderShortagesDTO closeShortagesDTO)
+    {
+        closeShortagesDTO.Comments = closeShortagesDTO.Comments.NormalizeOptional();
+        closeShortagesDTO.Items ??= [];
+
+        var order = await GetOrderForShortageUpdateAsync(id);
+        if (order.OrderStatusId == (int)OrderStatusCode.Cancelled)
+        {
+            throw new AppBadRequestException("No se pueden cerrar faltantes de una orden cancelada.");
+        }
+
+        if (order.OrderStatusId == (int)OrderStatusCode.Received)
+        {
+            throw new AppBadRequestException("La orden ya fue recibida completamente.");
+        }
+
+        if (order.PurchaseShortages.Count != 0)
+        {
+            throw new AppBadRequestException("Los faltantes de la orden ya fueron cerrados.");
+        }
+
+        var productsWithPendingQuantity = order.Products
+            .Where(product => product.ReceivedQuantity < product.Quantity)
+            .ToList();
+        if (productsWithPendingQuantity.Count == 0)
+        {
+            throw new AppBadRequestException("La orden no tiene cantidades pendientes para registrar como faltantes.");
+        }
+
+        if (closeShortagesDTO.Items.Count != productsWithPendingQuantity.Count ||
+            closeShortagesDTO.Items.Select(item => item.ProductId).Distinct().Count() != closeShortagesDTO.Items.Count ||
+            closeShortagesDTO.Items.Any(item => productsWithPendingQuantity.All(product => product.Id != item.ProductId)))
+        {
+            throw new AppBadRequestException("Debe registrar exactamente un faltante por cada variante pendiente de la orden.");
+        }
+
+        var shortageDate = closeShortagesDTO.ClosedAt.NormalizeToUtc() ?? DateTime.UtcNow;
+        var shortages = new List<PurchaseShortage>();
+
+        foreach (var item in closeShortagesDTO.Items)
+        {
+            var product = productsWithPendingQuantity.Single(product => product.Id == item.ProductId);
+            var originalQuantity = product.Quantity;
+            var shortageQuantity = originalQuantity - product.ReceivedQuantity;
+            var originalMerchandiseTotalNio = product.MerchandiseTotalCostNio;
+            var lossAmountNio = Math.Round(originalMerchandiseTotalNio * shortageQuantity / originalQuantity, 2);
+
+            shortages.Add(new PurchaseShortage
+            {
+                OrderId = order.Id,
+                ProductId = product.Id,
+                Quantity = shortageQuantity,
+                LossAmountNio = lossAmountNio,
+                ShortageDate = shortageDate,
+                Comments = item.Comments.NormalizeOptional() ?? closeShortagesDTO.Comments
+            });
+
+            product.MerchandiseTotalCostNio = originalMerchandiseTotalNio - lossAmountNio;
+            product.TotalCostNio = product.MerchandiseTotalCostNio + product.AllocatedShippingCostNio;
+            product.Quantity = product.ReceivedQuantity;
+            product.UnitCostNio = product.Quantity == 0 ? 0 : Math.Round(product.TotalCostNio / product.Quantity, 6);
+            product.UnitCostUsd = order.ExchangeRate == 0 ? 0 : Math.Round(product.UnitCostNio / order.ExchangeRate, 2);
+        }
+
+        order.MerchandiseTotalNio = order.Products.Sum(product => product.MerchandiseTotalCostNio);
+        order.AmountUsd = order.ExchangeRate == 0 ? 0 : Math.Round(order.MerchandiseTotalNio / order.ExchangeRate, 2);
+        order.ReceivedAmountNio = order.MerchandiseTotalNio;
+        order.TotalCostNio = order.Products.Sum(product => product.TotalCostNio);
+        order.OrderStatusId = (int)OrderStatusCode.Received;
+        await _context.PurchaseShortages.AddRangeAsync(shortages);
+        await _context.SaveChangesAsync();
+
+        return await GetByIdAsync(id);
+    }
+
+    public async Task<OrderDTO> CreateSupplierRefundAsync(int id, CreateSupplierRefundDTO createSupplierRefundDTO)
+    {
+        createSupplierRefundDTO.Reference = createSupplierRefundDTO.Reference.NormalizeOptional();
+        createSupplierRefundDTO.Comments = createSupplierRefundDTO.Comments.NormalizeOptional();
+
+        var order = await GetOrderForShortageUpdateAsync(id);
+        if (order.SupplierRefund is not null)
+        {
+            throw new AppBadRequestException("La orden ya tiene un reembolso de proveedor registrado.");
+        }
+
+        var totalShortageLossNio = order.PurchaseShortages.Sum(shortage => shortage.LossAmountNio);
+        if (totalShortageLossNio == 0)
+        {
+            throw new AppBadRequestException("La orden no tiene faltantes registrados para reembolsar.");
+        }
+
+        if (createSupplierRefundDTO.AmountNio > totalShortageLossNio)
+        {
+            throw new AppBadRequestException("El reembolso no puede superar la pérdida total por faltantes de la orden.");
+        }
+
+        var refundedAt = createSupplierRefundDTO.RefundedAt.NormalizeToUtc() ?? DateTime.UtcNow;
+        var movement = new FinancialMovement
+        {
+            Description = $"Reembolso de proveedor por orden #{order.Id}.",
+            MovementDate = refundedAt,
+            MovementDirectionId = (int)MovementDirectionOptions.In,
+            FinancialMovementTypeId = (int)FinancialMovementTypeOption.SupplierRefund,
+            OrderId = order.Id,
+            Amount = createSupplierRefundDTO.AmountNio,
+            ExchangeRate = order.ExchangeRate,
+            Comments = createSupplierRefundDTO.Comments
+        };
+        var supplierRefund = new SupplierRefund
+        {
+            OrderId = order.Id,
+            FinancialMovement = movement,
+            AmountNio = createSupplierRefundDTO.AmountNio,
+            RefundedAt = refundedAt,
+            Reference = createSupplierRefundDTO.Reference,
+            Comments = createSupplierRefundDTO.Comments
+        };
+
+        await _context.SupplierRefunds.AddAsync(supplierRefund);
+        await _context.SaveChangesAsync();
+
+        return await GetByIdAsync(id);
+    }
+
     public async Task<IEnumerable<OrderTrackingNumberDTO>> AddTrackingNumbersAsync(
         int orderId,
         IEnumerable<CreateOrderTrackingNumberDTO> createTrackingDTOs)
@@ -209,6 +334,8 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                     .ThenInclude(productDetail => productDetail!.Subcategory)
             .Include(order => order.Products)
                 .ThenInclude(product => product.Size)
+            .Include(order => order.PurchaseShortages)
+            .Include(order => order.SupplierRefund)
             .OrderByDescending(order => order.PurchaseDate)
             .ToListAsync();
 
@@ -225,6 +352,8 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                     .ThenInclude(productDetail => productDetail!.Subcategory)
             .Include(order => order.Products)
                 .ThenInclude(product => product.Size)
+            .Include(order => order.PurchaseShortages)
+            .Include(order => order.SupplierRefund)
             .FirstOrDefaultAsync(order => order.Id == id)
             ?? throw new AppNotFoundException($"La orden con id '{id}' no existe.");
 
@@ -543,10 +672,49 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         }
     }
 
+    private async Task<Order> GetOrderForShortageUpdateAsync(int id)
+    {
+        return await _context.Orders
+            .Include(order => order.Products)
+            .Include(order => order.PurchaseShortages)
+            .Include(order => order.SupplierRefund)
+            .FirstOrDefaultAsync(order => order.Id == id)
+            ?? throw new AppNotFoundException($"La orden con id '{id}' no existe.");
+    }
+
     private OrderDTO MapOrderDto(Order order)
     {
         var orderDto = _mapper.Map<OrderDTO>(order);
         orderDto.PurchaseCurrencyName = order.PurchaseCurrencyId == (int)PurchaseCurrencyOption.Usd ? "USD" : "NIO";
+        orderDto.TotalShortageLossNio = order.PurchaseShortages.Sum(shortage => shortage.LossAmountNio);
+        orderDto.TotalSupplierRefundNio = order.SupplierRefund?.AmountNio ?? 0;
+        orderDto.NetShortageLossNio = orderDto.TotalShortageLossNio - orderDto.TotalSupplierRefundNio;
+        var refundStatus = ResolveShortageRefundStatus(orderDto.TotalShortageLossNio, orderDto.TotalSupplierRefundNio);
+        orderDto.PurchaseShortages = order.PurchaseShortages
+            .OrderBy(shortage => shortage.Id)
+            .Select(shortage => new PurchaseShortageDTO
+            {
+                Id = shortage.Id,
+                ProductId = shortage.ProductId,
+                Quantity = shortage.Quantity,
+                LossAmountNio = shortage.LossAmountNio,
+                ShortageDate = shortage.ShortageDate,
+                Comments = shortage.Comments,
+                RefundStatus = refundStatus
+            })
+            .ToList();
+        if (order.SupplierRefund is not null)
+        {
+            orderDto.SupplierRefund = new SupplierRefundDTO
+            {
+                Id = order.SupplierRefund.Id,
+                FinancialMovementId = order.SupplierRefund.FinancialMovementId,
+                AmountNio = order.SupplierRefund.AmountNio,
+                RefundedAt = order.SupplierRefund.RefundedAt,
+                Reference = order.SupplierRefund.Reference,
+                Comments = order.SupplierRefund.Comments
+            };
+        }
 
         orderDto.ProductDetails = order.Products
             .Where(product => product.ProductDetail != null)
@@ -585,6 +753,18 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             .ToList();
 
         return orderDto;
+    }
+
+    private static PurchaseShortageRefundStatusOption ResolveShortageRefundStatus(decimal totalLossNio, decimal refundedNio)
+    {
+        if (refundedNio == 0 || totalLossNio == 0)
+        {
+            return PurchaseShortageRefundStatusOption.PendingRefund;
+        }
+
+        return refundedNio >= totalLossNio
+            ? PurchaseShortageRefundStatusOption.Refunded
+            : PurchaseShortageRefundStatusOption.PartiallyRefunded;
     }
 
     private async Task EnsureSupplierExistsAsync(int supplierId)

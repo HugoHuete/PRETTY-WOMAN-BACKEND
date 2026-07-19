@@ -48,6 +48,20 @@ public class OrdersController(IOrderService orderService) : ControllerBase
         return NoContent();
     }
 
+    [HttpPost("{id:int}/shortages/close")]
+    public async Task<ActionResult<OrderDTO>> CloseShortages(int id, [FromBody] CloseOrderShortagesDTO closeShortagesDTO)
+    {
+        var order = await _orderService.CloseShortagesAsync(id, closeShortagesDTO);
+        return Ok(order);
+    }
+
+    [HttpPost("{id:int}/supplier-refund")]
+    public async Task<ActionResult<OrderDTO>> CreateSupplierRefund(int id, [FromBody] CreateSupplierRefundDTO createSupplierRefundDTO)
+    {
+        var order = await _orderService.CreateSupplierRefundAsync(id, createSupplierRefundDTO);
+        return Ok(order);
+    }
+
     [HttpPost("{id:int}/tracking-numbers")]
     public async Task<ActionResult<IEnumerable<OrderTrackingNumberDTO>>> AddTrackingNumbers(
         int id,

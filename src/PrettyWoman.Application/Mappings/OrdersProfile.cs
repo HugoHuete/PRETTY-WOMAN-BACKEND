@@ -16,7 +16,12 @@ public class OrdersProfile : Profile
                 options => options.MapFrom(source => source.OrderStatus != null ? source.OrderStatus.Name : null))
             .ForMember(
                 destination => destination.SupplierName,
-                options => options.MapFrom(source => source.Supplier != null ? source.Supplier.Name : null));
+                options => options.MapFrom(source => source.Supplier != null ? source.Supplier.Name : null))
+            .ForMember(destination => destination.TotalShortageLossNio, options => options.Ignore())
+            .ForMember(destination => destination.TotalSupplierRefundNio, options => options.Ignore())
+            .ForMember(destination => destination.NetShortageLossNio, options => options.Ignore())
+            .ForMember(destination => destination.SupplierRefund, options => options.Ignore())
+            .ForMember(destination => destination.PurchaseShortages, options => options.Ignore());
 
         CreateMap<CreateOrderTrackingNumberDTO, OrderTrackingNumber>();
         CreateMap<UpdateOrderTrackingNumberDTO, OrderTrackingNumber>();

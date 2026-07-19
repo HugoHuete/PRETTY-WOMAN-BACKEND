@@ -120,6 +120,32 @@ Cuando la orden no tiene tracking numbers, el costo de envío bodega -> Nicaragu
 - Una orden cancelada no permite recepciones.
 - Una orden completamente recibida no permite nuevas recepciones.
 
+## Cerrar faltantes confirmados
+
+Cuando el proveedor confirme que las cantidades pendientes no llegarán, usar:
+
+```http
+POST /api/v1/orders/{orderId}/shortages/close
+```
+
+El request debe listar exactamente las variantes que aún tienen cantidad pendiente. La API calcula la cantidad faltante y la pérdida histórica de cada una, ajusta la cantidad final de la variante a la cantidad recibida y cierra la orden.
+
+Si posteriormente el proveedor devuelve dinero, usar un único reembolso por orden:
+
+```http
+POST /api/v1/orders/{orderId}/supplier-refund
+```
+
+```json
+{
+  "amountNio": 250,
+  "reference": "CR-001",
+  "comments": "Crédito recibido del proveedor"
+}
+```
+
+El monto no puede superar la pérdida total de faltantes de la orden. La respuesta de `GET /api/v1/orders/{orderId}` incluye el total faltante, el reembolso, la pérdida neta y el estado calculado de cada línea.
+
 ## Errores esperados
 
 - Orden inexistente.

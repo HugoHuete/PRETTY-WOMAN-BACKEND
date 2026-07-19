@@ -30,8 +30,8 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.ToTable(t =>
         {
             t.HasCheckConstraint(
-                "ck_products_quantity_positive",
-                "quantity > 0");
+                "ck_products_quantity_non_negative",
+                "quantity >= 0");
 
             t.HasCheckConstraint(
                 "ck_products_sale_price_positive",

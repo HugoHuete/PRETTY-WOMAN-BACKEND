@@ -30,4 +30,6 @@ public class Order : IAuditableEntity
     public ICollection<OrderTrackingNumber> OrderTrackingNumbers { get; set; } = [];
     public ICollection<ProductReceipt> ProductReceipts { get; set; } = [];
     public ICollection<Product> Products { get; set; } = [];
+    public ICollection<PurchaseShortage> PurchaseShortages { get; set; } = [];
+    public SupplierRefund? SupplierRefund { get; set; }
 }

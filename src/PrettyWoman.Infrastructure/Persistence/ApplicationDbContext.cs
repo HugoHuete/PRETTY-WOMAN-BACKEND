@@ -71,6 +71,8 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public DbSet<Order> Orders { get; set; }
     public DbSet<ProductReceipt> ProductReceipts { get; set; }
     public DbSet<ProductReceiptDetail> ProductReceiptDetails { get; set; }
+    public DbSet<PurchaseShortage> PurchaseShortages { get; set; }
+    public DbSet<SupplierRefund> SupplierRefunds { get; set; }
 
     // Products
     public DbSet<Category> Categories { get; set; }

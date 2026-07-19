@@ -37,5 +37,10 @@ public class OrderDTO
 
     public string? OrderStatusName { get; set; }
     public string? SupplierName { get; set; }
+    public decimal TotalShortageLossNio { get; set; }
+    public decimal TotalSupplierRefundNio { get; set; }
+    public decimal NetShortageLossNio { get; set; }
+    public SupplierRefundDTO? SupplierRefund { get; set; }
+    public ICollection<PurchaseShortageDTO> PurchaseShortages { get; set; } = [];
     public ICollection<OrderProductDetailDTO> ProductDetails { get; set; } = [];
 }

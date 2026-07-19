@@ -20,6 +20,125 @@ public class OrderServiceTests
 
 
     [Fact]
+    public async Task CloseShortagesAsync_ClosesOrderAndRegistersSupplierRefund()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-FALTANTE", "Blusa faltante"));
+        var order = await context.Orders.Include(item => item.Products).SingleAsync(item => item.Id == orderId);
+        var product = order.Products.Single();
+        product.ReceivedQuantity = 1;
+        product.AvailableQuantity = 1;
+        order.OrderStatusId = (int)OrderStatusCode.PartiallyReceived;
+        await context.SaveChangesAsync();
+
+        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
+        {
+            Items = [new CloseOrderShortageItemDTO { ProductId = product.Id }]
+        });
+
+        Assert.Equal((int)OrderStatusCode.Received, closedOrder.OrderStatusId);
+        Assert.Single(closedOrder.PurchaseShortages);
+        Assert.Equal(1, closedOrder.PurchaseShortages.Single().Quantity);
+        Assert.Equal(292m, closedOrder.TotalShortageLossNio);
+        Assert.Equal(292m, closedOrder.MerchandiseTotalNio);
+        Assert.Equal(8m, closedOrder.AmountUsd);
+        Assert.Equal(292m, closedOrder.ReceivedAmountNio);
+        Assert.Equal(3942m, closedOrder.TotalCostNio);
+        Assert.Equal(PurchaseShortageRefundStatusOption.PendingRefund, closedOrder.PurchaseShortages.Single().RefundStatus);
+
+        var refundedOrder = await service.CreateSupplierRefundAsync(orderId, new CreateSupplierRefundDTO
+        {
+            AmountNio = 200m,
+            Reference = "CR-001"
+        });
+
+        Assert.Equal(200m, refundedOrder.TotalSupplierRefundNio);
+        Assert.Equal(92m, refundedOrder.NetShortageLossNio);
+        Assert.Equal(PurchaseShortageRefundStatusOption.PartiallyRefunded, refundedOrder.PurchaseShortages.Single().RefundStatus);
+        var movement = await context.FinancialMovements.SingleAsync(item => item.FinancialMovementTypeId == (int)FinancialMovementTypeOption.SupplierRefund);
+        Assert.Equal((int)MovementDirectionOptions.In, movement.MovementDirectionId);
+        Assert.Equal(200m, movement.Amount);
+    }
+
+    [Fact]
+    public async Task CloseShortagesAsync_RegistersZeroLossShortageForZeroCostProduct()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-SIN-COSTO", "Muestra sin costo"));
+        var order = await context.Orders.Include(item => item.Products).SingleAsync(item => item.Id == orderId);
+        var product = order.Products.Single();
+        product.MerchandiseTotalCostNio = 0;
+        product.AllocatedShippingCostNio = 0;
+        product.TotalCostNio = 0;
+        product.UnitCostNio = 0;
+        product.UnitCostUsd = 0;
+        product.ReceivedQuantity = 1;
+        product.AvailableQuantity = 1;
+        order.OrderStatusId = (int)OrderStatusCode.PartiallyReceived;
+        await context.SaveChangesAsync();
+
+        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
+        {
+            Items = [new CloseOrderShortageItemDTO { ProductId = product.Id }]
+        });
+
+        var shortage = Assert.Single(closedOrder.PurchaseShortages);
+        Assert.Equal(0m, shortage.LossAmountNio);
+        Assert.Equal(0m, closedOrder.TotalShortageLossNio);
+        Assert.Equal(0m, closedOrder.NetShortageLossNio);
+    }
+
+    [Fact]
+    public async Task CloseShortagesAsync_ClosesFullyMissingVariant()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-AUSENTE", "Variante no recibida"));
+        var product = await context.Products.SingleAsync(item => item.OrderId == orderId);
+
+        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
+        {
+            Items = [new CloseOrderShortageItemDTO { ProductId = product.Id }]
+        });
+
+        Assert.Equal((int)OrderStatusCode.Received, closedOrder.OrderStatusId);
+        Assert.Equal(2, Assert.Single(closedOrder.PurchaseShortages).Quantity);
+        Assert.Equal(584m, closedOrder.TotalShortageLossNio);
+        Assert.Equal(0, (await context.Products.SingleAsync(item => item.Id == product.Id)).Quantity);
+    }
+
+    [Fact]
+    public async Task CloseShortagesAsync_ConservesMerchandiseCentsWhenSplittingLoss()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-CENTAVOS", "Producto con centavos"));
+        var order = await context.Orders.Include(item => item.Products).SingleAsync(item => item.Id == orderId);
+        var product = order.Products.Single();
+        product.MerchandiseTotalCostNio = 0.03m;
+        product.TotalCostNio = product.MerchandiseTotalCostNio + product.AllocatedShippingCostNio;
+        product.ReceivedQuantity = 1;
+        product.AvailableQuantity = 1;
+        order.OrderStatusId = (int)OrderStatusCode.PartiallyReceived;
+        await context.SaveChangesAsync();
+
+        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
+        {
+            Items = [new CloseOrderShortageItemDTO { ProductId = product.Id }]
+        });
+
+        Assert.Equal(0.02m, closedOrder.TotalShortageLossNio);
+        Assert.Equal(0.01m, closedOrder.MerchandiseTotalNio);
+        Assert.Equal(0.03m, closedOrder.TotalShortageLossNio + closedOrder.MerchandiseTotalNio);
+    }
+
+    [Fact]
     public async Task CreateAsync_ConvertsSupplierShippingUsdToNioForLocalPurchase()
     {
         await using var context = CreateContext();
@@ -388,8 +507,12 @@ public class OrderServiceTests
         context.SizeGroups.Add(new SizeGroup { Id = 1, Name = "Regular" });
         context.Sizes.Add(new Size { Id = 1, Name = "S", SizeGroupId = 1, DisplayOrder = 1 });
         context.OrderStatuses.Add(new OrderStatus { Id = (int)OrderStatusCode.Pending, Name = "Pending" });
+        context.OrderStatuses.Add(new OrderStatus { Id = (int)OrderStatusCode.PartiallyReceived, Name = "PartiallyReceived" });
+        context.OrderStatuses.Add(new OrderStatus { Id = (int)OrderStatusCode.Received, Name = "Received" });
         context.MovementDirections.Add(new MovementDirection { Id = (int)MovementDirectionOptions.Out, Name = "Out" });
+        context.MovementDirections.Add(new MovementDirection { Id = (int)MovementDirectionOptions.In, Name = "In" });
         context.FinancialMovementTypes.Add(new FinancialMovementType { Id = (int)FinancialMovementTypeOption.SupplierPayment, Name = "SupplierPayment" });
+        context.FinancialMovementTypes.Add(new FinancialMovementType { Id = (int)FinancialMovementTypeOption.SupplierRefund, Name = "SupplierRefund" });
         context.DollarExchangeRates.Add(new DollarExchangeRate
         {
             Id = 1,

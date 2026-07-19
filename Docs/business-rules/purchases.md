@@ -205,6 +205,24 @@ El costo de envío proveedor -> bodega se distribuye al crear o actualizar la or
 
 Si el proveedor confirma que una parte de la línea nunca será entregada, la cantidad final de la línea y sus costos deben ajustarse antes de cerrar definitivamente la orden.
 
+## Regla: faltantes confirmados y reembolso del proveedor
+
+Cuando el proveedor confirme que una parte de una orden no llegará, el administrador debe cerrar los faltantes pendientes. Por cada variante pendiente se crea un `purchase_shortage` con la cantidad faltante, la fecha y el costo perdido congelado en `loss_amount_nio`.
+
+Al cerrar los faltantes, la cantidad final de la variante queda igual a la cantidad realmente recibida; la orden pasa a `Received` y no puede recibir más productos. El faltante no crea un nuevo egreso financiero: el pago original ya se registró como `SupplierPayment`.
+
+Una orden puede tener un único `supplier_refund` opcional. Este guarda el monto total que el proveedor devolvió por todos sus faltantes, sin distribuirlo entre las variantes, y crea un movimiento financiero `SupplierRefund` de ingreso.
+
+El estado de reembolso de cada línea se calcula, no se almacena:
+
+* `PendingRefund`: no hay reembolso registrado.
+* `PartiallyRefunded`: el reembolso total de la orden es mayor que cero y menor que la pérdida total.
+* `Refunded`: el reembolso total es igual a la pérdida total.
+
+La pérdida neta de una compra es:
+
+`SUM(purchase_shortages.loss_amount_nio) - supplier_refund.amount_nio`
+
 ## Regla: no vender productos no recibidos
 
 El sistema solo debe vender desde `available_quantity`.
@@ -322,4 +340,3 @@ Por tanto, al crear una orden se debe crear también un `financial_movement` rel
 Si una orden se actualiza antes de tener inventario recibido o recepciones registradas, el movimiento financiero relacionado debe actualizarse para reflejar el nuevo total de la compra.
 
 Una orden puede tener total financiero igual a cero mientras se registra de forma preliminar sin productos ni costos. En ese estado no debe crear ni conservar un `financial_movement` de compra. Cuando una actualización haga que `orders.total_cost_nio` sea mayor que cero, el backend debe crear o actualizar el movimiento financiero; si vuelve a cero antes de recibir inventario, debe eliminarlo.
-
