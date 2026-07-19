@@ -2117,6 +2117,45 @@ public class SaleServiceTests
     }
 
     [Fact]
+    public async Task SaleExchange_RejectsLineAlreadyReferencedByActiveReturn()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var original = await AddProductAsync(context, 1, 1000m, 400m);
+        var replacement = await AddProductAsync(context, 1, 900m, 300m);
+        var saleId = await CreateSaleWithProductAsync(context, original.Id, SaleStatusOption.SentForDelivery);
+        var originalLineId = await context.SaleProducts
+            .Where(item => item.SaleId == saleId)
+            .Select(item => item.Id)
+            .SingleAsync();
+
+        await CreateReturnService(context).CreateAsync(saleId, new CreateSaleReturnDTO
+        {
+            ReasonId = (int)SaleReturnReasonOption.CustomerPreference,
+            MethodId = (int)SaleReturnMethodOption.InStore,
+            Items =
+            [
+                new CreateSaleReturnItemDTO
+                {
+                    OriginalSaleProductId = originalLineId,
+                    Quantity = 1,
+                    RecognizedUnitAmount = 1000m
+                }
+            ]
+        });
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => CreateExchangeService(context).CreateAsync(saleId, new CreateSaleExchangeDTO
+        {
+            ReturnItems = [new CreateExchangeReturnItemDTO { OriginalSaleProductId = originalLineId, Quantity = 1, RecognizedUnitAmount = 1000m }],
+            OutboundItems = [new CreateExchangeOutboundItemDTO { ProductId = replacement.Id, Quantity = 1, ItemTypeId = (int)ExchangeOutboundItemTypeOption.Replacement }]
+        }));
+
+        Assert.Contains("cantidad vendida disponible", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, (await context.Products.SingleAsync(item => item.Id == replacement.Id)).AvailableQuantity);
+        Assert.Empty(await context.SaleExchanges.ToListAsync());
+    }
+
+    [Fact]
     public async Task CreateAsync_RejectsDiscountWithoutSource()
     {
         await using var context = CreateContext();

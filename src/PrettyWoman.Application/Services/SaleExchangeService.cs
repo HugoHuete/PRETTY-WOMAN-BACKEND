@@ -44,10 +44,7 @@ public class SaleExchangeService(
 
         await EnsureReturnedProductsWereMovedOutOfInventoryAsync(sale, request.ReturnItems);
 
-        var existingReturns = await _context.ExchangeReturnItems
-            .Include(item => item.SaleExchange)
-            .Where(item => item.SaleExchange!.OriginalSaleId == saleId && item.SaleExchange.StatusId != (int)SaleExchangeStatusOption.Cancelled)
-            .ToListAsync();
+        var previouslyReturned = await GetPreviouslyReturnedQuantitiesAsync(saleId);
 
         foreach (var group in request.ReturnItems.GroupBy(item => item.OriginalSaleProductId))
         {
@@ -55,8 +52,8 @@ public class SaleExchangeService(
                 ?? throw new AppBadRequestException("Cada prenda retornada debe pertenecer a la venta original.");
             var requestedQuantity = group.Sum(item => item.Quantity);
 
-            if (requestedQuantity <= 0 || requestedQuantity + existingReturns.Where(item => item.OriginalSaleProductId == group.Key).Sum(item => item.Quantity) > saleProduct.Quantity)
-                throw new AppBadRequestException("La cantidad a retornar excede la cantidad vendida que aun no esta en otro cambio activo.");
+            if (requestedQuantity <= 0 || previouslyReturned.GetValueOrDefault(group.Key) + requestedQuantity > saleProduct.Quantity)
+                throw new AppBadRequestException("La cantidad a retornar excede la cantidad vendida disponible.");
             // Credito por unidad que se descuenta del saldo del cambio; por defecto normalmente coincide con lo que pago la clienta.
             if (group.Any(item => item.RecognizedUnitAmount < 0 || item.RecognizedUnitAmount > saleProduct.FinalUnitPrice))
                 throw new AppBadRequestException("El valor reconocido no puede ser negativo ni mayor al precio final originalmente vendido.");
@@ -179,6 +176,30 @@ public class SaleExchangeService(
 
         if (movedOutProductIds.Count != saleProductIds.Count)
             throw new AppBadRequestException("Solo se pueden crear cambios para prendas cuya venta ya desconto inventario.");
+    }
+
+    private async Task<Dictionary<int, int>> GetPreviouslyReturnedQuantitiesAsync(int saleId)
+    {
+        // Cambios y devoluciones consumen la misma cantidad vendida original; se validan juntos
+        // para que una unidad no pueda entrar dos veces al ciclo de retorno.
+        var returns = await _context.SaleReturnItems
+            .Include(item => item.SaleReturn)
+            .Where(item => item.SaleReturn!.OriginalSaleId == saleId &&
+                           item.SaleReturn.StatusId != (int)SaleReturnStatusOption.Cancelled)
+            .GroupBy(item => item.OriginalSaleProductId)
+            .Select(group => new { Id = group.Key, Quantity = group.Sum(item => item.Quantity) })
+            .ToListAsync();
+        var exchanges = await _context.ExchangeReturnItems
+            .Include(item => item.SaleExchange)
+            .Where(item => item.SaleExchange!.OriginalSaleId == saleId &&
+                           item.SaleExchange.StatusId != (int)SaleExchangeStatusOption.Cancelled)
+            .GroupBy(item => item.OriginalSaleProductId)
+            .Select(group => new { Id = group.Key, Quantity = group.Sum(item => item.Quantity) })
+            .ToListAsync();
+
+        return returns.Concat(exchanges)
+            .GroupBy(item => item.Id)
+            .ToDictionary(group => group.Key, group => group.Sum(item => item.Quantity));
     }
 
     private static void EnsureExchangeIsActive(SaleExchange exchange)
