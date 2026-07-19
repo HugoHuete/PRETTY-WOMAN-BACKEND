@@ -69,7 +69,7 @@ Puede trabajar con:
 | Autenticacion | Usuarios | Admin | Crear usuario, desbloquear usuario | Usuarios, roles/permisos | `POST /api/v1/auth/users`, `POST /api/v1/auth/users/{id}/unlock` |
 | Dashboard | Resumen | Admin, Vendedor | Ver ventas, pagos, reservas, entregas e incidencias | Ventas, cobros, reservas, entregas e incidencias; el bloque financiero es exclusivo de Admin | `GET /api/v1/dashboard/summary` |
 | Productos | Lista de productos | Admin, Vendedor | Buscar, filtrar, paginar, abrir detalle | Productos, categoria, subcategoria, talla, stock | `GET /api/v1/product-details` |
-| Productos | Detalle de producto | Admin, Vendedor | Ver informacion completa y disponibilidad | Producto, variantes/detalle, stock | `GET /api/v1/product-details/{productDetailId}` |
+| Productos | Detalle de producto | Admin, Vendedor | Ver informacion completa, disponibilidad, imágenes e historial | Producto, variantes/detalle, stock, imágenes, movimientos | `GET /api/v1/product-details/{productDetailId}`, rutas de imágenes e inventario del detalle |
 | Catalogos | Categorias | Admin | Listar, crear, editar | Categorias | `GET /api/v1/categories`, `POST /api/v1/categories`, `PUT /api/v1/categories/{id}` |
 | Catalogos | Subcategorias | Admin | Listar, filtrar por categoria, crear, editar | Subcategorias, categorias | `GET /api/v1/subcategories`, `GET /api/v1/categories/{id}/subcategories`, `POST /api/v1/subcategories`, `PUT /api/v1/subcategories/{id}` |
 | Catalogos | Tallas | Admin | Listar, crear, editar | Tallas | `GET /api/v1/sizes`, `POST /api/v1/sizes`, `PUT /api/v1/sizes/{id}` |
@@ -77,11 +77,13 @@ Puede trabajar con:
 | Clientes | Estado de cliente | Admin | Bloquear, desbloquear | Cliente, motivo de bloqueo | `PATCH /api/v1/clients/{id}/block`, `PATCH /api/v1/clients/{id}/unblock` |
 | Compras | Ordenes | Admin | Listar, crear, editar, ver detalle | Ordenes, proveedores, tracking | `GET /api/v1/orders`, `POST /api/v1/orders`, `PUT /api/v1/orders/{id}` |
 | Compras | Tracking de orden | Admin | Agregar, editar, eliminar tracking | Orden, numeros de tracking | `GET /api/v1/orders/{id}/tracking-numbers`, `POST /api/v1/orders/{id}/tracking-numbers`, `PUT /api/v1/orders/{id}/tracking-numbers/{trackingId}`, `DELETE /api/v1/orders/{id}/tracking-numbers/{trackingId}` |
-| Compras | Recepcion de productos | Admin | Registrar recepcion de productos de una orden | Orden, productos recibidos, cantidades | `POST /api/v1/orders/{orderId}/receipts` |
+| Compras | Recepcion de productos | Admin | Registrar recepción parcial/completa, trackings, flete de bodega y sobrantes | Orden, productos recibidos, cantidades, pesos, trackings y flete | `POST /api/v1/orders/{orderId}/receipts` |
+| Compras | Faltantes y reembolso | Admin | Cerrar cantidades que el proveedor confirmó que no llegarán; registrar reembolso posterior | Orden, variantes pendientes, pérdida y reembolso | `POST /api/v1/orders/{id}/shortages/close`, `POST /api/v1/orders/{id}/supplier-refund` |
+| Ventas | Postventa | Admin | Gestionar selección, cambios, devoluciones y reembolsos | Venta, líneas, inventario, pagos y entregas | Rutas `/sales/{id}/selection-holds`, `/exchanges`, `/returns` y reembolsos de pago |
 | Proveedores | Proveedores | Admin | Listar, crear, editar | Proveedores | `GET /api/v1/suppliers`, `POST /api/v1/suppliers`, `PUT /api/v1/suppliers/{id}` |
 | Descuentos | Campanas | Admin | Listar, crear, editar, deshabilitar | Campanas de descuento | `GET /api/v1/discountcampaigns`, `POST /api/v1/discountcampaigns`, `PUT /api/v1/discountcampaigns/{id}`, `PATCH /api/v1/discountcampaigns/{id}/disable` |
 | Finanzas | Balance | Admin | Ver balance actual | Balance financiero | `GET /api/v1/finances/current-balance` |
-| Finanzas | Movimientos | Admin | Listar, filtrar, crear, editar, eliminar | Movimientos, tipos de movimiento | `GET /api/v1/finances/movements`, `POST /api/v1/finances/movements`, `PUT /api/v1/finances/movements/{id}`, `DELETE /api/v1/finances/movements/{id}` |
+| Finanzas | Movimientos | Admin | Listar, filtrar, crear, editar, eliminar | Movimientos, tipos de movimiento | `GET /api/v1/finances/movement-types`, `GET /api/v1/finances/movements`, `POST /api/v1/finances/movements`, `PUT /api/v1/finances/movements/{id}`, `DELETE /api/v1/finances/movements/{id}` |
 | Finanzas | Prestamos | Admin | Listar, crear, editar, eliminar, registrar pagos | Prestamos, duenos, pagos | `GET /api/v1/loans`, `POST /api/v1/loans`, `PUT /api/v1/loans/{id}`, `DELETE /api/v1/loans/{id}`, `POST /api/v1/loans/{id}/payments` |
 | Finanzas | Duenos de prestamo | Admin | Listar, crear, editar | Duenos de prestamo | `GET /api/v1/loanowners`, `POST /api/v1/loanowners`, `PUT /api/v1/loanowners/{id}` |
 | Configuracion | Agencias de envio | Admin | Listar, crear, editar | Agencias de envio | `GET /api/v1/deliveryagencies`, `POST /api/v1/deliveryagencies`, `PUT /api/v1/deliveryagencies/{id}` |
@@ -91,6 +93,149 @@ Puede trabajar con:
 ## Contratos operativos confirmados
 
 Los endpoints siguientes ya están implementados y son la base de las pantallas críticas. Todos requieren JWT. `Employee` es el rol técnico de Vendedor.
+
+### Compras: faltantes confirmados y reembolso de proveedor
+
+Ambas acciones son exclusivas de Admin. Se ejecutan desde el detalle de la orden; sus respuestas devuelven el `OrderDTO` actualizado, por lo que la UI debe reemplazar el estado local con esa respuesta o recargar `GET /api/v1/orders/{id}`.
+
+| Flujo | Endpoint | Cuándo mostrarlo | Resultado |
+|---|---|---|---|
+| Cerrar faltantes | `POST /api/v1/orders/{id}/shortages/close` | Hay al menos una variante con `receivedQuantity < quantity`, la orden no está cancelada ni recibida y aún no tiene `purchaseShortages`. | Crea un faltante por cada variante pendiente y deja la orden en `Received`. |
+| Registrar reembolso | `POST /api/v1/orders/{id}/supplier-refund` | La orden ya tiene faltantes con pérdida mayor que cero y `supplierRefund` es `null`. | Registra el único reembolso permitido, crea un ingreso financiero `SupplierRefund` y actualiza la pérdida neta. |
+
+#### Cerrar faltantes
+
+Este flujo no permite escoger una cantidad parcial ni cerrar solo algunas variantes: la UI debe listar todas las variantes pendientes y enviar **exactamente una** por cada una. La API deriva la cantidad faltante como `quantity - receivedQuantity`.
+
+```json
+{
+  "closedAt": "2026-07-19T18:00:00Z",
+  "comments": "El proveedor confirmó los faltantes.",
+  "items": [
+    {
+      "productId": 123,
+      "comments": "Talla M agotada en origen."
+    }
+  ]
+}
+```
+
+- `closedAt` y los comentarios son opcionales; cada comentario de línea prevalece sobre el comentario general.
+- La UI no envía la cantidad faltante ni el costo perdido: son valores calculados por el backend.
+- Pedir confirmación explícita: la orden queda `Received` y no permite nuevas recepciones normales.
+- La pérdida considera únicamente el costo de mercancía faltante. El envío ya asignado se conserva; la UI no debe recalcular costos ni pérdidas.
+
+#### Registrar reembolso del proveedor
+
+Solo puede existir un reembolso por orden. No se distribuye entre los faltantes: el monto se compara con la pérdida total de la orden.
+
+```json
+{
+  "amountNio": 250,
+  "refundedAt": "2026-07-20T15:30:00Z",
+  "reference": "CR-001",
+  "comments": "Crédito recibido del proveedor"
+}
+```
+
+- `amountNio` es obligatorio, mayor que cero y no puede superar `totalShortageLossNio`.
+- `refundedAt`, `reference` y `comments` son opcionales.
+- Si la pérdida total es cero, no se debe mostrar esta acción: no hay monto reembolsable que registrar.
+
+#### Datos para mostrar en el detalle de orden
+
+`GET /api/v1/orders/{id}` y las respuestas de las dos acciones anteriores incluyen:
+
+```ts
+totalShortageLossNio: number
+totalSupplierRefundNio: number
+netShortageLossNio: number // totalShortageLossNio - totalSupplierRefundNio
+supplierRefund: {
+  id: number
+  financialMovementId: number
+  amountNio: number
+  refundedAt: string
+  reference: string | null
+  comments: string | null
+} | null
+purchaseShortages: Array<{
+  id: number
+  productId: number
+  quantity: number
+  lossAmountNio: number
+  shortageDate: string
+  comments: string | null
+  refundStatus: 1 | 2 | 3
+}>
+```
+
+Mostrar el resumen `Pérdida total - Reembolso proveedor = Pérdida neta`. El estado de cada faltante se calcula sobre el total de la orden, no por asignación individual de dinero:
+
+- `1` (`PendingRefund`): no hay reembolso.
+- `2` (`PartiallyRefunded`): hay reembolso, pero es menor que la pérdida total.
+- `3` (`Refunded`): el reembolso es igual a la pérdida total.
+
+Errores de negocio esperables: orden cancelada o ya recibida, faltantes ya cerrados, lista de variantes pendiente incompleta/duplicada, intento de reembolso sin faltantes, segundo reembolso y monto superior a la pérdida total. Mostrar `ProblemDetails.detail`; no usar textos como condición de lógica.
+
+### Compras: recepción de productos
+
+Usar `POST /api/v1/orders/{orderId}/receipts` para una recepción parcial o completa. Solo Admin puede hacerlo. El formulario debe enviar al menos un producto y puede registrar flete de bodega a Nicaragua de una de estas dos formas:
+
+- Orden con trackings: enviar al menos un elemento en `trackingNumbers`; el costo viene en cada tracking. No enviar `warehouseShippingCostUsd` directo.
+- Orden sin trackings: dejar `trackingNumbers` vacío y enviar, si corresponde, `warehouseShippingCostUsd` directo.
+
+```json
+{
+  "receivedDate": "2026-07-19T18:00:00Z",
+  "warehouseShippingCostUsd": 18,
+  "comments": "Recepción parcial.",
+  "trackingNumbers": [],
+  "products": [
+    {
+      "productId": 30,
+      "quantity": 3,
+      "weight": 1,
+      "isSurplus": false,
+      "comments": null
+    }
+  ]
+}
+```
+
+Para una orden con tracking, sustituir el costo directo por elementos como:
+
+```json
+{
+  "id": 12,
+  "weight": 8.5,
+  "shippingCostUsd": 24
+}
+```
+
+- Cada producto requiere `productId` y `quantity > 0`; `weight` es opcional y vale `1` por defecto.
+- Para recibir más de la cantidad pendiente, la línea debe enviar `isSurplus: true` y un comentario. Mostrar una confirmación antes de enviarla.
+- El backend distribuye el flete de bodega entre los productos de esa recepción según `weight * quantity`; la UI no debe prorratearlo.
+- La respuesta `OrderReceiptDTO` incluye `id`, `orderId`, `receivedDate`, `warehouseShippingCostUsd`, `warehouseShippingCostNio`, `orderStatusId`, `trackingNumberIds` y, por producto, `productId`, `quantity`, `isSurplus` y `allocatedWarehouseShippingCostNio`.
+- Después de una recepción, recargar el detalle de la orden para mostrar cantidades y costos calculados. Si quedan pendientes que el proveedor ya confirmó que no llegarán, habilitar el flujo de faltantes descrito arriba.
+
+### Productos: imágenes e historial de inventario
+
+Las acciones de imágenes e historial están disponibles para Admin y Vendedor desde el detalle de producto.
+
+| Flujo | Endpoint | Request / resultado |
+|---|---|---|
+| Consultar imagen | `GET /api/v1/product-details/{productDetailId}/images/{imageId}` | Devuelve `{ id, thumbnailUrl, webUrl, isPrimary, sortOrder }`. |
+| Subir imagen | `POST /api/v1/product-details/{productDetailId}/images` | `multipart/form-data`, campo `file`; máximo 8 MB. Devuelve la imagen creada. |
+| Ordenar y seleccionar portada | `PUT /api/v1/product-details/{productDetailId}/images` | `{ "primaryImageId": 10, "imageIdsInOrder": [10, 11, 12] }`; devuelve la colección ordenada. |
+| Eliminar imagen | `DELETE /api/v1/product-details/{productDetailId}/images/{imageId}` | Devuelve `204`. Pedir confirmación. |
+| Historial del detalle | `GET /api/v1/product-details/{productDetailId}/inventory-movements` | Devuelve movimientos de todas las variantes del detalle. |
+| Historial de variante | `GET /api/v1/product-details/{productDetailId}/variants/{productId}/inventory-movements` | Devuelve movimientos de una variante. |
+
+Después de subir, ordenar o eliminar, actualizar la colección con la respuesta o recargar el detalle. Usar `thumbnailUrl` en listas y `webUrl` para vista ampliada.
+
+### Finanzas: catálogo de tipos de movimiento
+
+Antes de crear o filtrar movimientos financieros, cargar `GET /api/v1/finances/movement-types`. Devuelve una lista de `{ id, name }`; la UI debe usar estos ids y nombres, no hardcodear tipos. Los movimientos automáticos —por ejemplo `SupplierRefund` o `WarehouseShippingPayment`— se muestran en el listado financiero, pero no deben crearse manualmente desde la pantalla de movimientos.
 
 ### Ventas, pagos y envíos
 
@@ -118,6 +263,34 @@ La cantidad de una línea sigue representando lo vendido originalmente aun cuand
 Una reserva con pago no usa `ProductHold`: es una venta con `saleStatusId: 2` (`Reserved`). Permanece activa hasta que el negocio la cancele. `selectionHolds` representa únicamente prendas enviadas para prueba, talla o selección.
 
 Para mostrar existencias, considerar que `Reserved` y `ReadyForDelivery` usan `reservedQuantity`; `SentForDelivery` ya está fuera del inventario activo. Un envío fallido devuelve a reservado solamente las unidades que todavía continúan fuera. La API rechazará esta transición si hay una devolución pendiente de recepción física o un cambio solicitado pendiente de entrega física; la UI debe resolver o cancelar primero esa operación.
+
+### Ventas: postventa, selección, cambios y devoluciones
+
+La consulta de historial está disponible para Admin y Vendedor; las acciones de postventa son exclusivas de Admin. Estas operaciones conservan la venta original y sus líneas históricas: no se deben simular editando cantidades de `saleProducts`.
+
+| Flujo | Endpoint | Rol | Resultado de UI esperado |
+|---|---|---|---|
+| Enviar productos a selección | `POST /api/v1/sales/{id}/selection-holds` | Admin | Crea los holds; las prendas quedan fuera de disponibilidad mientras estén activas. |
+| Resolver selección | `POST /api/v1/sales/{id}/selection-holds/{holdId}/resolve` | Admin | Registra la decisión de la clienta; las prendas no elegidas regresan a disponibilidad. |
+| Marcar selección devuelta | `POST /api/v1/sales/{id}/selection-holds/{holdId}/return` | Admin | Devuelve la prenda de selección no comprada al flujo de inventario. |
+| Consultar / crear cambio | `GET`, `POST /api/v1/sales/{id}/exchanges` | Consulta: Admin, Vendedor. Crear: Admin | El cambio conserva retorno y salida como ítems independientes de la venta. |
+| Entrega física del cambio | `POST /api/v1/sales/{id}/exchanges/{exchangeId}/handover` | Admin | La agencia entrega reemplazos y recibe retornos. |
+| Confirmar retorno de cambio | `POST /api/v1/sales/{id}/exchanges/{exchangeId}/return-items/{returnItemId}/received` | Admin | Confirma llegada física del artículo retornado. |
+| Cancelar cambio | `POST /api/v1/sales/{id}/exchanges/{exchangeId}/cancel` | Admin | Disponible solo mientras la regla de negocio permita cancelar el proceso. |
+| Consultar / crear devolución | `GET`, `POST /api/v1/sales/{id}/returns` | Consulta: Admin, Vendedor. Crear: Admin | Crea una devolución parcial o total sin editar la venta histórica. |
+| Recoger devolución por agencia | `POST /api/v1/sales/{id}/returns/{returnId}/pickup` | Admin | Registra recogida y ejecuta el reembolso. |
+| Recibir devolución en local | `POST /api/v1/sales/{id}/returns/{returnId}/receive` | Admin | Recibe físicamente, reintegra inventario o abre incidencia por daño, y ejecuta el reembolso. |
+| Cancelar devolución | `POST /api/v1/sales/{id}/returns/{returnId}/cancel` | Admin | Solo antes de recogida o recepción. |
+| Reembolsar pago registrado | `POST /api/v1/sales/{id}/payment-movements/{paymentMovementId}/refunds` | Admin | Crea el movimiento de reembolso ligado al pago original. |
+
+Reglas de presentación:
+
+- Un cambio o devolución no crea una venta nueva ni modifica el historial de pagos de la venta original.
+- Para una devolución, el backend calcula el reembolso; la UI debe mostrar el resultado y no recalcularlo. El envío original no se reembolsa; el costo de retorno puede descontarse según el flujo elegido.
+- Una devolución por agencia permanece fuera de inventario después de `pickup` hasta su recepción física. Para una devolución local, `receive` hace recepción y reembolso en el mismo paso.
+- Un cambio registra el saldo como `balanceToCollect`; mostrarlo como monto calculado por backend. La creación reserva las prendas de salida y `handover` registra el intercambio físico.
+- Estas transiciones devuelven `204` cuando completan; después recargar `GET /api/v1/sales/{id}` y, cuando aplique, `GET .../exchanges` o `GET .../returns`.
+- Para payloads y campos específicos, consultar [cambios](use-cases/exchange-products-after-sale.md), [devoluciones](use-cases/return-products-after-sale.md) y [selección](use-cases/send-products-for-selection.md).
 
 ### Incidencias de inventario
 
