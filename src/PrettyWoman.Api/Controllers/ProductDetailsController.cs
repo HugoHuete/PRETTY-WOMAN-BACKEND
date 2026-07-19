@@ -39,7 +39,7 @@ public class ProductDetailsController(IProductService productService, IProductIm
     [HttpPost("{productDetailId:int}/images")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(8 * 1024 * 1024)]
-    public async Task<ActionResult<ProductImageDTO>> UploadImage(int productDetailId, [FromForm] IFormFile file, CancellationToken cancellationToken)
+    public async Task<ActionResult<ProductImageDTO>> UploadImage(int productDetailId, IFormFile file, CancellationToken cancellationToken)
     {
         await using var content = file.OpenReadStream();
         var image = await _productImageService.UploadAsync(productDetailId, content, file.ContentType, cancellationToken);
