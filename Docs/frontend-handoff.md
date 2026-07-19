@@ -99,8 +99,8 @@ Los endpoints siguientes ya están implementados y son la base de las pantallas 
 | Listar / abrir venta | `GET /api/v1/sales`, `GET /api/v1/sales/{id}` | Admin, Vendedor | La consulta individual incluye productos, pagos, prendas en selección y `deliveries`. |
 | Crear venta o reserva | `POST /api/v1/sales` | Admin, Vendedor | Devuelve `201` y el id. Para una reserva confirmada enviar `saleStatusId: 2` (`Reserved`). |
 | Registrar abono o pago | `POST /api/v1/sales/{id}/payment-movements` | Admin, Vendedor | Devuelve `201` y el id. El backend calcula el total y estado de pago. |
-| Crear envío | `POST /api/v1/sales/{id}/deliveries` | Admin, Vendedor | Devuelve `201` y el id; deja la venta `ReadyForDelivery`. |
-| Despachar | `POST /api/v1/sales/{id}/deliveries/{deliveryId}/send` | Admin, Vendedor | Cambia el envío a `Sent`. |
+| Crear envío | `POST /api/v1/sales/{id}/deliveries` | Admin, Vendedor | Devuelve `201` y el id; deja la venta `ReadyForDelivery` y reserva productos si estaba `Pending`. |
+| Despachar | `POST /api/v1/sales/{id}/deliveries/{deliveryId}/send` | Admin, Vendedor | Cambia el envío a `Sent` y mueve la reserva fuera de inventario. |
 | Completar, fallar o cancelar envío | `.../complete`, `.../fail`, `.../cancel` | Admin | Son transiciones posteriores o sensibles. |
 | Conciliar cobro COD | `GET /api/v1/deliveryagencyreconciliations/pending-deliveries`, `POST /api/v1/deliveryagencyreconciliations` | Admin | Un envío `Sent` solo se completa si la agencia recauda el saldo total. |
 | Corregir o cancelar venta | `PATCH /api/v1/sales/{id}`, `PUT /api/v1/sales/{id}/products`, `POST /api/v1/sales/{id}/cancel` | Admin | No mostrar estas acciones a Vendedor. |
@@ -109,9 +109,13 @@ Para crear una venta, `products` y `selectionProducts` son listas distintas. Cad
 
 `PUT /api/v1/sales/{id}/products` recibe la composición final completa. Cada línea existente que se desee conservar debe incluir su `saleProductId`, obtenido de `GET /api/v1/sales/{id}`; omitir una línea existente la elimina y enviar una línea sin `saleProductId` agrega un producto nuevo. El backend conserva los precios y costos congelados de las líneas identificadas y mueve inventario únicamente por la diferencia de cantidad.
 
+La cantidad de una línea sigue representando lo vendido originalmente aun cuando parte haya sido devuelta. Al reemplazar productos, el backend excluye automáticamente del compromiso de inventario las unidades ya recibidas por devoluciones o cambios; el frontend no debe restarlas del `quantity` enviado.
+
 `shippingAmount` mayor que cero exige `saleDeliveryId`; primero debe existir el envío. Para pago con tarjeta (`paymentMethodId: 3`) también es obligatorio `paymentTerminalId`; en efectivo o transferencia no debe enviarse terminal. La respuesta de detalle expone el total calculado y cada `paymentMovement.grossAmount`; la UI no debe recalcularlos.
 
 Una reserva con pago no usa `ProductHold`: es una venta con `saleStatusId: 2` (`Reserved`). Permanece activa hasta que el negocio la cancele. `selectionHolds` representa únicamente prendas enviadas para prueba, talla o selección.
+
+Para mostrar existencias, considerar que `Reserved` y `ReadyForDelivery` usan `reservedQuantity`; `SentForDelivery` ya está fuera del inventario activo. Un envío fallido devuelve a reservado solamente las unidades que todavía continúan fuera. La API rechazará esta transición si hay una devolución pendiente de recepción física o un cambio solicitado pendiente de entrega física; la UI debe resolver o cancelar primero esa operación.
 
 ### Incidencias de inventario
 

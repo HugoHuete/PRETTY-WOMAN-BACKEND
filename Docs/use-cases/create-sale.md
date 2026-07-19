@@ -52,8 +52,9 @@ Registrar una venta con sus productos, descuentos aplicados, subtotal, total y e
    - `Reserved`, si la clienta ya confirmó y el producto queda apartado para retiro o envío futuro.
    - `ReadyForDelivery`, si ya puede retirarse o enviarse.
 9. Crear las líneas en `sale_details`.
-11. Para ventas en local, descontar inventario únicamente cuando los pagos de productos alcancen el total y la venta pase a `Completed`.
-12. Crear movimientos de inventario tipo `Sale` por cada producto vendido al completarse.
+10. Para `Reserved` o `ReadyForDelivery`, mover los productos de `Available` a `Reserved`.
+11. Para ventas en local, mover a `OutOfInventory` únicamente cuando los pagos de productos alcancen el total y la venta pase a `Completed`.
+12. Al despachar una venta reservada, convertir `Reserved` a `OutOfInventory`.
 
 ## Reglas de negocio
 
@@ -69,7 +70,7 @@ Registrar una venta con sus productos, descuentos aplicados, subtotal, total y e
 
 En venta local, el inventario disminuye y se crea `inventory_movements` tipo `Sale` al completarse el pago. Si queda pendiente, no se descuenta inventario todavía.
 
-Para una venta reservada o de entrega, se aplican las transiciones operativas de estado que correspondan.
+Una venta `Reserved` o `ReadyForDelivery` afecta `reserved_quantity`; todavía no representa una salida física. La salida se registra al pasar a `SentForDelivery`.
 
 Si hay pago previo para retiro o envio futuro, crear una venta en estado `Reserved`. No usar `product_holds` para reservas con pago.
 

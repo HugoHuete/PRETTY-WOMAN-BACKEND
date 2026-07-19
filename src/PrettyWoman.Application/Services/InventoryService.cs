@@ -20,6 +20,8 @@ public class InventoryService(IApplicationDbContext context) : IInventoryService
         (InventoryStockBucketOption.Unavailable, InventoryStockBucketOption.Available),
         (InventoryStockBucketOption.Unavailable, InventoryStockBucketOption.OutOfInventory),
         (InventoryStockBucketOption.OutOfInventory, InventoryStockBucketOption.Available),
+        // Un intento de entrega fallido conserva el compromiso de la venta para un nuevo envío.
+        (InventoryStockBucketOption.OutOfInventory, InventoryStockBucketOption.Reserved),
         (InventoryStockBucketOption.OutOfInventory, InventoryStockBucketOption.Unavailable)
     ];
 

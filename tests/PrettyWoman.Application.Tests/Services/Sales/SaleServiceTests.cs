@@ -263,6 +263,71 @@ public class SaleServiceTests
     }
 
     [Fact]
+    public async Task PatchHeaderAsync_PreservesDatesOfReturnMovementsLinkedToSaleProduct()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+        var originalSaleDate = new DateTime(2026, 7, 10, 10, 0, 0, DateTimeKind.Utc);
+        var returnReceivedAt = new DateTime(2026, 7, 12, 11, 0, 0, DateTimeKind.Utc);
+        var exchangeReceivedAt = new DateTime(2026, 7, 13, 12, 0, 0, DateTimeKind.Utc);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleDate = originalSaleDate,
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.Reserved,
+            Products =
+            [
+                new CreateSaleProductDTO
+                {
+                    ProductId = product.Id,
+                    Quantity = 1,
+                    DiscountSourceId = (int)DiscountSourceOption.None
+                }
+            ]
+        });
+        var saleProductId = await context.SaleProducts
+            .Where(item => item.SaleId == saleId)
+            .Select(item => item.Id)
+            .SingleAsync();
+
+        var customerReturn = new InventoryMovement
+        {
+            ProductId = product.Id,
+            SaleProductId = saleProductId,
+            InventoryMovementTypeId = (int)InventoryMovementTypeOption.CustomerReturn,
+            FromStockBucketId = (int)InventoryStockBucketOption.OutOfInventory,
+            ToStockBucketId = (int)InventoryStockBucketOption.Available,
+            Quantity = 1,
+            MovementDate = returnReceivedAt
+        };
+        var exchangeReturn = new InventoryMovement
+        {
+            ProductId = product.Id,
+            SaleProductId = saleProductId,
+            InventoryMovementTypeId = (int)InventoryMovementTypeOption.ExchangeReturnReceivedByAgency,
+            FromStockBucketId = (int)InventoryStockBucketOption.OutOfInventory,
+            ToStockBucketId = (int)InventoryStockBucketOption.Available,
+            Quantity = 1,
+            MovementDate = exchangeReceivedAt
+        };
+        context.InventoryMovements.AddRange(customerReturn, exchangeReturn);
+        await context.SaveChangesAsync();
+
+        var correctedSaleDate = new DateTime(2026, 7, 11, 14, 0, 0, DateTimeKind.Utc);
+        await service.PatchHeaderAsync(saleId, new PatchSaleHeaderDTO { SaleDate = correctedSaleDate });
+
+        var originalReservation = await context.InventoryMovements.SingleAsync(item =>
+            item.SaleProductId == saleProductId &&
+            item.InventoryMovementTypeId == (int)InventoryMovementTypeOption.ReservationCreated);
+        Assert.Equal(correctedSaleDate, originalReservation.MovementDate);
+        Assert.Equal(returnReceivedAt, customerReturn.MovementDate);
+        Assert.Equal(exchangeReceivedAt, exchangeReturn.MovementDate);
+    }
+
+    [Fact]
     public async Task PatchHeaderAsync_AllowsClearingNullableHeaderFields()
     {
         await using var context = CreateContext();
@@ -597,7 +662,7 @@ public class SaleServiceTests
 
         Assert.Equal(3, (await context.Products.SingleAsync(item => item.Id == product.Id)).AvailableQuantity);
         Assert.Contains(await context.InventoryMovements.ToListAsync(), movement =>
-            movement.InventoryMovementTypeId == (int)InventoryMovementTypeOption.SaleCancelled && movement.Quantity == 1);
+            movement.InventoryMovementTypeId == (int)InventoryMovementTypeOption.ReservationReleased && movement.Quantity == 1);
 
         await service.CancelAsync(saleId);
 
@@ -626,7 +691,8 @@ public class SaleServiceTests
             DeliveryAgencyId = 1
         });
         await saleService.MarkDeliveryAsSentAsync(saleId, deliveryId);
-        await CreateReturnService(context).CreateAsync(saleId, new CreateSaleReturnDTO
+        var returnService = CreateReturnService(context);
+        var returnId = await returnService.CreateAsync(saleId, new CreateSaleReturnDTO
         {
             ReasonId = (int)SaleReturnReasonOption.CustomerPreference,
             MethodId = (int)SaleReturnMethodOption.InStore,
@@ -636,11 +702,37 @@ public class SaleServiceTests
                 {
                     OriginalSaleProductId = line.Id,
                     Quantity = 2,
-                    RecognizedUnitAmount = 400m
+                    RecognizedUnitAmount = 0m
                 }
             ]
         });
+        var returnItemId = await context.SaleReturnItems
+            .Where(item => item.SaleReturnId == returnId)
+            .Select(item => item.Id)
+            .SingleAsync();
+        await returnService.ReceiveAsync(saleId, returnId, new ReceiveSaleReturnDTO
+        {
+            Items = [new ReceiveSaleReturnItemDTO { SaleReturnItemId = returnItemId }]
+        });
         await saleService.MarkDeliveryAsFailedAsync(saleId, deliveryId);
+
+        await saleService.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
+        {
+            Products =
+            [
+                new ReplaceSaleProductDTO
+                {
+                    SaleProductId = line.Id,
+                    ProductId = product.Id,
+                    Quantity = 3,
+                    DiscountSourceId = (int)DiscountSourceOption.None
+                }
+            ]
+        });
+
+        var inventoryAfterPriceOnlyReplacement = await context.Products.SingleAsync(item => item.Id == product.Id);
+        Assert.Equal(4, inventoryAfterPriceOnlyReplacement.AvailableQuantity);
+        Assert.Equal(1, inventoryAfterPriceOnlyReplacement.ReservedQuantity);
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => saleService.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
         {
@@ -685,7 +777,8 @@ public class SaleServiceTests
             DeliveryAgencyId = 1
         });
         await saleService.MarkDeliveryAsSentAsync(saleId, deliveryId);
-        await CreateExchangeService(context).CreateAsync(saleId, new CreateSaleExchangeDTO
+        var exchangeService = CreateExchangeService(context);
+        var exchangeId = await exchangeService.CreateAsync(saleId, new CreateSaleExchangeDTO
         {
             ReturnItems =
             [
@@ -706,7 +799,26 @@ public class SaleServiceTests
                 }
             ]
         });
+        await exchangeService.CompleteHandoverAsync(saleId, exchangeId);
         await saleService.MarkDeliveryAsFailedAsync(saleId, deliveryId);
+
+        await saleService.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
+        {
+            Products =
+            [
+                new ReplaceSaleProductDTO
+                {
+                    SaleProductId = line.Id,
+                    ProductId = originalProduct.Id,
+                    Quantity = 2,
+                    DiscountSourceId = (int)DiscountSourceOption.None
+                }
+            ]
+        });
+
+        var inventoryAfterPriceOnlyReplacement = await context.Products.SingleAsync(item => item.Id == originalProduct.Id);
+        Assert.Equal(2, inventoryAfterPriceOnlyReplacement.AvailableQuantity);
+        Assert.Equal(1, inventoryAfterPriceOnlyReplacement.ReservedQuantity);
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => saleService.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
         {
@@ -1014,16 +1126,21 @@ public class SaleServiceTests
 
         var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
         var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        var reservedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
         Assert.Equal(550m, delivery.AmountToCollect);
         Assert.Equal("De la rotonda 2 cuadras al norte", delivery.DeliveryAddress);
         Assert.Equal((int)SaleStatusOption.ReadyForDelivery, sale.SaleStatusId);
+        Assert.Equal(0, reservedProduct.AvailableQuantity);
+        Assert.Equal(1, reservedProduct.ReservedQuantity);
 
         await service.MarkDeliveryAsSentAsync(saleId, deliveryId);
 
         delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
         sale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        var sentProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
         Assert.Equal((int)DeliveryStatusCode.Sent, delivery.DeliveryStatusId);
         Assert.Equal((int)SaleStatusOption.SentForDelivery, sale.SaleStatusId);
+        Assert.Equal(0, sentProduct.ReservedQuantity);
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
         {
@@ -1091,6 +1208,191 @@ public class SaleServiceTests
     }
 
     [Fact]
+    public async Task MarkDeliveryAsFailedAsync_ReservesOnlyUnitsStillOutAfterReceivedReturn()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        await context.SaveChangesAsync();
+        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var saleService = CreateService(context);
+        var saleId = await saleService.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.Pending,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 2, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+        var saleProduct = await context.SaleProducts.SingleAsync(item => item.SaleId == saleId);
+        var deliveryId = await saleService.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "DEL-PARTIAL-RETURN",
+            MunicipalityId = 1,
+            DeliveryAgencyId = 1
+        });
+        await saleService.MarkDeliveryAsSentAsync(saleId, deliveryId);
+
+        var returnService = CreateReturnService(context);
+        var returnId = await returnService.CreateAsync(saleId, new CreateSaleReturnDTO
+        {
+            ReasonId = (int)SaleReturnReasonOption.CustomerPreference,
+            MethodId = (int)SaleReturnMethodOption.InStore,
+            Items =
+            [
+                new CreateSaleReturnItemDTO
+                {
+                    OriginalSaleProductId = saleProduct.Id,
+                    Quantity = 1,
+                    RecognizedUnitAmount = 0
+                }
+            ]
+        });
+        var returnItemId = await context.SaleReturnItems
+            .Where(item => item.SaleReturnId == returnId)
+            .Select(item => item.Id)
+            .SingleAsync();
+        await returnService.ReceiveAsync(saleId, returnId, new ReceiveSaleReturnDTO
+        {
+            Items = [new ReceiveSaleReturnItemDTO { SaleReturnItemId = returnItemId, IsDamaged = false }]
+        });
+
+        await saleService.MarkDeliveryAsFailedAsync(saleId, deliveryId);
+
+        var updatedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        Assert.Equal(1, updatedProduct.AvailableQuantity);
+        Assert.Equal(1, updatedProduct.ReservedQuantity);
+        var failedReservation = await context.InventoryMovements.SingleAsync(item =>
+            item.Comments == "Entrega fallida; productos reservados para un nuevo intento.");
+        Assert.Equal(1, failedReservation.Quantity);
+        Assert.Equal((int)InventoryStockBucketOption.OutOfInventory, failedReservation.FromStockBucketId);
+        Assert.Equal((int)InventoryStockBucketOption.Reserved, failedReservation.ToStockBucketId);
+    }
+
+    [Theory]
+    [InlineData((int)SaleReturnStatusOption.Requested)]
+    [InlineData((int)SaleReturnStatusOption.PickedUpAndRefunded)]
+    public async Task MarkDeliveryAsFailedAsync_RejectsReturnPendingPhysicalReceipt(int returnStatusId)
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        await context.SaveChangesAsync();
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var saleService = CreateService(context);
+        var saleId = await saleService.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.Reserved,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+        var saleProductId = await context.SaleProducts
+            .Where(item => item.SaleId == saleId)
+            .Select(item => item.Id)
+            .SingleAsync();
+        var deliveryId = await saleService.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = $"DEL-PENDING-RETURN-{returnStatusId}",
+            MunicipalityId = 1,
+            DeliveryAgencyId = 1
+        });
+        await saleService.MarkDeliveryAsSentAsync(saleId, deliveryId);
+        var returnId = await CreateReturnService(context).CreateAsync(saleId, new CreateSaleReturnDTO
+        {
+            ReasonId = (int)SaleReturnReasonOption.CustomerPreference,
+            MethodId = (int)SaleReturnMethodOption.InStore,
+            Items =
+            [
+                new CreateSaleReturnItemDTO
+                {
+                    OriginalSaleProductId = saleProductId,
+                    Quantity = 1,
+                    RecognizedUnitAmount = 0m
+                }
+            ]
+        });
+        if (returnStatusId != (int)SaleReturnStatusOption.Requested)
+        {
+            var saleReturn = await context.SaleReturns.SingleAsync(item => item.Id == returnId);
+            saleReturn.StatusId = returnStatusId;
+            await context.SaveChangesAsync();
+        }
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() =>
+            saleService.MarkDeliveryAsFailedAsync(saleId, deliveryId));
+
+        Assert.Contains("devoluciones pendientes", exception.Message, StringComparison.OrdinalIgnoreCase);
+        var unchangedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        var unchangedDelivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
+        var unchangedSale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        Assert.Equal(0, unchangedProduct.AvailableQuantity);
+        Assert.Equal(0, unchangedProduct.ReservedQuantity);
+        Assert.Equal((int)DeliveryStatusCode.Sent, unchangedDelivery.DeliveryStatusId);
+        Assert.Equal((int)SaleStatusOption.SentForDelivery, unchangedSale.SaleStatusId);
+    }
+
+    [Fact]
+    public async Task MarkDeliveryAsFailedAsync_RejectsExchangePendingPhysicalHandover()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        await context.SaveChangesAsync();
+        var originalProduct = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var replacementProduct = await AddProductAsync(context, availableQuantity: 1, salePrice: 600m, unitCostNio: 250m);
+        var saleService = CreateService(context);
+        var saleId = await saleService.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.Reserved,
+            Products = [new CreateSaleProductDTO { ProductId = originalProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+        var saleProductId = await context.SaleProducts
+            .Where(item => item.SaleId == saleId)
+            .Select(item => item.Id)
+            .SingleAsync();
+        var deliveryId = await saleService.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "DEL-PENDING-EXCHANGE",
+            MunicipalityId = 1,
+            DeliveryAgencyId = 1
+        });
+        await saleService.MarkDeliveryAsSentAsync(saleId, deliveryId);
+        await CreateExchangeService(context).CreateAsync(saleId, new CreateSaleExchangeDTO
+        {
+            ReturnItems =
+            [
+                new CreateExchangeReturnItemDTO
+                {
+                    OriginalSaleProductId = saleProductId,
+                    Quantity = 1,
+                    RecognizedUnitAmount = 500m
+                }
+            ],
+            OutboundItems =
+            [
+                new CreateExchangeOutboundItemDTO
+                {
+                    ProductId = replacementProduct.Id,
+                    Quantity = 1,
+                    ItemTypeId = (int)ExchangeOutboundItemTypeOption.Replacement
+                }
+            ]
+        });
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() =>
+            saleService.MarkDeliveryAsFailedAsync(saleId, deliveryId));
+
+        Assert.Contains("cambios pendientes", exception.Message, StringComparison.OrdinalIgnoreCase);
+        var unchangedOriginal = await context.Products.SingleAsync(item => item.Id == originalProduct.Id);
+        var unchangedDelivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
+        var unchangedSale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        Assert.Equal(0, unchangedOriginal.AvailableQuantity);
+        Assert.Equal(0, unchangedOriginal.ReservedQuantity);
+        Assert.Equal((int)DeliveryStatusCode.Sent, unchangedDelivery.DeliveryStatusId);
+        Assert.Equal((int)SaleStatusOption.SentForDelivery, unchangedSale.SaleStatusId);
+    }
+
+    [Fact]
     public async Task CancelAsync_CancelsSaleAndPendingDeliveryAndRestoresInventory()
     {
         await using var context = CreateContext();
@@ -1121,17 +1423,17 @@ public class SaleServiceTests
         var updatedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
         var inventoryMovement = await context.InventoryMovements.SingleAsync(item =>
             item.SaleProductId == sale.Products.Single().Id &&
-            item.InventoryMovementTypeId == (int)InventoryMovementTypeOption.SaleCancelled);
+            item.InventoryMovementTypeId == (int)InventoryMovementTypeOption.ReservationReleased);
 
         Assert.Equal((int)SaleStatusOption.Cancelled, sale.SaleStatusId);
         Assert.Equal((int)DeliveryStatusCode.Cancelled, delivery.DeliveryStatusId);
         Assert.Equal(2, updatedProduct.AvailableQuantity);
-        Assert.Equal((int)InventoryStockBucketOption.OutOfInventory, inventoryMovement.FromStockBucketId);
+        Assert.Equal((int)InventoryStockBucketOption.Reserved, inventoryMovement.FromStockBucketId);
         Assert.Equal((int)InventoryStockBucketOption.Available, inventoryMovement.ToStockBucketId);
     }
 
     [Fact]
-    public async Task CancelAsync_DoesNotRestoreInventoryWhenDeliveryChangedPendingSaleWithoutInventoryOutput()
+    public async Task CancelAsync_ReleasesReservationCreatedForPendingSaleDelivery()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -1163,7 +1465,10 @@ public class SaleServiceTests
         Assert.Equal((int)SaleStatusOption.Cancelled, sale.SaleStatusId);
         Assert.Equal((int)DeliveryStatusCode.Cancelled, delivery.DeliveryStatusId);
         Assert.Equal(1, updatedProduct.AvailableQuantity);
-        Assert.Empty(await context.InventoryMovements.ToListAsync());
+        var movements = await context.InventoryMovements.OrderBy(item => item.Id).ToListAsync();
+        Assert.Equal(2, movements.Count);
+        Assert.Equal((int)InventoryMovementTypeOption.ReservationCreated, movements[0].InventoryMovementTypeId);
+        Assert.Equal((int)InventoryMovementTypeOption.ReservationReleased, movements[1].InventoryMovementTypeId);
     }
 
     [Fact]
@@ -1672,13 +1977,14 @@ public class SaleServiceTests
         var sale = await context.Sales.Include(item => item.PaymentMovements).SingleAsync(item => item.Id == saleId);
         var reloadedExpensiveProduct = await context.Products.SingleAsync(item => item.Id == expensiveProduct.Id);
         var reloadedCheaperProduct = await context.Products.SingleAsync(item => item.Id == cheaperProduct.Id);
-        var saleMovement = await context.InventoryMovements.SingleAsync();
+        var saleMovement = await context.InventoryMovements.SingleAsync(item =>
+            item.ToStockBucketId == (int)InventoryStockBucketOption.OutOfInventory);
 
         Assert.Equal((int)SalePaymentStatusOption.RefundPending, sale.SalePaymentStatusId);
         Assert.Equal(1, reloadedExpensiveProduct.AvailableQuantity);
         Assert.Equal(0, reloadedCheaperProduct.AvailableQuantity);
         Assert.Equal(cheaperProduct.Id, saleMovement.ProductId);
-        Assert.Equal((int)InventoryMovementTypeOption.Sale, saleMovement.InventoryMovementTypeId);
+        Assert.Equal((int)InventoryMovementTypeOption.ReservationConvertedToSale, saleMovement.InventoryMovementTypeId);
         Assert.Contains(sale.PaymentMovements, item =>
             item.DeliveryAgencyReconciliationId == reconciliationId &&
             item.ProductAmount == 0m &&
@@ -1719,9 +2025,7 @@ public class SaleServiceTests
             SaleStatusId = (int)SaleStatusOption.Reserved,
             Products = [new CreateSaleProductDTO { ProductId = originalProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
-        var originalSale = await context.Sales.SingleAsync(item => item.Id == saleId);
-        originalSale.SaleStatusId = (int)SaleStatusOption.SentForDelivery;
-        await context.SaveChangesAsync();
+        await MoveSaleToSentAsync(context, saleId);
         var originalLineId = await context.SaleProducts.Where(item => item.SaleId == saleId).Select(item => item.Id).SingleAsync();
         var service = CreateExchangeService(context);
 
@@ -1871,21 +2175,41 @@ public class SaleServiceTests
         });
 
         if (initialStatus != status)
-        {
-            var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
-            sale.SaleStatusId = (int)status;
-            await context.SaveChangesAsync();
-        }
+            await MoveSaleToSentAsync(context, saleId);
 
         return saleId;
+    }
+
+    private static async Task MoveSaleToSentAsync(ApplicationDbContext context, int saleId)
+    {
+        var sale = await context.Sales
+            .Include(item => item.Products).ThenInclude(item => item.Product)
+            .SingleAsync(item => item.Id == saleId);
+        var inventoryService = new InventoryService(context);
+        foreach (var saleProduct in sale.Products)
+        {
+            var movement = inventoryService.Move(
+                saleProduct.Product!,
+                InventoryStockBucketOption.Reserved,
+                InventoryStockBucketOption.OutOfInventory,
+                saleProduct.Quantity,
+                InventoryMovementTypeOption.ReservationConvertedToSale,
+                DateTime.UtcNow,
+                "Venta enviada en preparación de prueba.");
+            movement.SaleProduct = saleProduct;
+        }
+
+        sale.SaleStatusId = (int)SaleStatusOption.SentForDelivery;
+        await context.SaveChangesAsync();
     }
 
     private static SaleService CreateService(ApplicationDbContext context)
     {
         var currentUser = new TestCurrentUserService();
-        var deliveryService = new SaleDeliveryService(context, currentUser);
+        var inventoryService = new InventoryService(context);
+        var deliveryService = new SaleDeliveryService(context, currentUser, inventoryService);
         var paymentService = new SalePaymentMovementService(context, currentUser, deliveryService);
-        return new SaleService(context, currentUser, paymentService, deliveryService, new InventoryService(context));
+        return new SaleService(context, currentUser, paymentService, deliveryService, inventoryService);
     }
 
     private static SaleExchangeService CreateExchangeService(ApplicationDbContext context)

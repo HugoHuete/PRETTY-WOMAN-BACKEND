@@ -170,6 +170,26 @@ public class InventoryServiceTests : IDisposable
     }
 
     [Fact]
+    public void Move_AllowsOutOfInventoryToReturnToReservedAfterFailedDelivery()
+    {
+        var product = CreateProduct();
+        product.AvailableQuantity = 3;
+
+        var movement = _service.Move(
+            product,
+            InventoryStockBucketOption.OutOfInventory,
+            InventoryStockBucketOption.Reserved,
+            2,
+            InventoryMovementTypeOption.ReservationCreated,
+            DateTime.UtcNow);
+
+        Assert.Equal(3, product.AvailableQuantity);
+        Assert.Equal(2, product.ReservedQuantity);
+        Assert.Equal((int)InventoryStockBucketOption.OutOfInventory, movement.FromStockBucketId);
+        Assert.Equal((int)InventoryStockBucketOption.Reserved, movement.ToStockBucketId);
+    }
+
+    [Fact]
     public void Move_RejectsWhenResultWouldExceedReceivedQuantity()
     {
         var product = CreateProduct();

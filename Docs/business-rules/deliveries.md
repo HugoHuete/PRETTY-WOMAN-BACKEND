@@ -16,13 +16,13 @@ A delivery is active while its status is neither `Completed`, `Cancelled`, nor `
 
 ## Sale states
 
-- Creating a delivery sets the sale to `ReadyForDelivery`.
+- Creating a delivery sets the sale to `ReadyForDelivery`. If the sale was `Pending`, its products move from `Available` to `Reserved`; an already reserved sale is not reserved twice.
 - `PATCH /api/v1/sales/{saleId}/deliveries/{deliveryId}` may update the client, historical address, agency, municipality, code, and shipping charge while the delivery is pending.
 - The update recalculates `amount_to_collect` and applies the selected agency collection rule.
 - A delivery can be edited only while it is `Pending`.
-- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/send` transitions a delivery from `Pending` to `Sent` and sets the sale to `SentForDelivery`.
+- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/send` transitions a delivery from `Pending` to `Sent`, moves the reserved quantities to `OutOfInventory`, and sets the sale to `SentForDelivery`.
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/complete` transitions a sent delivery to `Completed` only when los productos y el envio ya estan pagados completamente.
-- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/fail` transitions a sent delivery to `Failed` and returns the sale to `ReadyForDelivery` for a new attempt.
+- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/fail` transitions a sent delivery to `Failed`, returns only the quantities still outside to `Reserved`, and returns the sale to `ReadyForDelivery` for a new attempt. The transition is rejected while a return is requested or picked up but not received, or while an exchange remains requested before its physical handover.
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/cancel` transitions a pending delivery to `Cancelled` and returns the sale to `ReadyForDelivery`.
 - A completed or cancelled sale must not retain an active delivery.
 

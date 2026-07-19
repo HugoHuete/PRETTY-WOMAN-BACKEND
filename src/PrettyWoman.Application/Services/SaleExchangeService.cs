@@ -170,8 +170,8 @@ public class SaleExchangeService(
             .Where(movement =>
                 movement.SaleProductId.HasValue && saleProductIds.Contains(movement.SaleProductId.Value) &&
                 (movement.InventoryMovementTypeId == (int)InventoryMovementTypeOption.Sale ||
+                 movement.InventoryMovementTypeId == (int)InventoryMovementTypeOption.ReservationConvertedToSale ||
                  movement.InventoryMovementTypeId == (int)InventoryMovementTypeOption.SelectionConvertedToSale) &&
-                movement.FromStockBucketId == (int)InventoryStockBucketOption.Available &&
                 movement.ToStockBucketId == (int)InventoryStockBucketOption.OutOfInventory)
             .Select(movement => movement.SaleProductId!.Value)
             .Distinct()
@@ -202,6 +202,8 @@ public class SaleExchangeService(
             item.HandedToAgencyAt.Value,
             "Prenda de cambio recibida por agencia; disponible y pendiente de retorno fisico.");
         movement.ExchangeReturnItem = item;
+        // La línea original permite descontar este retorno del compromiso neto de la venta.
+        movement.SaleProductId = item.OriginalSaleProductId;
     }
 
     private void DeliverOutboundItems(IEnumerable<ExchangeOutboundItem> items)

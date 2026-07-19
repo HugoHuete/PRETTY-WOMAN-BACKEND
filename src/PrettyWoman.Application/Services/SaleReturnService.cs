@@ -222,6 +222,8 @@ public class SaleReturnService(
                 receivedAt,
                 "Devolución recibida dañada; pendiente de resolución de inventario.");
             movement.SaleReturnItem = item;
+            // Se conserva la línea original aunque la unidad entre a no disponible por daño.
+            movement.SaleProductId = item.OriginalSaleProductId;
             movement.ProductInventoryIssue = issue;
             issue.InventoryMovements.Add(movement);
             return;
@@ -236,6 +238,8 @@ public class SaleReturnService(
             receivedAt,
             "Devolución recibida y disponible para venta.");
         availableMovement.SaleReturnItem = item;
+        // La relación con la línea permite reconstruir cuánto inventario sigue comprometido.
+        availableMovement.SaleProductId = item.OriginalSaleProductId;
     }
 
     private async Task<SaleReturn> GetForUpdateAsync(int saleId, int returnId)
@@ -258,7 +262,16 @@ public class SaleReturnService(
     private async Task EnsureProductsWereMovedOutOfInventoryAsync(IEnumerable<CreateSaleReturnItemDTO> items)
     {
         var ids = items.Select(item => item.OriginalSaleProductId).Distinct().ToList();
-        var moved = await _context.InventoryMovements.Where(item => ids.Contains(item.SaleProductId ?? 0) && item.FromStockBucketId == (int)InventoryStockBucketOption.Available && item.ToStockBucketId == (int)InventoryStockBucketOption.OutOfInventory && (item.InventoryMovementTypeId == (int)InventoryMovementTypeOption.Sale || item.InventoryMovementTypeId == (int)InventoryMovementTypeOption.SelectionConvertedToSale)).Select(item => item.SaleProductId!.Value).Distinct().ToListAsync();
+        var moved = await _context.InventoryMovements
+            .Where(item =>
+                ids.Contains(item.SaleProductId ?? 0) &&
+                item.ToStockBucketId == (int)InventoryStockBucketOption.OutOfInventory &&
+                (item.InventoryMovementTypeId == (int)InventoryMovementTypeOption.Sale ||
+                 item.InventoryMovementTypeId == (int)InventoryMovementTypeOption.ReservationConvertedToSale ||
+                 item.InventoryMovementTypeId == (int)InventoryMovementTypeOption.SelectionConvertedToSale))
+            .Select(item => item.SaleProductId!.Value)
+            .Distinct()
+            .ToListAsync();
         if (moved.Count != ids.Count) throw new AppBadRequestException("Solo se pueden devolver prendas cuya venta ya descontó inventario.");
     }
 

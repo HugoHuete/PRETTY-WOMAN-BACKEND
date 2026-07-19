@@ -113,29 +113,34 @@ Antes de vender:
 
 `AvailableQuantity >= RequestedQuantity`
 
-## Regla: una venta descuenta inventario
+## Regla: ciclo de inventario de una venta
 
-Cuando se confirma una linea de venta que no proviene de una reserva:
+El bucket depende del estado operativo de la venta:
 
-1. Validar que `available_quantity` sea suficiente.
-2. Disminuir `available_quantity`.
-3. Crear un `inventory_movement` de tipo `Sale` con `Available -> OutOfInventory`.
-4. Relacionar el movimiento con `sale_product_id`.
-5. Copiar `products.unit_cost_nio` a `sale_products.unit_cost_at_sale`.
+* `Pending`: no compromete inventario.
+* `Reserved` y `ReadyForDelivery`: cada línea permanece en `Reserved` mediante `Available -> Reserved` y `ReservationCreated`.
+* `SentForDelivery` y `Completed`: cada línea permanece en `OutOfInventory`.
+* Al despachar un envío, usar `Reserved -> OutOfInventory` y `ReservationConvertedToSale`.
+* Si el envío falla, usar `OutOfInventory -> Reserved` solamente por la salida neta que todavía continúa fuera.
+* No se puede fallar el envío mientras una devolución aún no haya sido recibida físicamente o un cambio solicitado aún no haya registrado su entrega física; esas unidades todavía dependen de permanecer en `OutOfInventory`.
 
-Debe cumplirse:
+Una venta completada directamente en local puede usar `Available -> OutOfInventory` con tipo `Sale`. Todos los movimientos deben conservar `sale_product_id`.
+
+Antes de reservar o vender debe cumplirse:
 
 `AvailableQuantity >= SaleQuantity`
 
-El movimiento debe registrar una cantidad positiva. El tipo del movimiento determina que su efecto sobre el inventario es una salida.
+Una devolución recibida también conserva `sale_product_id`, además de su referencia a `sale_return_item_id` o `exchange_return_item_id`, para que la salida neta de la línea permanezca trazable.
+
+Al corregir posteriormente los productos de una venta, el compromiso objetivo de cada línea es su cantidad comercial menos las unidades ya recibidas mediante devoluciones o cambios. Una corrección de precio no debe volver a reservar esas unidades retornadas.
 
 ## Regla: cancelacion de una venta
 
 Si una linea vendida es cancelada y el producto puede volver al inventario:
 
 1. Cambiar el estado de la venta a `Cancelled`.
-2. Aumentar `available_quantity`.
-3. Crear un `inventory_movement` de tipo `SaleCancelled`.
+2. Mover la cantidad neta comprometida desde `Reserved` o `OutOfInventory` hacia `Available`.
+3. Crear un `inventory_movement` de tipo `ReservationReleased` o `SaleCancelled`, según el bucket de origen.
 4. Relacionar el movimiento con la linea de venta original.
 
 No se debe eliminar el movimiento de venta original.
@@ -318,9 +323,9 @@ No debe utilizarse un ajuste generico para representar:
 * `Discarded`
 * `AdjustmentIncrease`
 * `AdjustmentDecrease`
-* `ReservationCreated` (hold de seleccion creado; nombre pendiente de normalizar)
-* `ReservationReleased` (hold de seleccion liberado; nombre pendiente de normalizar)
-* `ReservationConvertedToSale` (hold de seleccion convertido; nombre pendiente de normalizar)
+* `ReservationCreated`
+* `ReservationReleased`
+* `ReservationConvertedToSale`
 
 ## Datos minimos de un movimiento de inventario
 

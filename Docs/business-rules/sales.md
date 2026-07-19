@@ -121,9 +121,11 @@ El estado de venta es operativo y no debe indicar si la venta está pagada. El e
 
 Una venta reservada debe usar `Reserved` cuando la clienta ya confirmó la compra y el producto queda apartado para retiro o envío futuro. La reserva puede estar sin pago, parcialmente pagada o pagada completa según la suma de sus pagos.
 
+`Reserved` y `ReadyForDelivery` mantienen las unidades en `reserved_quantity`. Al despachar, pasan de `Reserved` a `OutOfInventory`; si el envío falla, la salida neta pendiente regresa a `Reserved`. `Pending` no compromete inventario.
+
 ## Regla: ventas en local, pago e inventario
 
-Una venta en local puede crearse sin pago o con pago parcial; por sí sola queda pendiente y no descuenta inventario. Cuando sus pagos de productos alcanzan el total, el sistema la marca `Completed` y registra la salida de inventario. Si posteriormente se corrige o reembolsa un pago que impide mantenerla completada, queda `Reserved` para conservar el inventario apartado y permitir su cancelación o corrección.
+Una venta en local puede crearse sin pago o con pago parcial; por sí sola queda pendiente y no compromete inventario. Cuando sus pagos de productos alcanzan el total, el sistema la marca `Completed` y registra la salida a `OutOfInventory`. Si posteriormente se corrige o reembolsa un pago que impide mantenerla completada, la salida neta pasa a `Reserved` para conservar el inventario apartado y permitir su cancelación o corrección.
 
 ## Regla: devolución de un producto
 

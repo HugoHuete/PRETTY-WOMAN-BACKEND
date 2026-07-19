@@ -34,13 +34,14 @@
 4. Calculate the net amount already paid by the customer.
 5. Validate the agency collection capability and calculate `amount_to_collect`.
 6. Create a `Pending` delivery.
-7. Move the sale to `ReadyForDelivery`.
+7. If the sale was `Pending`, move its products from `Available` to `Reserved`.
+8. Move the sale to `ReadyForDelivery` without duplicating an existing reservation.
 
 ## Send flow
 
-The send endpoint only accepts a `Pending` delivery. It verifies that the delivery belongs to the sale, validates the selected agency payment rule, changes the delivery to `Sent`, and changes the sale to `SentForDelivery`. Admin and Vendedor can perform this transition.
+The send endpoint only accepts a `Pending` delivery. It verifies that the delivery belongs to the sale, validates the selected agency payment rule, moves the sale products from `Reserved` to `OutOfInventory`, changes the delivery to `Sent`, and changes the sale to `SentForDelivery`. Admin and Vendedor can perform this transition.
 
-A sent delivery can then be completed or failed. Completion requires that products and shipping are fully paid. For cash-on-delivery deliveries, the agency reconciliation records the full collection and completes the delivery; a partial collection is rejected. Failure returns the sale to `ReadyForDelivery` so a new delivery can be created. Cancellation is only available while the delivery is pending and also returns the sale to `ReadyForDelivery`.
+A sent delivery can then be completed or failed. Completion requires that products and shipping are fully paid. For cash-on-delivery deliveries, the agency reconciliation records the full collection and completes the delivery; a partial collection is rejected. Failure moves only the net quantity still outside back to `Reserved` and returns the sale to `ReadyForDelivery` so a new delivery can be created. Cancellation is only available while the delivery is pending; it returns the sale to `ReadyForDelivery` and keeps its existing reservation.
 
 When the delivery includes products sent for selection, it can be marked as `DeliveredPendingSelection` after the agency hands it to the client. It cannot be completed, failed, or included in a reconciliation while any related `product_hold` remains `Active`.
 

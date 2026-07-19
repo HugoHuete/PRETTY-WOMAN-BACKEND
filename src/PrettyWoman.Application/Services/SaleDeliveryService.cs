@@ -9,11 +9,15 @@ using PrettyWoman.Domain.Enums;
 
 namespace PrettyWoman.Application.Services;
 
-public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserService currentUserService) : ISaleDeliveryService
+public class SaleDeliveryService(
+    IApplicationDbContext context,
+    ICurrentUserService currentUserService,
+    IInventoryService inventoryService) : ISaleDeliveryService
 {
     private const string ActiveDeliveryConstraintName = "ux_sale_deliveries_sale_id_active";
     private readonly IApplicationDbContext _context = context;
     private readonly ICurrentUserService _currentUserService = currentUserService;
+    private readonly IInventoryService _inventoryService = inventoryService;
 
     public async Task<int> CreateAsync(int saleId, CreateSaleDeliveryDTO deliveryRequest)
     {
@@ -22,12 +26,13 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
 
         var sale = await _context.Sales
             .Include(item => item.PaymentMovements)
+            .Include(item => item.Products).ThenInclude(item => item.Product)
             .FirstOrDefaultAsync(item => item.Id == saleId)
             ?? throw new AppNotFoundException($"La venta con id {saleId} no existe.");
 
         // La restriccion de un envio activo se respalda tambien con un indice unico en base de datos.
-        EnsureSaleCanHaveDelivery(sale);
         await EnsureNoActiveDeliveryAsync(saleId);
+        EnsureSaleCanHaveDelivery(sale);
 
         var agency = await _context.DeliveryAgencies
             .FirstOrDefaultAsync(item => item.Id == deliveryRequest.DeliveryAgencyId && item.Enabled)
@@ -68,6 +73,9 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
             Comments = deliveryRequest.Comments
         };
 
+        if (sale.SaleStatusId == (int)SaleStatusOption.Pending)
+            ReserveSaleProducts(sale);
+
         sale.SaleStatusId = (int)SaleStatusOption.ReadyForDelivery;
         try
         {
@@ -87,6 +95,9 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         var delivery = await _context.SaleDeliveries
             .Include(item => item.Sale)
                 .ThenInclude(sale => sale!.PaymentMovements)
+            .Include(item => item.Sale)
+                .ThenInclude(sale => sale!.Products)
+                    .ThenInclude(item => item.Product)
             .Include(item => item.DeliveryAgency)
             .FirstOrDefaultAsync(item => item.Id == deliveryId && item.SaleId == saleId)
             ?? throw new AppNotFoundException($"El envio con id {deliveryId} no existe para la venta indicada.");
@@ -97,6 +108,12 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         var sale = delivery.Sale!;
         // Una agencia sin COD solo recibe pedidos con productos y envio ya cubiertos.
         EnsureDeliveryCanBeSent(delivery);
+        await MoveCurrentSaleProductQuantitiesAsync(
+            sale,
+            InventoryStockBucketOption.Reserved,
+            InventoryStockBucketOption.OutOfInventory,
+            InventoryMovementTypeOption.ReservationConvertedToSale,
+            "Reserva enviada a la agencia de entrega.");
         delivery.DeliveryStatusId = (int)DeliveryStatusCode.Sent;
         sale.SaleStatusId = (int)SaleStatusOption.SentForDelivery;
 
@@ -119,11 +136,43 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         var delivery = await GetDeliveryWithSaleAsync(saleId, deliveryId);
         EnsureDeliveryIsSent(delivery, "marcar como fallido");
         await EnsureSelectionHoldsAreResolvedAsync(saleId);
+        await EnsureNoPendingPhysicalReturnsAsync(saleId);
 
-        // Un intento fallido libera la venta para que se pueda crear un nuevo envio.
+        // Solo regresan a reservado las unidades que continúan fuera; una devolución ya recibida
+        // pudo haber reducido previamente la salida neta de alguna línea.
+        await MoveCurrentSaleProductQuantitiesAsync(
+            delivery.Sale!,
+            InventoryStockBucketOption.OutOfInventory,
+            InventoryStockBucketOption.Reserved,
+            InventoryMovementTypeOption.ReservationCreated,
+            "Entrega fallida; productos reservados para un nuevo intento.");
         delivery.DeliveryStatusId = (int)DeliveryStatusCode.Failed;
         delivery.Sale!.SaleStatusId = (int)SaleStatusOption.ReadyForDelivery;
         await _context.SaveChangesAsync();
+    }
+
+    private async Task EnsureNoPendingPhysicalReturnsAsync(int saleId)
+    {
+        // Mientras la devolución o el cambio aún no registra su entrada física, sus unidades siguen
+        // en OutOfInventory. Reservarlas aquí haría que la recepción posterior partiera del bucket incorrecto.
+        var hasPendingReturn = await _context.SaleReturns.AnyAsync(item =>
+            item.OriginalSaleId == saleId &&
+            (item.StatusId == (int)SaleReturnStatusOption.Requested ||
+             item.StatusId == (int)SaleReturnStatusOption.PickedUpAndRefunded));
+        if (hasPendingReturn)
+        {
+            throw new AppBadRequestException(
+                "No se puede marcar el envio como fallido mientras haya devoluciones pendientes de recepcion fisica.");
+        }
+
+        var hasRequestedExchange = await _context.SaleExchanges.AnyAsync(item =>
+            item.OriginalSaleId == saleId &&
+            item.StatusId == (int)SaleExchangeStatusOption.Requested);
+        if (hasRequestedExchange)
+        {
+            throw new AppBadRequestException(
+                "No se puede marcar el envio como fallido mientras haya cambios pendientes de entrega fisica.");
+        }
     }
 
     public async Task MarkAsDeliveredPendingSelectionAsync(int saleId, int deliveryId)
@@ -240,6 +289,9 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
         return await _context.SaleDeliveries
             .Include(item => item.Sale)
                 .ThenInclude(sale => sale!.PaymentMovements)
+            .Include(item => item.Sale)
+                .ThenInclude(sale => sale!.Products)
+                    .ThenInclude(item => item.Product)
             .FirstOrDefaultAsync(item => item.Id == deliveryId && item.SaleId == saleId)
             ?? throw new AppNotFoundException($"El envio con id {deliveryId} no existe para la venta indicada.");
     }
@@ -290,10 +342,79 @@ public class SaleDeliveryService(IApplicationDbContext context, ICurrentUserServ
             throw new AppBadRequestException("Las ventas en local no pueden tener envios.");
         }
 
-        if (sale.SaleStatusId is (int)SaleStatusOption.Completed or (int)SaleStatusOption.Cancelled)
+        if (sale.SaleStatusId is not ((int)SaleStatusOption.Pending or
+            (int)SaleStatusOption.Reserved or
+            (int)SaleStatusOption.ReadyForDelivery))
         {
-            throw new AppBadRequestException("No se puede crear o enviar un envio para una venta completada o cancelada.");
+            throw new AppBadRequestException("Solo se puede crear un envio para una venta pendiente, reservada o lista para entrega.");
         }
+    }
+
+    private void ReserveSaleProducts(Sale sale)
+    {
+        foreach (var saleProduct in sale.Products)
+        {
+            var movement = _inventoryService.Move(
+                saleProduct.Product!,
+                InventoryStockBucketOption.Available,
+                InventoryStockBucketOption.Reserved,
+                saleProduct.Quantity,
+                InventoryMovementTypeOption.ReservationCreated,
+                DateTime.UtcNow,
+                "Productos reservados al crear el envio.");
+            movement.SaleProduct = saleProduct;
+        }
+    }
+
+    private async Task MoveCurrentSaleProductQuantitiesAsync(
+        Sale sale,
+        InventoryStockBucketOption source,
+        InventoryStockBucketOption destination,
+        InventoryMovementTypeOption movementType,
+        string comments)
+    {
+        var saleProductIds = sale.Products.Select(item => item.Id).ToList();
+        var movements = await _context.InventoryMovements
+            .Where(item => item.SaleProductId.HasValue && saleProductIds.Contains(item.SaleProductId.Value))
+            .ToListAsync();
+
+        foreach (var saleProduct in sale.Products)
+        {
+            // El neto del bucket evita repetir unidades que una devolución o transición previa ya movió.
+            var quantity = CalculateQuantityInBucket(saleProduct.Id, movements, source);
+            if (quantity == 0) continue;
+
+            var movement = _inventoryService.Move(
+                saleProduct.Product!,
+                source,
+                destination,
+                quantity,
+                movementType,
+                DateTime.UtcNow,
+                comments);
+            movement.SaleProduct = saleProduct;
+        }
+    }
+
+    private static int CalculateQuantityInBucket(
+        int saleProductId,
+        IEnumerable<InventoryMovement> movements,
+        InventoryStockBucketOption bucket)
+    {
+        var quantity = movements
+            .Where(movement => movement.SaleProductId == saleProductId)
+            .Sum(movement =>
+                movement.ToStockBucketId == (int)bucket
+                    ? movement.Quantity
+                    : movement.FromStockBucketId == (int)bucket
+                        ? -movement.Quantity
+                        : 0);
+
+        if (quantity < 0)
+            throw new AppBadRequestException(
+                $"Los movimientos de la linea de venta con id {saleProductId} tienen una cantidad neta invalida en {bucket}.");
+
+        return quantity;
     }
 
     private static void EnsureDeliveryCanBeUpdated(SaleDelivery delivery)
