@@ -512,7 +512,8 @@ public class OrderReceiptServiceTests
         context.OrderStatuses.AddRange(
             new OrderStatus { Id = (int)OrderStatusCode.Pending, Name = "Pending" },
             new OrderStatus { Id = (int)OrderStatusCode.PartiallyReceived, Name = "PartiallyReceived" },
-            new OrderStatus { Id = (int)OrderStatusCode.Received, Name = "Received" });
+            new OrderStatus { Id = (int)OrderStatusCode.Received, Name = "Received" },
+            new OrderStatus { Id = (int)OrderStatusCode.PendingRefund, Name = "PendingRefund" });
         context.MovementDirections.AddRange(
             new MovementDirection { Id = (int)MovementDirectionOptions.In, Name = "In" },
             new MovementDirection { Id = (int)MovementDirectionOptions.Out, Name = "Out" });

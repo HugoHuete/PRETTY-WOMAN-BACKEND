@@ -62,6 +62,13 @@ public class OrdersController(IOrderService orderService) : ControllerBase
         return Ok(order);
     }
 
+    [HttpPost("{id:int}/supplier-refund/decline")]
+    public async Task<ActionResult<OrderDTO>> DeclineSupplierRefund(int id, [FromBody] DeclineSupplierRefundDTO declineSupplierRefundDTO)
+    {
+        var order = await _orderService.DeclineSupplierRefundAsync(id, declineSupplierRefundDTO);
+        return Ok(order);
+    }
+
     [HttpPost("{id:int}/tracking-numbers")]
     public async Task<ActionResult<IEnumerable<OrderTrackingNumberDTO>>> AddTrackingNumbers(
         int id,

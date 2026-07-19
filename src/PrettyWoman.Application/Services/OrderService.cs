@@ -181,7 +181,9 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         order.AmountUsd = order.ExchangeRate == 0 ? 0 : Math.Round(order.MerchandiseTotalNio / order.ExchangeRate, 2);
         order.ReceivedAmountNio = order.MerchandiseTotalNio;
         order.TotalCostNio = order.Products.Sum(product => product.TotalCostNio);
-        order.OrderStatusId = (int)OrderStatusCode.Received;
+        order.OrderStatusId = shortages.Any(shortage => shortage.LossAmountNio > 0)
+            ? (int)OrderStatusCode.PendingRefund
+            : (int)OrderStatusCode.Received;
         await _context.PurchaseShortages.AddRangeAsync(shortages);
         await _context.SaveChangesAsync();
 
@@ -197,6 +199,11 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         if (order.SupplierRefund is not null)
         {
             throw new AppBadRequestException("La orden ya tiene un reembolso de proveedor registrado.");
+        }
+
+        if (order.SupplierRefundDeclinedAt is not null)
+        {
+            throw new AppBadRequestException("La orden está marcada como no reembolsable por el proveedor.");
         }
 
         var totalShortageLossNio = order.PurchaseShortages.Sum(shortage => shortage.LossAmountNio);
@@ -232,8 +239,39 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             Comments = createSupplierRefundDTO.Comments
         };
 
+        order.SupplierRefundResolution = SupplierRefundResolutionOption.Refunded;
+        order.OrderStatusId = (int)OrderStatusCode.Received;
         await _context.SupplierRefunds.AddAsync(supplierRefund);
-        await _context.SaveChangesAsync();
+        await SaveSupplierRefundResolutionAsync();
+
+        return await GetByIdAsync(id);
+    }
+
+    public async Task<OrderDTO> DeclineSupplierRefundAsync(int id, DeclineSupplierRefundDTO declineSupplierRefundDTO)
+    {
+        declineSupplierRefundDTO.Comments = declineSupplierRefundDTO.Comments.NormalizeOptional();
+
+        var order = await GetOrderForShortageUpdateAsync(id);
+        if (order.SupplierRefund is not null)
+        {
+            throw new AppBadRequestException("La orden ya tiene un reembolso de proveedor registrado.");
+        }
+
+        if (order.SupplierRefundDeclinedAt is not null)
+        {
+            throw new AppBadRequestException("La orden ya está marcada como no reembolsable por el proveedor.");
+        }
+
+        if (order.PurchaseShortages.Sum(shortage => shortage.LossAmountNio) == 0)
+        {
+            throw new AppBadRequestException("La orden no tiene pérdida por faltantes para marcar sin reembolso.");
+        }
+
+        order.SupplierRefundResolution = SupplierRefundResolutionOption.NotRefunded;
+        order.SupplierRefundDeclinedAt = declineSupplierRefundDTO.DeclinedAt.NormalizeToUtc() ?? DateTime.UtcNow;
+        order.SupplierRefundDeclineComments = declineSupplierRefundDTO.Comments;
+        order.OrderStatusId = (int)OrderStatusCode.Received;
+        await SaveSupplierRefundResolutionAsync();
 
         return await GetByIdAsync(id);
     }
@@ -682,6 +720,18 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             ?? throw new AppNotFoundException($"La orden con id '{id}' no existe.");
     }
 
+    private async Task SaveSupplierRefundResolutionAsync()
+    {
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw new AppBadRequestException("El estado de reembolso de la orden fue resuelto por otra operación. Actualice la orden e intente nuevamente.");
+        }
+    }
+
     private OrderDTO MapOrderDto(Order order)
     {
         var orderDto = _mapper.Map<OrderDTO>(order);
@@ -689,7 +739,10 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         orderDto.TotalShortageLossNio = order.PurchaseShortages.Sum(shortage => shortage.LossAmountNio);
         orderDto.TotalSupplierRefundNio = order.SupplierRefund?.AmountNio ?? 0;
         orderDto.NetShortageLossNio = orderDto.TotalShortageLossNio - orderDto.TotalSupplierRefundNio;
-        var refundStatus = ResolveShortageRefundStatus(orderDto.TotalShortageLossNio, orderDto.TotalSupplierRefundNio);
+        var refundStatus = ResolveShortageRefundStatus(
+            orderDto.TotalShortageLossNio,
+            orderDto.TotalSupplierRefundNio,
+            order.SupplierRefundDeclinedAt is not null);
         orderDto.PurchaseShortages = order.PurchaseShortages
             .OrderBy(shortage => shortage.Id)
             .Select(shortage => new PurchaseShortageDTO
@@ -755,8 +808,13 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         return orderDto;
     }
 
-    private static PurchaseShortageRefundStatusOption ResolveShortageRefundStatus(decimal totalLossNio, decimal refundedNio)
+    private static PurchaseShortageRefundStatusOption ResolveShortageRefundStatus(decimal totalLossNio, decimal refundedNio, bool refundDeclined)
     {
+        if (refundDeclined)
+        {
+            return PurchaseShortageRefundStatusOption.NotRefunded;
+        }
+
         if (refundedNio == 0 || totalLossNio == 0)
         {
             return PurchaseShortageRefundStatusOption.PendingRefund;

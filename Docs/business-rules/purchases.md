@@ -214,15 +214,20 @@ Si el proveedor confirma que una parte de la línea nunca será entregada, la ca
 
 Cuando el proveedor confirme que una parte de una orden no llegará, el administrador debe cerrar los faltantes pendientes. Por cada variante pendiente se crea un `purchase_shortage` con la cantidad faltante, la fecha y el costo perdido congelado en `loss_amount_nio`.
 
-Al cerrar los faltantes, la cantidad final de la variante queda igual a la cantidad realmente recibida; la orden pasa a `Received` y no puede recibir más productos. El faltante no crea un nuevo egreso financiero: el pago original ya se registró como `SupplierPayment`.
+Al cerrar faltantes con pérdida, la cantidad final de la variante queda igual a la cantidad realmente recibida y la orden pasa a `PendingRefund`: no admite más recepciones normales y queda pendiente de resolver el reembolso. El faltante no crea un nuevo egreso financiero: el pago original ya se registró como `SupplierPayment`.
+
+Al registrar el único reembolso de proveedor o confirmar que no habrá reembolso, la orden pasa a `Received`. Si todos los faltantes tienen pérdida cero, no hay una acción financiera pendiente y la orden pasa directamente a `Received`.
 
 Una orden puede tener un único `supplier_refund` opcional. Este guarda el monto total que el proveedor devolvió por todos sus faltantes, sin distribuirlo entre las variantes, y crea un movimiento financiero `SupplierRefund` de ingreso.
+
+Si el proveedor confirma que no devolverá dinero, la orden guarda `supplier_refund_declined_at` y un comentario opcional. Esta resolución no crea un `supplier_refund` ni un movimiento financiero; tampoco permite registrar posteriormente un reembolso para la misma orden.
 
 El estado de reembolso de cada línea se calcula, no se almacena:
 
 * `PendingRefund`: no hay reembolso registrado.
 * `PartiallyRefunded`: el reembolso total de la orden es mayor que cero y menor que la pérdida total.
 * `Refunded`: el reembolso total es igual a la pérdida total.
+* `NotRefunded`: el proveedor confirmó que no emitirá reembolso.
 
 La pérdida neta de una compra es:
 
@@ -268,10 +273,13 @@ Estados sugeridos para `order_statuses`:
 * `PartiallyReceived`
 * `Received`
 * `Cancelled`
+* `PendingRefund`
 
 La orden debe pasar a `PartiallyReceived` cuando al menos una unidad haya sido recibida, pero todavía existan unidades pendientes.
 
-La orden debe pasar a `Received` solamente cuando todos sus productos hayan sido recibidos completamente.
+La orden debe pasar a `Received` cuando todos sus productos hayan sido recibidos completamente, o después de resolver el reembolso de faltantes confirmados.
+
+La orden debe pasar a `PendingRefund` cuando se cierran faltantes con pérdida: ya no hay unidades por recibir, pero falta registrar el reembolso único del proveedor o confirmar que no existirá.
 
 Una orden cancelada no debe permitir nuevas recepciones.
 

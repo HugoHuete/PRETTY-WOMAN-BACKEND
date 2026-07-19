@@ -129,7 +129,7 @@ Cuando el proveedor confirme que las cantidades pendientes no llegarán, usar:
 POST /api/v1/orders/{orderId}/shortages/close
 ```
 
-El request debe listar exactamente las variantes que aún tienen cantidad pendiente. La API calcula la cantidad faltante y la pérdida histórica de cada una, ajusta la cantidad final de la variante a la cantidad recibida y cierra la orden.
+El request debe listar exactamente las variantes que aún tienen cantidad pendiente. La API calcula la cantidad faltante y la pérdida histórica de cada una, ajusta la cantidad final de la variante a la cantidad recibida y deja la orden en `PendingRefund` cuando existe pérdida. En ese estado no admite más recepciones normales.
 
 Si posteriormente el proveedor devuelve dinero, usar un único reembolso por orden:
 
@@ -145,7 +145,22 @@ POST /api/v1/orders/{orderId}/supplier-refund
 }
 ```
 
-El monto no puede superar la pérdida total de faltantes de la orden. La respuesta de `GET /api/v1/orders/{orderId}` incluye el total faltante, el reembolso, la pérdida neta y el estado calculado de cada línea.
+El monto no puede superar la pérdida total de faltantes de la orden. Al registrarlo, la orden pasa a `Received`. La respuesta de `GET /api/v1/orders/{orderId}` incluye el total faltante, el reembolso, la pérdida neta y el estado calculado de cada línea.
+
+Si el proveedor confirma que no habrá reembolso, usar en lugar del reembolso monetario:
+
+```http
+POST /api/v1/orders/{orderId}/supplier-refund/decline
+```
+
+```json
+{
+  "declinedAt": "2026-07-20T15:30:00Z",
+  "comments": "Proveedor confirmó que no emitirá crédito."
+}
+```
+
+Este endpoint no crea un movimiento financiero ni un `supplier_refund`; deja los faltantes con estado calculado `NotRefunded` y pasa la orden a `Received`. Solo puede usarse una vez y no puede combinarse con un reembolso monetario.
 
 ## Errores esperados
 

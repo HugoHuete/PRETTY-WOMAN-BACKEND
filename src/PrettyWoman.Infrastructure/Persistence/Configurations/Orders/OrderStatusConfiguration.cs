@@ -38,6 +38,11 @@ public class OrderStatusConfiguration : IEntityTypeConfiguration<OrderStatus>
             {
                 Id = (int)OrderStatusCode.Cancelled,
                 Name = nameof(OrderStatusCode.Cancelled)
+            },
+            new OrderStatus
+            {
+                Id = (int)OrderStatusCode.PendingRefund,
+                Name = nameof(OrderStatusCode.PendingRefund)
             }
         );
     }

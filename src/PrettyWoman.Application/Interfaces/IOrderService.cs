@@ -11,6 +11,7 @@ public interface IOrderService
     Task UpdateAsync(int id, UpdateOrderDTO updateOrderDTO);
     Task<OrderDTO> CloseShortagesAsync(int id, CloseOrderShortagesDTO closeShortagesDTO);
     Task<OrderDTO> CreateSupplierRefundAsync(int id, CreateSupplierRefundDTO createSupplierRefundDTO);
+    Task<OrderDTO> DeclineSupplierRefundAsync(int id, DeclineSupplierRefundDTO declineSupplierRefundDTO);
     Task<IEnumerable<OrderTrackingNumberDTO>> AddTrackingNumbersAsync(int orderId, IEnumerable<CreateOrderTrackingNumberDTO> createTrackingDTOs);
     Task<OrderTrackingNumberDTO> UpdateTrackingNumberAsync(int orderId, int trackingId, UpdateOrderTrackingNumberDTO updateTrackingDTO);
     Task DeleteTrackingNumberAsync(int orderId, int trackingId);

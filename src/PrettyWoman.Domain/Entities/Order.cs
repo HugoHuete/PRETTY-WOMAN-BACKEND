@@ -16,6 +16,9 @@ public class Order : IAuditableEntity
     public decimal SupplierShippingCostUsd { get; set; }
     public decimal WarehouseShippingCostUsd { get; set; }
     public decimal TotalCostNio { get; set; }
+    public SupplierRefundResolutionOption? SupplierRefundResolution { get; set; }
+    public DateTime? SupplierRefundDeclinedAt { get; set; }
+    public string? SupplierRefundDeclineComments { get; set; }
     public string? Comments { get; set; }
 
 

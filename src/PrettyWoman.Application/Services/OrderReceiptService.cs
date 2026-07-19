@@ -117,9 +117,10 @@ public class OrderReceiptService(
             throw new AppBadRequestException("No se puede recibir productos de una orden cancelada.");
         }
 
-        if (order.OrderStatusId == (int)OrderStatusCode.Received && products.Any(product => !product.IsSurplus))
+        if (order.OrderStatusId is (int)OrderStatusCode.Received or (int)OrderStatusCode.PendingRefund &&
+            products.Any(product => !product.IsSurplus))
         {
-            throw new AppBadRequestException("La orden ya fue recibida completamente.");
+            throw new AppBadRequestException("La orden no admite más recepciones normales.");
         }
     }
 
@@ -273,6 +274,11 @@ public class OrderReceiptService(
     }
     private static int ResolveOrderStatus(Order order)
     {
+        if (order.OrderStatusId == (int)OrderStatusCode.PendingRefund)
+        {
+            return (int)OrderStatusCode.PendingRefund;
+        }
+
         return order.Products.All(product => product.ReceivedQuantity >= product.Quantity)
             ? (int)OrderStatusCode.Received
             : (int)OrderStatusCode.PartiallyReceived;

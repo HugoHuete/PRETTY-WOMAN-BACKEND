@@ -4,5 +4,6 @@ public enum PurchaseShortageRefundStatusOption
 {
     PendingRefund = 1,
     PartiallyRefunded = 2,
-    Refunded = 3
+    Refunded = 3,
+    NotRefunded = 4
 }

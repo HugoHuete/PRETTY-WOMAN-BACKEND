@@ -101,7 +101,8 @@ Ambas acciones son exclusivas de Admin. Se ejecutan desde el detalle de la orden
 | Flujo | Endpoint | Cuándo mostrarlo | Resultado |
 |---|---|---|---|
 | Cerrar faltantes | `POST /api/v1/orders/{id}/shortages/close` | Hay al menos una variante con `receivedQuantity < quantity`, la orden no está cancelada ni recibida y aún no tiene `purchaseShortages`. | Crea un faltante por cada variante pendiente y deja la orden en `Received`. |
-| Registrar reembolso | `POST /api/v1/orders/{id}/supplier-refund` | La orden ya tiene faltantes con pérdida mayor que cero y `supplierRefund` es `null`. | Registra el único reembolso permitido, crea un ingreso financiero `SupplierRefund` y actualiza la pérdida neta. |
+| Registrar reembolso | `POST /api/v1/orders/{id}/supplier-refund` | La orden ya tiene faltantes con pérdida mayor que cero y `supplierRefund` y `supplierRefundDeclinedAt` son `null`. | Registra el único reembolso permitido, crea un ingreso financiero `SupplierRefund` y actualiza la pérdida neta. |
+| Marcar sin reembolso | `POST /api/v1/orders/{id}/supplier-refund/decline` | La orden tiene pérdida por faltantes y no tiene reembolso ni resolución previa. | Deja constancia sin crear movimiento financiero y marca los faltantes como `NotRefunded`. |
 
 #### Cerrar faltantes
 
@@ -142,6 +143,25 @@ Solo puede existir un reembolso por orden. No se distribuye entre los faltantes:
 - `refundedAt`, `reference` y `comments` son opcionales.
 - Si la pérdida total es cero, no se debe mostrar esta acción: no hay monto reembolsable que registrar.
 
+#### Marcar que el proveedor no reembolsará
+
+No enviar un reembolso de monto cero. Cuando el proveedor confirme que no emitirá crédito, usar:
+
+```http
+POST /api/v1/orders/{id}/supplier-refund/decline
+```
+
+```json
+{
+  "declinedAt": "2026-07-20T15:30:00Z",
+  "comments": "Proveedor confirmó que no emitirá crédito."
+}
+```
+
+- Ambos campos son opcionales; si no se manda `declinedAt`, el backend usa la fecha/hora actual.
+- Esta acción no crea un `SupplierRefund` ni un ingreso financiero.
+- Después de marcarla no se puede crear un reembolso monetario para esa orden. Pedir confirmación explícita en la UI.
+
 #### Datos para mostrar en el detalle de orden
 
 `GET /api/v1/orders/{id}` y las respuestas de las dos acciones anteriores incluyen:
@@ -158,6 +178,8 @@ supplierRefund: {
   reference: string | null
   comments: string | null
 } | null
+supplierRefundDeclinedAt: string | null
+supplierRefundDeclineComments: string | null
 purchaseShortages: Array<{
   id: number
   productId: number
@@ -165,7 +187,7 @@ purchaseShortages: Array<{
   lossAmountNio: number
   shortageDate: string
   comments: string | null
-  refundStatus: 1 | 2 | 3
+  refundStatus: 1 | 2 | 3 | 4
 }>
 ```
 
@@ -174,6 +196,13 @@ Mostrar el resumen `Pérdida total - Reembolso proveedor = Pérdida neta`. El es
 - `1` (`PendingRefund`): no hay reembolso.
 - `2` (`PartiallyRefunded`): hay reembolso, pero es menor que la pérdida total.
 - `3` (`Refunded`): el reembolso es igual a la pérdida total.
+- `4` (`NotRefunded`): el proveedor confirmó que no emitirá reembolso.
+
+#### Estado de la orden durante faltantes
+
+- `PartiallyReceived` (`2`): todavía hay unidades pendientes de recibir.
+- `PendingRefund` (`5`): se cerraron faltantes con pérdida; ya no se permiten recepciones normales y falta registrar el reembolso o marcar que no habrá.
+- `Received` (`3`): se recibió todo o ya se resolvió el reembolso/declinación de los faltantes. Los faltantes de pérdida cero pasan directamente a este estado porque no requieren resolución financiera.
 
 Errores de negocio esperables: orden cancelada o ya recibida, faltantes ya cerrados, lista de variantes pendiente incompleta/duplicada, intento de reembolso sin faltantes, segundo reembolso y monto superior a la pérdida total. Mostrar `ProblemDetails.detail`; no usar textos como condición de lógica.
 

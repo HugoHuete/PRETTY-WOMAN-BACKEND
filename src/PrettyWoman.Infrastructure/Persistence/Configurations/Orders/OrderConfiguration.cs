@@ -10,6 +10,8 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
     public void Configure(EntityTypeBuilder<Order> builder)
     {
         builder.Property(x => x.Comments).HasMaxLength(300);
+        builder.Property(x => x.SupplierRefundDeclineComments).HasMaxLength(300);
+        builder.Property(x => x.SupplierRefundResolution).IsConcurrencyToken();
         builder.Property(x => x.PurchaseCurrencyId).HasDefaultValue((int)PurchaseCurrencyOption.Usd);
         builder.Property(x => x.AmountUsd).HasPrecision(14, 2);
         builder.Property(x => x.ExchangeRate).HasPrecision(10, 4);
@@ -61,6 +63,10 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             t.HasCheckConstraint(
                 "ck_orders_total_cost_nio_non_negative",
                 "total_cost_nio >= 0");
+
+            t.HasCheckConstraint(
+                "ck_orders_supplier_refund_resolution_valid",
+                "supplier_refund_resolution IS NULL OR supplier_refund_resolution IN (1, 2)");
         });
 
 
