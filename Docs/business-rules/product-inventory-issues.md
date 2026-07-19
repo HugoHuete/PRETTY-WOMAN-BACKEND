@@ -141,7 +141,7 @@ Un issue solo debe cancelarse si fue creado por error.
 3. Colocar `resolved_at`.
 4. Disminuir `products.unavailable_quantity`.
 5. Aumentar `products.available_quantity`.
-6. Crear un movimiento que deje evidencia, normalmente `AdjustmentIncrease` o un tipo especifico si existe.
+6. Crear un movimiento que deje evidencia, normalmente `IssueReturnedToAvailable`.
 
 Si el producto realmente estuvo no disponible y luego se recupero, usar `ResolvedToAvailable`, no `Cancelled`.
 

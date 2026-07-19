@@ -87,6 +87,60 @@ Los cambios de inventario deben realizarse desde un unico servicio de aplicacion
 
 Los controladores y otros servicios no deben modificar directamente las cantidades de `products`.
 
+## Regla: ajustes manuales de inventario
+
+Los ajustes manuales se registran en `inventory_adjustments` y `inventory_adjustment_items`. Cada item debe crear exactamente un `inventory_movement` mediante `InventoryService`.
+
+Un ajuste aplica cuando se necesita corregir una diferencia operativa que no pertenece naturalmente a una venta, devolucion, cambio, recepcion de compra, seleccion o issue abierto.
+
+Ejemplos:
+
+* cruce de codigo entre productos
+* correccion manual de conteo
+* faltante detectado despues de haber recibido inventario
+* recuperacion de un producto previamente dado de baja
+* donacion o salida no comercial
+
+Cada item debe indicar:
+
+* `product_id`
+* `from_stock_bucket_id`
+* `to_stock_bucket_id`
+* `quantity`
+* comentario opcional
+
+El encabezado del ajuste puede guardar `reference` y `comments`:
+
+* `reference`: identificador corto para rastrear el origen del ajuste, como folio, orden, factura, conteo fisico, venta relacionada o codigo interno.
+* `comments`: explicacion en lenguaje humano sobre que paso, por que se ajusto y cualquier detalle util para auditoria.
+
+Ejemplos de `reference`: `CONTEO-JULIO-2026`, `ORDEN-123`, `FACTURA-9981`, `VENTA-456`.
+
+Ejemplos de `comments`: `Sobrante encontrado al recibir compra.`, `Se corrigio cruce de codigo entre dos variantes.`, `Conteo fisico mostro una unidad menos y no se encontro flujo asociado.`
+
+Debe cumplirse:
+
+`from_stock_bucket_id <> to_stock_bucket_id`
+
+`quantity > 0`
+
+Los motivos del ajuste viven en `inventory_adjustment_reasons`. El motivo explica por que se hace el ajuste; el movimiento explica que bucket cambia.
+
+Los ajustes usan un unico tipo de movimiento:
+
+* `AdjustmentTransfer`: registra el cambio de bucket del item de ajuste, por ejemplo `External -> Available`, `Available -> OutOfInventory` o `Available -> Unavailable`.
+
+La causa del ajuste no se infiere del tipo de movimiento; vive en `inventory_adjustment_reasons`.
+
+Un ajuste positivo desde `External` aumenta `received_quantity` y no puede dejar `received_quantity > quantity`. Si el sobrante recibido supera la cantidad comprada, primero debe corregirse la compra/costo de la variante antes de registrar la entrada de inventario.
+
+No se debe usar ajuste manual cuando existe un flujo especifico:
+
+* producto danado, sucio o en revision: usar `product_inventory_issues`
+* venta, cancelacion de venta o envio: usar el flujo de ventas/envios
+* devolucion o cambio de clienta: usar `sale_returns` o `sale_exchanges`
+* recepcion normal de compra: usar `order_receipts`
+
 ## Regla: recepcion de productos
 
 Cuando se recibe una cantidad de producto de una orden:
@@ -256,7 +310,7 @@ Cambios:
 
 `AvailableQuantity += IssueQuantity`
 
-No se debe utilizar `AdjustmentIncrease` cuando la causa conocida sea reparacion o hallazgo.
+No se debe registrar un ajuste manual cuando la causa conocida sea reparacion o hallazgo.
 
 ## Regla: producto descartado o perdida confirmada
 
@@ -280,7 +334,7 @@ Los ajustes manuales deben utilizarse solamente cuando la diferencia no tenga un
 
 ### Ajuste positivo
 
-Utilizar `AdjustmentIncrease` cuando un conteo fisico encuentre mas unidades que las registradas y no exista una causa mas especifica.
+Utilizar un ajuste con motivo `ManualCorrection` cuando un conteo fisico encuentre mas unidades que las registradas y no exista una causa mas especifica.
 
 Efecto:
 
@@ -288,7 +342,7 @@ Efecto:
 
 ### Ajuste negativo
 
-Utilizar `AdjustmentDecrease` cuando un conteo fisico encuentre menos unidades que las registradas y no exista una causa mas especifica.
+Utilizar un ajuste con motivo `ManualCorrection` cuando un conteo fisico encuentre menos unidades que las registradas y no exista una causa mas especifica.
 
 Efecto:
 
@@ -315,17 +369,21 @@ No debe utilizarse un ajuste generico para representar:
 * `Sale`
 * `SaleCancelled`
 * `CustomerReturn`
-* `ExchangeReturn`
-* `Damaged`
-* `Repaired`
-* `Lost`
-* `Found`
-* `Discarded`
-* `AdjustmentIncrease`
-* `AdjustmentDecrease`
+* `IssueOpened`
+* `IssueReturnedToAvailable`
+* `IssueRemovedFromInventory`
 * `ReservationCreated`
 * `ReservationReleased`
 * `ReservationConvertedToSale`
+* `SelectionSent`
+* `SelectionConvertedToSale`
+* `SelectionReturned`
+* `ExchangeReplacementReserved`
+* `ExchangeReplacementDelivered`
+* `ExchangeReplacementReservationReleased`
+* `ExchangeReturnReceivedByAgency`
+* `ExchangeReturnMissing`
+* `AdjustmentTransfer`
 
 ## Datos minimos de un movimiento de inventario
 

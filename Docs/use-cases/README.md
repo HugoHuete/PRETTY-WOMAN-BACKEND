@@ -34,6 +34,7 @@ Cada documento intenta cubrir:
 - Aplicar descuento manual
 - Registrar producto dañado
 - Registrar producto perdido
+- Registrar ajuste de inventario
 - Recibir productos de una orden
 - Crear movimiento financiero desde pago
 - Registrar préstamo

@@ -151,8 +151,8 @@ public class ProductServiceTests
         Assert.Equal(1001, result[0].ProductCode);
         Assert.Equal(2, result[0].SizeId);
         Assert.Equal("M", result[0].SizeName);
-        Assert.Equal((int)InventoryMovementTypeOption.AdjustmentDecrease, result[0].InventoryMovementTypeId);
-        Assert.Equal("AdjustmentDecrease", result[0].InventoryMovementTypeName);
+        Assert.Equal((int)InventoryMovementTypeOption.AdjustmentTransfer, result[0].InventoryMovementTypeId);
+        Assert.Equal("AdjustmentTransfer", result[0].InventoryMovementTypeName);
         Assert.Equal((int)InventoryStockBucketOption.Available, result[0].FromStockBucketId);
         Assert.Equal("Available", result[0].FromStockBucketName);
         Assert.Equal((int)InventoryStockBucketOption.Unavailable, result[0].ToStockBucketId);
@@ -272,7 +272,7 @@ public class ProductServiceTests
         context.ProductDetails.AddRange(pants, blouse, shoes);
         context.InventoryMovementTypes.AddRange(
             new InventoryMovementType { Id = (int)InventoryMovementTypeOption.PurchaseReceived, Name = "PurchaseReceived" },
-            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.AdjustmentDecrease, Name = "AdjustmentDecrease" });
+            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.AdjustmentTransfer, Name = "AdjustmentTransfer" });
         context.InventoryStockBuckets.AddRange(
             new InventoryStockBucket { Id = (int)InventoryStockBucketOption.External, Name = "External" },
             new InventoryStockBucket { Id = (int)InventoryStockBucketOption.Available, Name = "Available" },
@@ -293,7 +293,7 @@ public class ProductServiceTests
             new InventoryMovement
             {
                 Product = pants.Products.ElementAt(1),
-                InventoryMovementTypeId = (int)InventoryMovementTypeOption.AdjustmentDecrease,
+                InventoryMovementTypeId = (int)InventoryMovementTypeOption.AdjustmentTransfer,
                 FromStockBucketId = (int)InventoryStockBucketOption.Available,
                 ToStockBucketId = (int)InventoryStockBucketOption.Unavailable,
                 Quantity = 1,

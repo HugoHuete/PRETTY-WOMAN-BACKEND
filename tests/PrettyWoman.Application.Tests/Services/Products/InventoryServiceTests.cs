@@ -160,7 +160,7 @@ public class InventoryServiceTests : IDisposable
             InventoryStockBucketOption.Reserved,
             InventoryStockBucketOption.Unavailable,
             1,
-            InventoryMovementTypeOption.AdjustmentDecrease,
+            InventoryMovementTypeOption.AdjustmentTransfer,
             DateTime.UtcNow));
 
         Assert.Equal("La transición de inventario 'Reserved -> Unavailable' no está permitida.", exception.Message);
@@ -199,7 +199,7 @@ public class InventoryServiceTests : IDisposable
             InventoryStockBucketOption.OutOfInventory,
             InventoryStockBucketOption.Available,
             1,
-            InventoryMovementTypeOption.AdjustmentIncrease,
+            InventoryMovementTypeOption.AdjustmentTransfer,
             DateTime.UtcNow));
 
         Assert.Equal("La transición dejaría más inventario activo que recibido en la variante con id '1'.", exception.Message);

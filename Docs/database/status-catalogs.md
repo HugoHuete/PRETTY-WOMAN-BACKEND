@@ -97,18 +97,21 @@ PurchaseReceived
 Sale
 SaleCancelled
 CustomerReturn
-ExchangeReturn
-Damaged
-Repaired
-Lost
-Found
-Discarded
-Donation
-AdjustmentIncrease
-AdjustmentDecrease
+IssueOpened
+IssueReturnedToAvailable
+IssueRemovedFromInventory
 ReservationCreated
 ReservationReleased
 ReservationConvertedToSale
+SelectionSent
+SelectionConvertedToSale
+SelectionReturned
+ExchangeReplacementReserved
+ExchangeReplacementDelivered
+ExchangeReplacementReservationReleased
+ExchangeReturnReceivedByAgency
+ExchangeReturnMissing
+AdjustmentTransfer
 ```
 
 ## financial_movement_types

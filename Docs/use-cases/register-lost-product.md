@@ -55,7 +55,7 @@ No se borra el movimiento original `Lost`.
 - No registrar como venta.
 - Toda perdida debe tener movimiento de inventario.
 - No se debe usar `product_holds` para productos perdidos.
-- Si se encuentra despues, usar `Found`, no `AdjustmentIncrease`.
+- Si se encuentra despues, resolver el issue como encontrado; no registrar un ajuste manual separado.
 
 ## Errores esperados
 

@@ -21,6 +21,7 @@ public class InventoryMovementConfiguration : IEntityTypeConfiguration<Inventory
         builder.HasOne(x => x.ExchangeReturnItem).WithMany().HasForeignKey(x => x.ExchangeReturnItemId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.ExchangeOutboundItem).WithMany().HasForeignKey(x => x.ExchangeOutboundItemId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.SaleReturnItem).WithMany().HasForeignKey(x => x.SaleReturnItemId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.InventoryAdjustmentItem).WithOne(x => x.InventoryMovement).HasForeignKey<InventoryMovement>(x => x.InventoryAdjustmentItemId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => x.MovementDate);
         builder.HasIndex(x => x.CreatedAt);
@@ -33,6 +34,7 @@ public class InventoryMovementConfiguration : IEntityTypeConfiguration<Inventory
         builder.HasIndex(x => x.ExchangeReturnItemId);
         builder.HasIndex(x => x.ExchangeOutboundItemId);
         builder.HasIndex(x => x.SaleReturnItemId);
+        builder.HasIndex(x => x.InventoryAdjustmentItemId).IsUnique().HasFilter("inventory_adjustment_item_id IS NOT NULL");
         builder.HasIndex(x => new { x.ProductId, x.MovementDate });
         builder.HasIndex(x => new { x.InventoryMovementTypeId, x.MovementDate });
 

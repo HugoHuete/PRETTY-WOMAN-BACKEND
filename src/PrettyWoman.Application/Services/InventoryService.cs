@@ -12,6 +12,7 @@ public class InventoryService(IApplicationDbContext context) : IInventoryService
     private static readonly HashSet<(InventoryStockBucketOption From, InventoryStockBucketOption To)> AllowedTransitions =
     [
         (InventoryStockBucketOption.External, InventoryStockBucketOption.Available),
+        (InventoryStockBucketOption.External, InventoryStockBucketOption.Unavailable),
         (InventoryStockBucketOption.Available, InventoryStockBucketOption.Reserved),
         (InventoryStockBucketOption.Available, InventoryStockBucketOption.Unavailable),
         (InventoryStockBucketOption.Available, InventoryStockBucketOption.OutOfInventory),

@@ -6,29 +6,25 @@ public enum InventoryMovementTypeOption
     Sale = 2,
     SaleCancelled = 3,
     CustomerReturn = 4, // Devuelto
-    ExchangeReturn = 5, // Cambiado
 
     // Movimientos generados por ProductInventoryIssue. El detalle del motivo/resultado vive en el issue.
-    IssueOpened = 6,
-    IssueReturnedToAvailable = 7,
-    IssueRemovedFromInventory = 8,
+    IssueOpened = 5,
+    IssueReturnedToAvailable = 6,
+    IssueRemovedFromInventory = 7,
 
     // Estas reservaciones sumas y restan a la cantidad "reservada"
-    ReservationCreated = 9,
-    ReservationReleased = 10,
-    ReservationConvertedToSale = 11,
+    ReservationCreated = 8,
+    ReservationReleased = 9,
+    ReservationConvertedToSale = 10,
 
-    Donation = 12,
-    AdjustmentIncrease = 13,
-    AdjustmentDecrease = 14,
-
-    SelectionSent = 15,
-    SelectionConvertedToSale = 16,
-    SelectionReturned = 17,
-    ExchangeReplacementReserved = 18,
-    ExchangeReplacementDelivered = 19,
-    ExchangeReplacementReservationReleased = 20,
-    ExchangeReturnReceivedByAgency = 21,
-    ExchangeReturnMissing = 22
+    SelectionSent = 11,
+    SelectionConvertedToSale = 12,
+    SelectionReturned = 13,
+    ExchangeReplacementReserved = 14,
+    ExchangeReplacementDelivered = 15,
+    ExchangeReplacementReservationReleased = 16,
+    ExchangeReturnReceivedByAgency = 17,
+    ExchangeReturnMissing = 18,
+    AdjustmentTransfer = 19
 
 }
