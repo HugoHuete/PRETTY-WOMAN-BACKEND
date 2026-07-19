@@ -155,7 +155,7 @@ Cuando se recibe una cantidad de producto de una orden:
 6. Relacionar el movimiento con el producto y la orden.
 7. Actualizar el estado de la orden cuando corresponda.
 
-Para registrar sobrantes, la línea debe marcarse explícitamente como sobrante y enviar comentario. Solo en ese caso se permite:
+Para registrar sobrantes, la línea debe marcarse explícitamente como sobrante. El comentario general de la recepción es opcional; no se exige comentario por línea. Solo en ese caso se permite:
 
 `ReceivedQuantity > Quantity`
 

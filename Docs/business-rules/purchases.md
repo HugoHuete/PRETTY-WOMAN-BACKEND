@@ -163,7 +163,7 @@ La base de distribución del envío es:
 
 `products[].weight × products[].quantity`
 
-Para registrar unidades recibidas de más, la línea debe enviar `products[].isSurplus = true` y un `products[].comments` que explique el sobrante. Sin esa marca explícita, la recepción sigue rechazando cantidades mayores a la cantidad pendiente.
+Para registrar unidades recibidas de más, la línea debe enviar `products[].isSurplus = true`. El comentario general de la recepción es opcional y puede documentar el sobrante; no se exige comentario por línea. Sin la marca explícita, la recepción sigue rechazando cantidades mayores a la cantidad pendiente.
 
 ## Regla: recepción parcial de compra
 

@@ -14,6 +14,4 @@ public class ReceiveOrderProductDTO
     public decimal Weight { get; set; } = 1;
 
     public bool IsSurplus { get; set; }
-
-    public string? Comments { get; set; }
 }

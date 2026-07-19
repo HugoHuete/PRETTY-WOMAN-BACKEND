@@ -224,8 +224,7 @@ Usar `POST /api/v1/orders/{orderId}/receipts` para una recepción parcial o comp
       "productId": 30,
       "quantity": 3,
       "weight": 1,
-      "isSurplus": false,
-      "comments": null
+      "isSurplus": false
     }
   ]
 }
@@ -281,7 +280,7 @@ Antes de crear o filtrar movimientos financieros, cargar `GET /api/v1/finances/m
 
 Para crear una venta, `products` y `selectionProducts` son listas distintas. Cada elemento de `products` requiere `productId`, `quantity`, `discountAmount` y `discountSourceId`. El pago inicial es opcional en `paymentMovements`; cada pago requiere `paymentMethodId`, `productAmount` y `shippingAmount`.
 
-En recepcion de compras, la UI debe bloquear cantidades mayores a lo pendiente salvo que el usuario marque explícitamente la línea como sobrante. Para sobrantes enviar `isSurplus: true` y `comments`; conviene mostrar confirmacion visual porque esa acción puede dejar `receivedQuantity` mayor que `quantity`.
+En recepcion de compras, la UI debe bloquear cantidades mayores a lo pendiente salvo que el usuario marque explícitamente la línea como sobrante. Para sobrantes enviar `isSurplus: true`; el comentario general de la recepción es opcional y sirve si se desea documentar el caso. No pedir comentario por línea. Conviene mostrar confirmacion visual porque esa acción puede dejar `receivedQuantity` mayor que `quantity`.
 
 `PUT /api/v1/sales/{id}/products` recibe la composición final completa. Cada línea existente que se desee conservar debe incluir su `saleProductId`, obtenido de `GET /api/v1/sales/{id}`; omitir una línea existente la elimina y enviar una línea sin `saleProductId` agrega un producto nuevo. El backend conserva los precios y costos congelados de las líneas identificadas y mueve inventario únicamente por la diferencia de cantidad.
 

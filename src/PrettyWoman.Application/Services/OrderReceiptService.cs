@@ -49,8 +49,8 @@ public class OrderReceiptService(
                 InventoryStockBucketOption.Available,
                 item.Quantity,
                 InventoryMovementTypeOption.PurchaseReceived,
-                receiptDate,
-                item.Comments ?? receiveOrderDTO.Comments);
+                receiptDate
+            );
             inventoryMovement.OrderId = order.Id;
 
             item.Product.AllocatedShippingCostNio += warehouseShippingAllocations[item.Product.Id];
@@ -153,17 +153,11 @@ public class OrderReceiptService(
                 throw new AppBadRequestException($"La cantidad recibida del producto '{product.Id}' supera la cantidad pendiente.");
             }
 
-            if (productDTO.IsSurplus && string.IsNullOrWhiteSpace(productDTO.Comments))
-            {
-                throw new AppBadRequestException($"Debe indicar un comentario para registrar sobrante del producto '{product.Id}'.");
-            }
-
             receivedProducts.Add(new ReceivedProduct(
                 product,
                 productDTO.Quantity,
                 productDTO.Weight,
-                productDTO.IsSurplus,
-                productDTO.Comments));
+                productDTO.IsSurplus));
         }
 
         return receivedProducts;
@@ -324,11 +318,7 @@ public class OrderReceiptService(
         receiveOrderDTO.Comments = receiveOrderDTO.Comments.NormalizeOptional();
         receiveOrderDTO.TrackingNumbers ??= [];
         receiveOrderDTO.Products ??= [];
-        foreach (var product in receiveOrderDTO.Products)
-        {
-            product.Comments = product.Comments.NormalizeOptional();
-        }
     }
 
-    private sealed record ReceivedProduct(Product Product, int Quantity, decimal Weight, bool IsSurplus, string? Comments);
+    private sealed record ReceivedProduct(Product Product, int Quantity, decimal Weight, bool IsSurplus);
 }

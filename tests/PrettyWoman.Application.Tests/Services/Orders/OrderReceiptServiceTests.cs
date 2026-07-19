@@ -296,14 +296,14 @@ public class OrderReceiptServiceTests
         var receipt = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 10m,
+            Comments = "Vino una unidad adicional no solicitada.",
             Products =
             [
                 new ReceiveOrderProductDTO
                 {
                     ProductId = product.Id,
                     Quantity = 3,
-                    IsSurplus = true,
-                    Comments = "Vino una unidad adicional no solicitada."
+                    IsSurplus = true
                 }
             ]
         });
@@ -356,8 +356,7 @@ public class OrderReceiptServiceTests
                 {
                     ProductId = product.Id,
                     Quantity = 1,
-                    IsSurplus = true,
-                    Comments = "Unidad sobrante encontrada al cerrar el paquete."
+                    IsSurplus = true
                 }
             ]
         });
@@ -397,7 +396,7 @@ public class OrderReceiptServiceTests
     }
 
     [Fact]
-    public async Task ReceiveAsync_RejectsSurplusWithoutLineComment()
+    public async Task ReceiveAsync_AllowsSurplusWithoutLineComment()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -406,9 +405,10 @@ public class OrderReceiptServiceTests
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var product = await context.Products.SingleAsync();
 
-        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 0,
+            Comments = "Sobrante registrado al recibir la compra.",
             Products =
             [
                 new ReceiveOrderProductDTO
@@ -418,9 +418,10 @@ public class OrderReceiptServiceTests
                     IsSurplus = true
                 }
             ]
-        }));
+        });
 
-        Assert.Contains("comentario", exception.Message);
+        var inventoryMovement = await context.InventoryMovements.SingleAsync();
+        Assert.Equal("Sobrante registrado al recibir la compra.", inventoryMovement.Comments);
     }
 
     private static CreateOrderDTO CreateOrderRequest(int quantity)

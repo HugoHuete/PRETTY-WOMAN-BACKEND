@@ -98,8 +98,7 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
                     ProductId = product.ProductId,
                     Quantity = 3,
                     Weight = 1,
-                    IsSurplus = true,
-                    Comments = "Vino una unidad adicional no solicitada."
+                    IsSurplus = true
                 }
             ]
         });
