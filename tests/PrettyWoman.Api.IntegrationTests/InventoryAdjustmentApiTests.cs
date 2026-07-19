@@ -21,19 +21,27 @@ public class InventoryAdjustmentApiTests(PrettyWomanApiFactory factory)
         using var employee = await CreateEmployeeClientAsync();
 
         var reasonsResponse = await employee.GetAsync("/api/v1/inventory-catalogs/adjustment-reasons");
+        var suggestionsResponse = await employee.GetAsync("/api/v1/inventory-catalogs/adjustment-reason-suggestions");
         var bucketsResponse = await employee.GetAsync("/api/v1/inventory-catalogs/stock-buckets");
 
         Assert.Equal(HttpStatusCode.OK, reasonsResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, suggestionsResponse.StatusCode);
         Assert.Equal(HttpStatusCode.OK, bucketsResponse.StatusCode);
 
         var reasons = await reasonsResponse.Content.ReadFromJsonAsync<List<InventoryCatalogItemDTO>>();
+        var suggestions = await suggestionsResponse.Content.ReadFromJsonAsync<List<InventoryAdjustmentReasonSuggestionDTO>>();
         var buckets = await bucketsResponse.Content.ReadFromJsonAsync<List<InventoryCatalogItemDTO>>();
 
         Assert.NotNull(reasons);
+        Assert.NotNull(suggestions);
         Assert.NotNull(buckets);
         Assert.Contains(reasons, reason =>
             reason.Id == (int)InventoryAdjustmentReasonOption.ManualCorrection &&
             reason.Name == nameof(InventoryAdjustmentReasonOption.ManualCorrection));
+        Assert.Contains(suggestions, suggestion =>
+            suggestion.InventoryAdjustmentReasonId == (int)InventoryAdjustmentReasonOption.PurchaseSurplus &&
+            suggestion.SuggestedMovements.Count == 0 &&
+            !string.IsNullOrWhiteSpace(suggestion.Description));
         Assert.Contains(buckets, bucket =>
             bucket.Id == (int)InventoryStockBucketOption.Available &&
             bucket.Name == nameof(InventoryStockBucketOption.Available));

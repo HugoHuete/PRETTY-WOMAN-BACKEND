@@ -27,9 +27,10 @@ Corregir diferencias de inventario que no pertenecen a un flujo especifico como 
 La pantalla de creacion de ajustes no debe hardcodear motivos ni buckets. Debe consumir:
 
 - `GET /api/v1/inventory-catalogs/adjustment-reasons`
+- `GET /api/v1/inventory-catalogs/adjustment-reason-suggestions`
 - `GET /api/v1/inventory-catalogs/stock-buckets`
 
-Ambos endpoints devuelven items con esta forma:
+Los endpoints `adjustment-reasons` y `stock-buckets` devuelven items con esta forma:
 
 ```json
 {
@@ -37,6 +38,28 @@ Ambos endpoints devuelven items con esta forma:
   "name": "ManualCorrection"
 }
 ```
+
+`adjustment-reason-suggestions` devuelve los buckets sugeridos para cada motivo:
+
+```json
+{
+  "inventoryAdjustmentReasonId": 5,
+  "inventoryAdjustmentReasonName": "LostItem",
+  "description": "Baja de unidades que ya no se encontraron fisicamente.",
+  "suggestedMovements": [
+    {
+      "fromStockBucketId": 2,
+      "fromStockBucketName": "Available",
+      "toStockBucketId": 5,
+      "toStockBucketName": "OutOfInventory",
+      "description": "Dar de baja una unidad disponible que se perdio o no se encontro en conteo fisico."
+    }
+  ]
+}
+```
+
+Estas sugerencias son ayuda de UI, no una regla cerrada. El backend sigue validando la transicion real con `InventoryService`.
+Para `PurchaseSurplus`, si la unidad sobrante no estaba contemplada en la compra, el endpoint no sugiere una transferencia automatica: primero se debe aumentar/corregir la cantidad comprada y luego recibir la unidad por el flujo de compras. Esto evita sugerir `External -> Available` cuando `received_quantity` ya es igual a `quantity`.
 
 ## Flujo esperado
 

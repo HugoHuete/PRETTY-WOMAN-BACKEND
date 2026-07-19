@@ -128,7 +128,7 @@ Para mostrar existencias, considerar que `Reserved` y `ReadyForDelivery` usan `r
 
 Al crear una incidencia se envían `productId`, `productInventoryIssueTypeId`, `quantity`, `issueDate` opcional y `comments` opcional. Los tipos son `Damaged=1`, `Dirty=2`, `Missing=3`, `UnderReview=4` y `Repairing=5`. Mientras esté `Open=1`, la cantidad queda automáticamente fuera de disponibilidad. Al resolver, usar `ResolvedToAvailable=2`, `Discarded=3`, `ConfirmedLost=4` o `Cancelled=5`.
 
-Para ajustes de inventario, cargar los catalogos con `GET /api/v1/inventory-catalogs/adjustment-reasons` y `GET /api/v1/inventory-catalogs/stock-buckets`. Ambos devuelven `{ id, name }` y evitan hardcodear motivos o buckets en la UI.
+Para ajustes de inventario, cargar los catalogos con `GET /api/v1/inventory-catalogs/adjustment-reasons` y `GET /api/v1/inventory-catalogs/stock-buckets`. Ambos devuelven `{ id, name }` y evitan hardcodear motivos o buckets en la UI. Para precargar origen/destino segun el motivo seleccionado, usar `GET /api/v1/inventory-catalogs/adjustment-reason-suggestions`; devuelve cada motivo con `description` y `suggestedMovements`, donde cada sugerencia incluye bucket origen, bucket destino y una descripcion corta. Estas sugerencias ayudan a la UI, pero el backend sigue validando la transicion final. Si un motivo viene sin sugerencias, como `PurchaseSurplus`, la UI debe mostrar la descripcion del flujo recomendado en vez de prellenar buckets.
 
 ### Errores y estados que debe manejar la UI
 

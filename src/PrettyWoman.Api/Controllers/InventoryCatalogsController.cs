@@ -21,6 +21,14 @@ public class InventoryCatalogsController(IInventoryCatalogService inventoryCatal
         return Ok(reasons);
     }
 
+    [HttpGet("adjustment-reason-suggestions")]
+    [ProducesResponseType(typeof(IEnumerable<InventoryAdjustmentReasonSuggestionDTO>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<IEnumerable<InventoryAdjustmentReasonSuggestionDTO>>> GetAdjustmentReasonSuggestions()
+    {
+        var suggestions = await _inventoryCatalogService.GetAdjustmentReasonSuggestionsAsync();
+        return Ok(suggestions);
+    }
+
     [HttpGet("stock-buckets")]
     [ProducesResponseType(typeof(IEnumerable<InventoryCatalogItemDTO>), StatusCodes.Status200OK)]
     public async Task<ActionResult<IEnumerable<InventoryCatalogItemDTO>>> GetStockBuckets()
