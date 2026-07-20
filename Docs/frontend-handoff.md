@@ -287,7 +287,7 @@ Al crear o editar una agencia, el formulario de configuración debe permitir def
 
 En la conciliación COD, cada entrega puede registrar `amountCollectedNio`, `amountCollectedUsd`, `changeGivenNio` y `collectionExchangeRate`; una agencia sí puede reportar NIO y USD juntos. El pago generado conserva esos valores originales y usa como `grossAmount` el neto convertido y redondeado a 2 decimales. Como ese `grossAmount` ya nace del mismo tender, `exchangeDifferenceNio` es cero y no se vuelve a calcular un residuo sobre el valor sin redondear. Por eso el detalle de la venta puede mostrar ambas monedas en un movimiento vinculado a `deliveryAgencyReconciliationId`, aunque los pagos registrados directamente continúen usando una sola moneda por movimiento.
 
-Para crear una venta, `products` y `selectionProducts` son listas distintas. Cada elemento de `products` requiere `productId`, `quantity`, `discountAmount` y `discountSourceId`. El pago inicial es opcional en `paymentMovements`; cada pago requiere `paymentMethodId`, `productAmount` y `shippingAmount`.
+Para crear una venta, `products` y `selectionProducts` son listas distintas. Cada elemento de `products` requiere `productId`, `quantity`, `discountAmount` y `discountSourceId`. `selectionProducts` solo se admite para canales destinados a envío: debe estar vacío cuando `saleChannelId` sea `1` (`InStoreSale`). El envío puede crearse después, por lo que no se exige un `delivery` previo para registrar la selección. El pago inicial es opcional en `paymentMovements`; cada pago requiere `paymentMethodId`, `productAmount` y `shippingAmount`.
 
 Cada movimiento de pago aplica `productAmount` y `shippingAmount` a la deuda de la venta siempre en córdobas. Los campos de moneda recibida son independientes:
 
@@ -352,7 +352,7 @@ La consulta de historial está disponible para Admin y Vendedor; las acciones de
 
 | Flujo | Endpoint | Rol | Resultado de UI esperado |
 |---|---|---|---|
-| Enviar productos a selección | `POST /api/v1/sales/{id}/selection-holds` | Admin | Crea los holds; las prendas quedan fuera de disponibilidad mientras estén activas. |
+| Enviar productos a selección | `POST /api/v1/sales/{id}/selection-holds` | Admin | Solo para ventas con canal distinto de `InStoreSale`; crea los holds y deja las prendas fuera de disponibilidad mientras estén activas. |
 | Resolver selección | `POST /api/v1/sales/{id}/selection-holds/{holdId}/resolve` | Admin | Registra la decisión de la clienta; las prendas no elegidas regresan a disponibilidad. |
 | Marcar selección devuelta | `POST /api/v1/sales/{id}/selection-holds/{holdId}/return` | Admin | Devuelve la prenda de selección no comprada al flujo de inventario. |
 | Consultar / crear cambio | `GET`, `POST /api/v1/sales/{id}/exchanges` | Consulta: Admin, Vendedor. Crear: Admin | El cambio conserva retorno y salida como ítems independientes de la venta. |
@@ -565,6 +565,9 @@ No existe todavía una ruta específica para cancelar una sola línea de venta. 
   finanzas, incidencias de inventario, ni bloquear clientes. Las correcciones, cancelaciones,
   devoluciones, reembolsos, cambios y transiciones posteriores a `Sent` de una venta son exclusivas
   de Admin.
+- Las ventas en local no admiten prendas para seleccion. La UI debe ocultar `selectionProducts` y las
+  acciones de `selection-holds` cuando el canal sea `InStoreSale`, y no debe permitir cambiar a local
+  una venta que ya tenga historial de seleccion.
 - Una venta con pago parcial no se entrega a la clienta. Una agencia con `canCollectCashOnDelivery: true`
   puede transportar el pedido, pero solo se completa cuando recauda el total pendiente; de lo contrario
   el envio se marca fallido, sin cobro parcial. Una agencia con `canCollectCashOnDelivery: false` exige

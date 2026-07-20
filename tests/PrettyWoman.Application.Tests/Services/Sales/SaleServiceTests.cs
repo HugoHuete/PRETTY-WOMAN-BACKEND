@@ -180,6 +180,100 @@ public class SaleServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_RejectsSelectionProductsForInStoreSale()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            SelectionProducts = [new CreateSaleSelectionProductDTO { ProductId = product.Id, Quantity = 1 }]
+        }));
+
+        Assert.Contains("ventas en local", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await context.Sales.ToListAsync());
+        Assert.Empty(await context.ProductHolds.ToListAsync());
+        Assert.Equal(2, (await context.Products.SingleAsync(item => item.Id == product.Id)).AvailableQuantity);
+    }
+
+    [Fact]
+    public async Task CreateAsync_AllowsSelectionProductsForDeliverySale()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SelectionProducts = [new CreateSaleSelectionProductDTO { ProductId = product.Id, Quantity = 1 }]
+        });
+
+        var hold = await context.ProductHolds.SingleAsync(item => item.SaleId == saleId);
+        var updatedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        Assert.Equal((int)ProductHoldStatusOption.Active, hold.ProductHoldStatusId);
+        Assert.Equal(1, updatedProduct.AvailableQuantity);
+        Assert.Equal(1, updatedProduct.UnavailableQuantity);
+    }
+
+    [Fact]
+    public async Task AddSelectionHoldsAsync_RejectsInStoreSale()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.AddSelectionHoldsAsync(
+            saleId,
+            [new CreateSaleSelectionProductDTO { ProductId = product.Id, Quantity = 1 }]));
+
+        Assert.Contains("ventas en local", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(await context.ProductHolds.Where(item => item.SaleId == saleId).ToListAsync());
+    }
+
+    [Fact]
+    public async Task PatchHeaderAsync_RejectsChangingSaleWithSelectionHistoryToInStoreSale()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SelectionProducts = [new CreateSaleSelectionProductDTO { ProductId = product.Id, Quantity = 1 }]
+        });
+        var holdId = await context.ProductHolds
+            .Where(item => item.SaleId == saleId)
+            .Select(item => item.Id)
+            .SingleAsync();
+        await service.ResolveSelectionHoldAsync(saleId, holdId, new ResolveSelectionHoldDTO { Selected = false });
+        await service.MarkSelectionHoldAsReturnedAsync(saleId, holdId);
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.PatchHeaderAsync(
+            saleId,
+            new PatchSaleHeaderDTO { SaleChannelId = (int)SaleChannelOption.InStoreSale }));
+
+        Assert.Contains("ventas en local", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(
+            (int)ProductHoldStatusOption.NotSelected,
+            (await context.ProductHolds.SingleAsync(item => item.Id == holdId)).ProductHoldStatusId);
+        Assert.Equal(
+            (int)SaleChannelOption.Whatsapp,
+            (await context.Sales.SingleAsync(item => item.Id == saleId)).SaleChannelId);
+    }
+
+    [Fact]
     public async Task CreateAsync_RecordsUsdCashPaymentAsPaidWithoutRefundPending()
     {
         await using var context = CreateContext();

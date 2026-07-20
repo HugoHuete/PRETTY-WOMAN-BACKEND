@@ -127,6 +127,8 @@ Una venta reservada debe usar `Reserved` cuando la clienta ya confirmó la compr
 
 Una venta en local puede crearse sin pago o con pago parcial; por sí sola queda pendiente y no compromete inventario. Cuando sus pagos de productos alcanzan el total, el sistema la marca `Completed` y registra la salida a `OutOfInventory`. Si posteriormente se corrige o reembolsa un pago que impide mantenerla completada, la salida neta pasa a `Reserved` para conservar el inventario apartado y permitir su cancelación o corrección.
 
+Una venta en local no puede incluir prendas para selección. La creación debe rechazar `selectionProducts`, la ruta para agregar holds debe rechazar ventas `InStoreSale` y una venta que tenga cualquier historial de selección no puede cambiar su canal a `InStoreSale`. La selección se reserva para ventas destinadas a envío, aunque el registro del envío todavía no exista al momento de crear la venta.
+
 ## Regla: devolución de un producto
 
 Las devoluciones posteriores se registran como `SaleReturn` y `SaleReturnItem`; no cambian los productos ni los pagos históricos de la venta. Cada ítem conserva el monto reconocido y `OriginalUnitCost` de la línea original.

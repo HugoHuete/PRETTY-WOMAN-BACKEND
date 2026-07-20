@@ -113,6 +113,10 @@ public class SaleService(
 
         if (patchSaleHeaderDTO.HasSaleChannelId)
         {
+            EnsureSelectionIsAllowed(
+                patchSaleHeaderDTO.SaleChannelId!.Value,
+                sale.ProductHolds.Count);
+
             SalePaymentMovementRules.EnsureAllowedProductTotal(
                 patchSaleHeaderDTO.SaleChannelId!.Value,
                 sale.Total,
@@ -296,6 +300,7 @@ public class SaleService(
         await ValidateSelectionProductRequestAsync(selectionProducts);
 
         var sale = await GetSaleWithDetailsAsync(saleId, asNoTracking: false);
+        EnsureSelectionIsAllowed(sale.SaleChannelId, selectionProducts.Count);
         if (sale.SaleStatusId is (int)SaleStatusOption.Cancelled or (int)SaleStatusOption.Completed ||
             sale.Deliveries.Any(delivery => delivery.DeliveryStatusId != (int)DeliveryStatusCode.Pending))
             throw new AppBadRequestException("Solo se pueden agregar prendas para seleccion antes de enviar la venta.");
@@ -484,6 +489,7 @@ public class SaleService(
         if (!await _context.SaleChannels.AnyAsync(channel => channel.Id == saleDTO.SaleChannelId))
             throw new AppNotFoundException($"El canal de venta con id {saleDTO.SaleChannelId} no existe.");
 
+        EnsureSelectionIsAllowed(saleDTO.SaleChannelId, saleDTO.SelectionProducts.Count);
         await ValidateOptionalReferencesAsync(saleDTO.ClientId);
         await ValidateRequestedSaleStatusAsync(saleDTO.SaleStatusId);
         await ValidateProductRequestAsync(saleDTO.Products, saleDTO.SelectionProducts, requireAtLeastOne: true);
@@ -642,6 +648,15 @@ public class SaleService(
         }
 
         return Task.CompletedTask;
+    }
+
+    private static void EnsureSelectionIsAllowed(int saleChannelId, int selectionCount)
+    {
+        if (saleChannelId == (int)SaleChannelOption.InStoreSale && selectionCount > 0)
+        {
+            throw new AppBadRequestException(
+                "Las ventas en local no pueden incluir prendas para seleccion; la seleccion solo esta disponible para ventas con envio.");
+        }
     }
 
     private async Task<List<Product>> LoadSaleProductsAsync(
