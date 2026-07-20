@@ -22,6 +22,13 @@ public class SalePaymentMovement : IAuditableEntity
     public decimal IncomeTaxPercentage { get; set; }
     public decimal IncomeTaxAmount { get; set; }
     public decimal NetReceivedAmount { get; set; }
+    // El monto aplicado a la venta permanece en C$. Estos campos registran el efectivo
+    // realmente recibido y permiten conservar el tipo de cambio de un cobro en USD.
+    public decimal AmountReceivedNio { get; set; }
+    public decimal AmountReceivedUsd { get; set; }
+    public decimal ChangeGivenNio { get; set; }
+    public decimal? ExchangeRate { get; set; }
+    public decimal ExchangeDifferenceNio { get; set; }
     public required string UserId { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
@@ -38,4 +45,3 @@ public class SalePaymentMovement : IAuditableEntity
     public SalePaymentMovement? ReversedSalePaymentMovement { get; set; }
     public List<SalePaymentMovement> ReversalMovements { get; set; } = [];
 }
-

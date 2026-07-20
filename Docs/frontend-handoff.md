@@ -86,7 +86,7 @@ Puede trabajar con:
 | Finanzas | Movimientos | Admin | Listar, filtrar, crear, editar, eliminar | Movimientos, tipos de movimiento | `GET /api/v1/finances/movement-types`, `GET /api/v1/finances/movements`, `POST /api/v1/finances/movements`, `PUT /api/v1/finances/movements/{id}`, `DELETE /api/v1/finances/movements/{id}` |
 | Finanzas | Prestamos | Admin | Listar, crear, editar, eliminar, registrar pagos | Prestamos, duenos, pagos | `GET /api/v1/loans`, `POST /api/v1/loans`, `PUT /api/v1/loans/{id}`, `DELETE /api/v1/loans/{id}`, `POST /api/v1/loans/{id}/payments` |
 | Finanzas | Duenos de prestamo | Admin | Listar, crear, editar | Duenos de prestamo | `GET /api/v1/loanowners`, `POST /api/v1/loanowners`, `PUT /api/v1/loanowners/{id}` |
-| Configuracion | Agencias de envio | Admin | Listar, crear, editar | Agencias de envio | `GET /api/v1/deliveryagencies`, `POST /api/v1/deliveryagencies`, `PUT /api/v1/deliveryagencies/{id}` |
+| Configuracion | Agencias de envio | Admin | Listar, crear, editar y definir si recauda contra entrega | Agencias de envio, incluido `canCollectCashOnDelivery` | `GET /api/v1/deliveryagencies`, `POST /api/v1/deliveryagencies`, `PUT /api/v1/deliveryagencies/{id}` |
 | Configuracion | Terminales de pago | Admin | Listar, crear, editar | Terminales POS | `GET /api/v1/paymentterminals`, `POST /api/v1/paymentterminals`, `PUT /api/v1/paymentterminals/{id}` |
 | Configuracion | Categorias de gasto | Admin | Listar, crear, editar | Categorias de gasto | `GET /api/v1/expensecategories`, `POST /api/v1/expensecategories`, `PUT /api/v1/expensecategories/{id}` |
 
@@ -278,7 +278,57 @@ Antes de crear o filtrar movimientos financieros, cargar `GET /api/v1/finances/m
 | Conciliar cobro COD | `GET /api/v1/deliveryagencyreconciliations/pending-deliveries`, `POST /api/v1/deliveryagencyreconciliations` | Admin | Un envío `Sent` solo se completa si la agencia recauda el saldo total. |
 | Corregir o cancelar venta | `PATCH /api/v1/sales/{id}`, `PUT /api/v1/sales/{id}/products`, `POST /api/v1/sales/{id}/cancel` | Admin | No mostrar estas acciones a Vendedor. |
 
+Cada agencia expone `canCollectCashOnDelivery`, y la UI debe usar este valor en lugar de decidir por el nombre de la agencia:
+
+- Si es `true`, la agencia puede transportar una venta sin pago completo. El backend devuelve en `delivery.amountToCollect` la suma pendiente de productos y del envío; la UI debe mostrar ese valor como la instrucción de cobro. La agencia debe recaudar el saldo completo para entregar y conciliar el pedido. Si la clienta no paga todo, no se registra un cobro parcial y el envío se marca `Failed`.
+- Si es `false`, la agencia no recauda dinero de la clienta. Los productos deben estar completamente pagados antes de crear el envío y tanto los productos como `shippingChargedToClient` deben estar completamente pagados antes de ejecutar `send`. En este caso `delivery.amountToCollect` es `0`.
+
+Al crear o editar una agencia, el formulario de configuración debe permitir definir `canCollectCashOnDelivery`. Al crear o despachar un envío, conviene explicar la restricción y deshabilitar preventivamente la acción cuando el detalle de la venta muestre un saldo incompatible; el backend continúa siendo la fuente de verdad y validará nuevamente la operación.
+
+En la conciliación COD, cada entrega puede registrar `amountCollectedNio`, `amountCollectedUsd`, `changeGivenNio` y `collectionExchangeRate`; una agencia sí puede reportar NIO y USD juntos. El pago generado conserva esos valores originales y usa como `grossAmount` el neto convertido y redondeado a 2 decimales. Como ese `grossAmount` ya nace del mismo tender, `exchangeDifferenceNio` es cero y no se vuelve a calcular un residuo sobre el valor sin redondear. Por eso el detalle de la venta puede mostrar ambas monedas en un movimiento vinculado a `deliveryAgencyReconciliationId`, aunque los pagos registrados directamente continúen usando una sola moneda por movimiento.
+
 Para crear una venta, `products` y `selectionProducts` son listas distintas. Cada elemento de `products` requiere `productId`, `quantity`, `discountAmount` y `discountSourceId`. El pago inicial es opcional en `paymentMovements`; cada pago requiere `paymentMethodId`, `productAmount` y `shippingAmount`.
+
+Cada movimiento de pago aplica `productAmount` y `shippingAmount` a la deuda de la venta siempre en córdobas. Los campos de moneda recibida son independientes:
+
+- `amountReceivedNio`: monto recibido en córdobas.
+- `amountReceivedUsd`: monto recibido en dólares.
+- `changeGivenNio`: cambio entregado en córdobas.
+- `exchangeRate`: tasa aplicada, obligatoria cuando `amountReceivedUsd > 0` y omitida para pagos en córdobas.
+
+Un movimiento solo puede recibir una moneda. Si la clienta combina córdobas y dólares, enviar dos movimientos de pago. Para compatibilidad, si se omiten ambos montos recibidos, el backend asume que se recibió exactamente `productAmount + shippingAmount` en córdobas.
+
+Ejemplo de venta de C$800 pagada con dólares:
+
+```json
+{
+  "paymentMethodId": 1,
+  "productAmount": 800.00,
+  "shippingAmount": 0,
+  "amountReceivedUsd": 21.85,
+  "changeGivenNio": 0,
+  "exchangeRate": 36.62
+}
+```
+
+La UI debe calcular el monto sugerido en USD con redondeo hacia arriba a dos decimales: `ceil(saldoNio / exchangeRate * 100) / 100`. El backend sigue considerando aplicados C$800 exactos y guarda la diferencia de conversión; en el ejemplo devuelve `exchangeDifferenceNio: 0.15`, sin dejar la venta parcialmente pagada ni marcarla para reembolso.
+
+El movimiento financiero sí refleja el efectivo convertido realmente recibido: en este ejemplo registra C$800.15. De esta manera el saldo financiero incluye la diferencia de cambio, aunque el saldo comercial de la venta permanezca exactamente en C$800.
+
+Si la clienta entrega una denominación mayor, enviar el monto físico completo y el cambio en córdobas. Ejemplo para recibir $22 y entregar C$5.64 de cambio:
+
+```json
+{
+  "paymentMethodId": 1,
+  "productAmount": 800.00,
+  "shippingAmount": 0,
+  "amountReceivedUsd": 22.00,
+  "changeGivenNio": 5.64,
+  "exchangeRate": 36.62
+}
+```
+
+Los pagos en USD se admiten con `paymentMethodId: 1` (`Cash`) y `paymentMethodId: 2` (`Transfer`). No se admiten con `paymentMethodId: 3` (`Card`), porque el POS procesa únicamente córdobas. La UI debe solicitar y mostrar la tasa utilizada antes de confirmar; esa tasa queda congelada en el pago. El backend normaliza los montos recibidos y el cambio a 2 decimales, y la tasa a 4 decimales. Luego redondea el total convertido a 2 decimales y deriva `exchangeDifferenceNio` comparando ese total monetario con el monto aplicado. También rechaza montos en ambas monedas dentro del mismo movimiento, tasas ausentes o inválidas y diferencias mayores a C$0.50 después de restar el cambio.
 
 En recepcion de compras, la UI debe bloquear cantidades mayores a lo pendiente salvo que el usuario marque explícitamente la línea como sobrante. Para sobrantes enviar `isSurplus: true`; el comentario general de la recepción es opcional y sirve si se desea documentar el caso. No pedir comentario por línea. Conviene mostrar confirmacion visual porque esa acción puede dejar `receivedQuantity` mayor que `quantity`.
 
@@ -286,7 +336,11 @@ En recepcion de compras, la UI debe bloquear cantidades mayores a lo pendiente s
 
 La cantidad de una línea sigue representando lo vendido originalmente aun cuando parte haya sido devuelta. Al reemplazar productos, el backend excluye automáticamente del compromiso de inventario las unidades ya recibidas por devoluciones o cambios; el frontend no debe restarlas del `quantity` enviado.
 
-`shippingAmount` mayor que cero exige `saleDeliveryId`; primero debe existir el envío. Para pago con tarjeta (`paymentMethodId: 3`) también es obligatorio `paymentTerminalId`; en efectivo o transferencia no debe enviarse terminal. La respuesta de detalle expone el total calculado y cada `paymentMovement.grossAmount`; la UI no debe recalcularlos.
+`shippingAmount` mayor que cero exige `saleDeliveryId`; primero debe existir el envío. Para pago con tarjeta (`paymentMethodId: 3`) también es obligatorio `paymentTerminalId`; en efectivo o transferencia no debe enviarse terminal. La respuesta de detalle expone el total calculado y, por movimiento, `grossAmount`, `amountReceivedNio`, `amountReceivedUsd`, `changeGivenNio`, `exchangeRate` y `exchangeDifferenceNio`; la UI no debe recalcular los valores persistidos.
+
+Un pago en USD no se puede editar. Para corregirlo, la UI debe solicitar su reembolso completo y registrar un pago nuevo; los reembolsos parciales continúan disponibles únicamente para pagos que no fueron recibidos en USD. El request del reembolso puede omitir `paymentMethodId`, `productAmount` y `shippingAmount`, o enviarlos con los mismos valores del pago original; cualquier valor distinto se rechaza.
+
+En pagos en córdobas, un `PATCH` que solo cambia datos no monetarios, como `movementDate`, conserva `amountReceivedNio` y `changeGivenNio`. Si el pago tiene cambio registrado, el backend no permite modificar su monto aplicado ni su método de pago; se debe reembolsar y registrar un pago nuevo para no alterar el efectivo histórico de caja.
 
 Una reserva con pago no usa `ProductHold`: es una venta con `saleStatusId: 2` (`Reserved`). Permanece activa hasta que el negocio la cancele. `selectionHolds` representa únicamente prendas enviadas para prueba, talla o selección.
 
@@ -511,9 +565,10 @@ No existe todavía una ruta específica para cancelar una sola línea de venta. 
   finanzas, incidencias de inventario, ni bloquear clientes. Las correcciones, cancelaciones,
   devoluciones, reembolsos, cambios y transiciones posteriores a `Sent` de una venta son exclusivas
   de Admin.
-- Una venta con pago parcial no se entrega a la clienta. Una agencia con cobro contra entrega puede
-  transportar el pedido, pero solo se completa cuando recauda el total pendiente; de lo contrario el
-  envio se marca fallido, sin cobro parcial.
+- Una venta con pago parcial no se entrega a la clienta. Una agencia con `canCollectCashOnDelivery: true`
+  puede transportar el pedido, pero solo se completa cuando recauda el total pendiente; de lo contrario
+  el envio se marca fallido, sin cobro parcial. Una agencia con `canCollectCashOnDelivery: false` exige
+  los productos pagados antes de crear el envio y tambien el costo de envio pagado antes de despacharlo.
 - Admin conserva acceso completo a todos los modulos.
 - La tienda publica para clientas, si se construye, ira en otro proyecto.
 - El mapa de pantallas puede empezar en este backend como handoff y moverse al repo frontend cuando exista.
@@ -533,6 +588,6 @@ No existe todavía una ruta específica para cancelar una sola línea de venta. 
 - `GET /api/v1/dashboard/summary`
 - Requiere JWT de Admin o Vendedor (`Employee`).
 - Query opcional: `fromDate` y `toDate` en formato `YYYY-MM-DD`. Ambas fechas son inclusivas y, si se omiten, el período es el día actual en hora de Nicaragua.
-- Devuelve ventas no canceladas, cobros registrados, reservas activas creadas en el período, entregas creadas en el período e incidencias de inventario abiertas registradas en el período.
+- Devuelve ventas no canceladas, cobros registrados, reservas activas creadas en el período, entregas creadas en el período e incidencias de inventario abiertas registradas en el período. `payments.collectedNio` y cada elemento de `payments.byPaymentMethod` representan el monto financiero realmente recibido (`netReceivedAmount + exchangeDifferenceNio`), mientras el saldo pendiente de ventas continúa calculándose con el monto aplicado (`grossAmount`).
 - El bloque `financial` solo se devuelve a Admin e incluye ingresos, egresos y balance del período. El frontend de Vendedor no debe depender de ese campo.
 - Las listas `payments.byPaymentMethod` y `operations.deliveriesByStatus` pueden estar vacías; el frontend debe representarlas como cero, no como error.

@@ -67,7 +67,7 @@ public class DashboardSummaryTests(PrettyWomanApiFactory factory)
         Assert.Equal(1, body.RootElement.GetProperty("sales").GetProperty("count").GetInt32());
         Assert.Equal(1000m, body.RootElement.GetProperty("sales").GetProperty("totalNio").GetDecimal());
         Assert.Equal(600m, body.RootElement.GetProperty("sales").GetProperty("pendingCollectionNio").GetDecimal());
-        Assert.Equal(400m, body.RootElement.GetProperty("payments").GetProperty("collectedNio").GetDecimal());
+        Assert.Equal(400.15m, body.RootElement.GetProperty("payments").GetProperty("collectedNio").GetDecimal());
         Assert.Equal(1, body.RootElement.GetProperty("operations").GetProperty("activeReservationCount").GetInt32());
         Assert.Equal(2, body.RootElement.GetProperty("operations").GetProperty("activeReservedUnitCount").GetInt32());
         Assert.Equal(1, body.RootElement.GetProperty("operations").GetProperty("openInventoryIssueCount").GetInt32());
@@ -148,6 +148,9 @@ public class DashboardSummaryTests(PrettyWomanApiFactory factory)
                 GrossAmount = 400m,
                 ProductAmount = 400m,
                 NetReceivedAmount = 400m,
+                AmountReceivedUsd = 10.96m,
+                ExchangeRate = 36.51m,
+                ExchangeDifferenceNio = 0.15m,
                 UserId = admin.Id
             },
             new ProductHold

@@ -95,10 +95,11 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
         {
             DeliveryAgencyId = agency.Id,
             ReconciliationDate = request.ReconciliationDate ?? DateTime.UtcNow,
-            SettlementExchangeRate = request.SettlementExchangeRate,
-            AmountReceivedNio = Math.Round(request.Deliveries.Sum(item => item.AmountCollectedNio), 2),
-            AmountReceivedUsd = Math.Round(request.Deliveries.Sum(item => item.AmountCollectedUsd), 2),
-            AmountPaidToAgencyNio = Math.Round(request.Deliveries.Sum(item => item.ChangeGivenNio + item.ShippingPaidToAgency) + returns.Sum(item => item.ReturnShippingPaidToAgency), 2),
+            SettlementExchangeRate = Math.Round(request.SettlementExchangeRate, 4, MidpointRounding.AwayFromZero),
+            AmountReceivedNio = request.Deliveries.Sum(item => RoundMoney(item.AmountCollectedNio)),
+            AmountReceivedUsd = request.Deliveries.Sum(item => RoundMoney(item.AmountCollectedUsd)),
+            AmountPaidToAgencyNio = request.Deliveries.Sum(item => RoundMoney(item.ChangeGivenNio) + RoundMoney(item.ShippingPaidToAgency)) +
+                                    returns.Sum(item => RoundMoney(item.ReturnShippingPaidToAgency)),
             Comments = request.Comments
         };
 
@@ -109,13 +110,14 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
         foreach (var delivery in deliveries)
         {
             var deliveryRequest = deliveryRequests[delivery.Id];
-            var collectedAmount = CalculateCollectedAmount(deliveryRequest);
+            var tender = ResolveAgencyCollectionTender(deliveryRequest);
+            var collectedAmount = tender.CollectedAmount;
             ValidateDeliveryForReconciliation(delivery, deliveryRequest, agency.Id, collectedAmount);
-            ApplyDeliveryCollection(delivery, deliveryRequest, reconciliation);
+            ApplyDeliveryCollection(delivery, deliveryRequest, tender, reconciliation);
 
             if (delivery.DeliveryStatusId is (int)DeliveryStatusCode.Sent or (int)DeliveryStatusCode.Completed && collectedAmount > 0)
             {
-                var payment = CreateAgencyCollectionPayment(delivery.Sale!, delivery, collectedAmount, reconciliation, ResolveUserId());
+                var payment = CreateAgencyCollectionPayment(delivery.Sale!, delivery, tender, reconciliation, ResolveUserId());
                 delivery.Sale!.PaymentMovements.Add(payment);
                 salesWithNewPayments[delivery.SaleId] = delivery.Sale;
             }
@@ -200,10 +202,11 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
     private static SalePaymentMovement CreateAgencyCollectionPayment(
         Sale sale,
         SaleDelivery delivery,
-        decimal collectedAmount,
+        AgencyCollectionTender tender,
         DeliveryAgencyReconciliation reconciliation,
         string userId)
     {
+        var collectedAmount = tender.CollectedAmount;
         var outstandingProductAmount = Math.Max(0, sale.Total - SalePaymentMovementRules.CalculateProductTotal(sale.PaymentMovements));
         var outstandingShippingAmount = Math.Max(0, delivery.ShippingChargedToClient - SalePaymentMovementRules.CalculateShippingTotal(sale.PaymentMovements, delivery.Id));
         var outstandingTotal = outstandingProductAmount + outstandingShippingAmount;
@@ -226,6 +229,11 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             SaleDeliveryId = shippingAmount > 0 ? delivery.Id : null,
             DeliveryAgencyReconciliation = reconciliation,
             NetReceivedAmount = collectedAmount,
+            AmountReceivedNio = tender.AmountReceivedNio,
+            AmountReceivedUsd = tender.AmountReceivedUsd,
+            ChangeGivenNio = tender.ChangeGivenNio,
+            ExchangeRate = tender.ExchangeRate,
+            ExchangeDifferenceNio = tender.ExchangeDifferenceNio,
             UserId = userId
         };
     }
@@ -233,13 +241,14 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
     private static void ApplyDeliveryCollection(
         SaleDelivery delivery,
         ReconcileSaleDeliveryDTO request,
+        AgencyCollectionTender tender,
         DeliveryAgencyReconciliation reconciliation)
     {
-        delivery.AmountCollectedNio = request.AmountCollectedNio;
-        delivery.AmountCollectedUsd = request.AmountCollectedUsd;
-        delivery.ChangeGivenNio = request.ChangeGivenNio;
-        delivery.CollectionExchangeRate = request.CollectionExchangeRate;
-        delivery.ShippingPaidToAgency = request.ShippingPaidToAgency;
+        delivery.AmountCollectedNio = tender.AmountReceivedNio;
+        delivery.AmountCollectedUsd = tender.AmountReceivedUsd;
+        delivery.ChangeGivenNio = tender.ChangeGivenNio;
+        delivery.CollectionExchangeRate = tender.ExchangeRate;
+        delivery.ShippingPaidToAgency = RoundMoney(request.ShippingPaidToAgency);
         delivery.DeliveryAgencyReconciliation = reconciliation;
     }
 
@@ -276,11 +285,31 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
         }
     }
 
-    // El efectivo neto recaudado excluye el vuelto entregado en cordobas.
-    private static decimal CalculateCollectedAmount(ReconcileSaleDeliveryDTO request)
-        => Math.Round(
-            request.AmountCollectedNio + request.AmountCollectedUsd * (request.CollectionExchangeRate ?? 0) - request.ChangeGivenNio,
-            2);
+    // El monto neto recaudado excluye el vuelto entregado en cordobas y conserva
+    // las monedas originales para que el pago de la venta sea auditable.
+    private static AgencyCollectionTender ResolveAgencyCollectionTender(ReconcileSaleDeliveryDTO request)
+    {
+        var amountReceivedNio = RoundMoney(request.AmountCollectedNio);
+        var amountReceivedUsd = RoundMoney(request.AmountCollectedUsd);
+        var changeGivenNio = RoundMoney(request.ChangeGivenNio);
+        var exchangeRate = request.CollectionExchangeRate.HasValue
+            ? Math.Round(request.CollectionExchangeRate.Value, 4, MidpointRounding.AwayFromZero)
+            : (decimal?)null;
+        var convertedNetAmount = amountReceivedNio + amountReceivedUsd * (exchangeRate ?? 0) - changeGivenNio;
+        var collectedAmount = RoundMoney(convertedNetAmount);
+
+        return new AgencyCollectionTender(
+            amountReceivedNio,
+            amountReceivedUsd,
+            changeGivenNio,
+            exchangeRate,
+            // GrossAmount ya es el total convertido y redondeado de este mismo tender.
+            0,
+            collectedAmount);
+    }
+
+    private static decimal RoundMoney(decimal amount)
+        => Math.Round(amount, 2, MidpointRounding.AwayFromZero);
 
     private static void NormalizeAndValidateRequest(CreateDeliveryAgencyReconciliationDTO request)
     {
@@ -317,6 +346,14 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
 
     private string ResolveUserId() => _currentUserService.UserId ?? "system";
 
+    private sealed record AgencyCollectionTender(
+        decimal AmountReceivedNio,
+        decimal AmountReceivedUsd,
+        decimal ChangeGivenNio,
+        decimal? ExchangeRate,
+        decimal ExchangeDifferenceNio,
+        decimal CollectedAmount);
+
     private static void ValidateDeliveryAmounts(ReconcileSaleDeliveryDTO request)
     {
         if (request.AmountCollectedNio < 0 || request.AmountCollectedUsd < 0 ||
@@ -325,11 +362,12 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             throw new AppBadRequestException("Los montos del envio no pueden ser negativos.");
         }
 
-        if (request.AmountCollectedUsd == 0 && request.CollectionExchangeRate.HasValue)
+        var tender = ResolveAgencyCollectionTender(request);
+        if (tender.AmountReceivedUsd == 0 && tender.ExchangeRate.HasValue)
             throw new AppBadRequestException("La tasa de cambio del cobro solo debe indicarse cuando se recolecten dolares.");
-        if (request.AmountCollectedUsd > 0 && (!request.CollectionExchangeRate.HasValue || request.CollectionExchangeRate <= 0))
+        if (tender.AmountReceivedUsd > 0 && (!tender.ExchangeRate.HasValue || tender.ExchangeRate <= 0))
             throw new AppBadRequestException("Los cobros en dolares deben indicar la tasa de cambio aplicada por la agencia.");
-        if (request.ChangeGivenNio > request.AmountCollectedNio + request.AmountCollectedUsd * (request.CollectionExchangeRate ?? 0))
+        if (tender.ChangeGivenNio > tender.AmountReceivedNio + tender.AmountReceivedUsd * (tender.ExchangeRate ?? 0))
             throw new AppBadRequestException("El vuelto entregado no puede exceder el monto recibido de la clienta.");
     }
 }

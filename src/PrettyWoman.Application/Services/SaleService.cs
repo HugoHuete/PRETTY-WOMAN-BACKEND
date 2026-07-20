@@ -1191,7 +1191,12 @@ public class SaleService(
                 CommissionAmount = payment.CommissionAmount,
                 IncomeTaxPercentage = payment.IncomeTaxPercentage,
                 IncomeTaxAmount = payment.IncomeTaxAmount,
-                NetReceivedAmount = payment.NetReceivedAmount
+                NetReceivedAmount = payment.NetReceivedAmount,
+                AmountReceivedNio = payment.AmountReceivedNio,
+                AmountReceivedUsd = payment.AmountReceivedUsd,
+                ChangeGivenNio = payment.ChangeGivenNio,
+                ExchangeRate = payment.ExchangeRate,
+                ExchangeDifferenceNio = payment.ExchangeDifferenceNio
             }).ToList(),
             Deliveries = sale.Deliveries.Select(delivery => new SaleDeliveryDTO
             {

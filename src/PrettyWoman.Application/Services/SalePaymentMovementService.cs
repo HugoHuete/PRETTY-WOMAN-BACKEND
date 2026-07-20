@@ -20,11 +20,13 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
         foreach (var paymentMovement in paymentMovements)
         {
             var allocation = ResolveCreateAllocation(paymentMovement);
+            var tender = ResolveCreateTender(paymentMovement, allocation);
             if (allocation.ShippingAmount > 0)
                 throw new AppBadRequestException("Los pagos iniciales no pueden aplicarse a envio. Cree primero el envio.");
 
             await ValidatePaymentDataAsync(paymentMovement.PaymentMethodId, paymentMovement.PaymentTerminalId, allocation.GrossAmount);
-            payments.Add(await CreatePaymentMovementAsync(paymentMovement, allocation));
+            ValidateTenderPaymentMethod(paymentMovement.PaymentMethodId, tender);
+            payments.Add(await CreatePaymentMovementAsync(paymentMovement, allocation, tender));
         }
 
         return payments;
@@ -34,7 +36,7 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
     {
         foreach (var paymentMovement in paymentMovements)
         {
-            var exchangeRate = await GetExchangeRateAsync(paymentMovement.MovementDate);
+            var exchangeRate = paymentMovement.ExchangeRate ?? await GetExchangeRateAsync(paymentMovement.MovementDate);
             await _context.FinancialMovements.AddAsync(CreateFinancialMovement(paymentMovement, exchangeRate));
         }
     }
@@ -42,14 +44,16 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
     public async Task<int> AddAsync(int saleId, CreateSalePaymentMovementDTO paymentMovement)
     {
         var allocation = ResolveCreateAllocation(paymentMovement);
+        var tender = ResolveCreateTender(paymentMovement, allocation);
         await ValidatePaymentDataAsync(paymentMovement.PaymentMethodId, paymentMovement.PaymentTerminalId, allocation.GrossAmount);
+        ValidateTenderPaymentMethod(paymentMovement.PaymentMethodId, tender);
 
         var sale = await GetSaleForPaymentChangesAsync(saleId);
         EnsureSaleIsNotCancelled(sale);
         await ValidateShippingAllocationAsync(sale, allocation);
 
         // Un pago conserva sus dos destinos aunque genere un solo movimiento financiero.
-        var payment = await CreatePaymentMovementAsync(paymentMovement, allocation);
+        var payment = await CreatePaymentMovementAsync(paymentMovement, allocation, tender);
         sale.PaymentMovements.Add(payment);
         // Cada cambio se valida contra los limites de productos y de cada envio antes de guardar.
         await ValidatePaymentTotalsAsync(sale);
@@ -86,7 +90,10 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
         await ValidatePaymentDataAsync(paymentMethodId, paymentTerminalId, allocation.GrossAmount);
         await ValidateShippingAllocationAsync(sale, allocation);
 
-        await ApplyPaymentAmountsAsync(payment, movementDate, paymentMethodId, paymentTerminalId, allocation);
+        EnsureForeignCurrencyPaymentIsNotUpdated(payment);
+        var tender = ResolveUpdatedTender(payment, paymentMethodId, allocation);
+        await ApplyPaymentAmountsAsync(payment, movementDate, paymentMethodId, paymentTerminalId, allocation,
+            tender);
         // Cada cambio se valida contra los limites de productos y de cada envio antes de guardar.
         await ValidatePaymentTotalsAsync(sale);
 
@@ -126,7 +133,10 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
             ?? throw new AppNotFoundException($"La venta con id {saleId} no existe.");
     }
 
-    private async Task<SalePaymentMovement> CreatePaymentMovementAsync(CreateSalePaymentMovementDTO paymentRequest, PaymentAllocation allocation)
+    private async Task<SalePaymentMovement> CreatePaymentMovementAsync(
+        CreateSalePaymentMovementDTO paymentRequest,
+        PaymentAllocation allocation,
+        PaymentTender tender)
     {
         var payment = new SalePaymentMovement
         {
@@ -134,11 +144,17 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
             UserId = ResolveUserId()
         };
 
-        await ApplyPaymentAmountsAsync(payment, paymentRequest.MovementDate ?? DateTime.UtcNow, paymentRequest.PaymentMethodId, paymentRequest.PaymentTerminalId, allocation);
+        await ApplyPaymentAmountsAsync(payment, paymentRequest.MovementDate ?? DateTime.UtcNow, paymentRequest.PaymentMethodId, paymentRequest.PaymentTerminalId, allocation, tender);
         return payment;
     }
 
-    private async Task ApplyPaymentAmountsAsync(SalePaymentMovement payment, DateTime movementDate, int paymentMethodId, int? paymentTerminalId, PaymentAllocation allocation)
+    private async Task ApplyPaymentAmountsAsync(
+        SalePaymentMovement payment,
+        DateTime movementDate,
+        int paymentMethodId,
+        int? paymentTerminalId,
+        PaymentAllocation allocation,
+        PaymentTender tender)
     {
         var terminal = paymentTerminalId.HasValue
             ? await _context.PaymentTerminals.FirstAsync(item => item.Id == paymentTerminalId.Value && item.Enabled)
@@ -159,6 +175,11 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
         payment.IncomeTaxPercentage = terminal?.IncomeTaxPercentage ?? 0;
         payment.IncomeTaxAmount = incomeTaxAmount;
         payment.NetReceivedAmount = allocation.GrossAmount - commissionAmount - incomeTaxAmount;
+        payment.AmountReceivedNio = tender.AmountReceivedNio;
+        payment.AmountReceivedUsd = tender.AmountReceivedUsd;
+        payment.ChangeGivenNio = tender.ChangeGivenNio;
+        payment.ExchangeRate = tender.ExchangeRate;
+        payment.ExchangeDifferenceNio = tender.ExchangeDifferenceNio;
     }
 
     private async Task<SalePaymentMovement> CreateRefundPaymentMovementAsync(SalePaymentMovement originalPayment, RefundSalePaymentMovementDTO refundRequest)
@@ -177,6 +198,9 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
 
         if (originalPayment.PaymentMethodId == (int)PaymentMethodOption.Card)
             return CreateCardRefundPaymentMovement(originalPayment, refundRequest, refundedProductAmount, refundedShippingAmount);
+
+        if (originalPayment.AmountReceivedUsd > 0)
+            return CreateUsdRefundPaymentMovement(originalPayment, refundRequest, refundedProductAmount, refundedShippingAmount);
 
         var paymentMethodId = refundRequest.PaymentMethodId ?? originalPayment.PaymentMethodId;
         if (paymentMethodId == (int)PaymentMethodOption.Card)
@@ -199,6 +223,11 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
             ShippingAmount = allocation.ShippingAmount,
             SaleDeliveryId = allocation.SaleDeliveryId,
             NetReceivedAmount = allocation.GrossAmount,
+            AmountReceivedNio = allocation.GrossAmount,
+            AmountReceivedUsd = 0,
+            ChangeGivenNio = 0,
+            ExchangeRate = null,
+            ExchangeDifferenceNio = 0,
             UserId = ResolveUserId()
         };
     }
@@ -232,6 +261,46 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
             IncomeTaxPercentage = originalPayment.IncomeTaxPercentage,
             IncomeTaxAmount = originalPayment.IncomeTaxAmount,
             NetReceivedAmount = originalPayment.NetReceivedAmount,
+            AmountReceivedNio = originalPayment.AmountReceivedNio,
+            AmountReceivedUsd = originalPayment.AmountReceivedUsd,
+            ChangeGivenNio = originalPayment.ChangeGivenNio,
+            ExchangeRate = originalPayment.ExchangeRate,
+            ExchangeDifferenceNio = originalPayment.ExchangeDifferenceNio,
+            UserId = ResolveUserId()
+        };
+    }
+
+    private SalePaymentMovement CreateUsdRefundPaymentMovement(
+        SalePaymentMovement originalPayment,
+        RefundSalePaymentMovementDTO refundRequest,
+        decimal refundedProductAmount,
+        decimal refundedShippingAmount)
+    {
+        if (refundedProductAmount > 0 || refundedShippingAmount > 0 ||
+            refundRequest.PaymentMethodId.HasValue && refundRequest.PaymentMethodId.Value != originalPayment.PaymentMethodId ||
+            refundRequest.PaymentTerminalId.HasValue && refundRequest.PaymentTerminalId.Value != originalPayment.PaymentTerminalId ||
+            refundRequest.ProductAmount.HasValue && refundRequest.ProductAmount.Value != originalPayment.ProductAmount ||
+            refundRequest.ShippingAmount.HasValue && refundRequest.ShippingAmount.Value != originalPayment.ShippingAmount)
+        {
+            throw new AppBadRequestException("Los pagos en dólares solo se pueden reembolsar completos y en la misma moneda.");
+        }
+
+        return new SalePaymentMovement
+        {
+            MovementDate = refundRequest.MovementDate ?? DateTime.UtcNow,
+            MovementDirectionId = (int)MovementDirectionOptions.Out,
+            PaymentMethodId = originalPayment.PaymentMethodId,
+            ReversedSalePaymentMovementId = originalPayment.Id,
+            GrossAmount = originalPayment.GrossAmount,
+            ProductAmount = originalPayment.ProductAmount,
+            ShippingAmount = originalPayment.ShippingAmount,
+            SaleDeliveryId = originalPayment.SaleDeliveryId,
+            NetReceivedAmount = originalPayment.NetReceivedAmount,
+            AmountReceivedNio = originalPayment.AmountReceivedNio,
+            AmountReceivedUsd = originalPayment.AmountReceivedUsd,
+            ChangeGivenNio = originalPayment.ChangeGivenNio,
+            ExchangeRate = originalPayment.ExchangeRate,
+            ExchangeDifferenceNio = originalPayment.ExchangeDifferenceNio,
             UserId = ResolveUserId()
         };
     }
@@ -277,6 +346,65 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
         return new PaymentAllocation(request.ProductAmount, request.ShippingAmount, request.SaleDeliveryId);
     }
 
+    private static PaymentTender ResolveCreateTender(CreateSalePaymentMovementDTO request, PaymentAllocation allocation)
+    {
+        if (request.AmountReceivedNio < 0 || request.AmountReceivedUsd < 0 || request.ChangeGivenNio < 0)
+            throw new AppBadRequestException("Los montos recibidos y el cambio no pueden ser negativos.");
+
+        // El calculo usa las mismas escalas que se persisten para que los valores guardados
+        // siempre reproduzcan la diferencia de cambio registrada.
+        var amountReceivedNio = RoundMoney(request.AmountReceivedNio);
+        var amountReceivedUsd = RoundMoney(request.AmountReceivedUsd);
+        var changeGivenNio = RoundMoney(request.ChangeGivenNio);
+        var exchangeRate = request.ExchangeRate.HasValue
+            ? Math.Round(request.ExchangeRate.Value, 4, MidpointRounding.AwayFromZero)
+            : (decimal?)null;
+
+        if (amountReceivedNio > 0 && amountReceivedUsd > 0)
+            throw new AppBadRequestException("Cada pago debe recibirse en una sola moneda. Registre pagos mixtos por separado.");
+
+        // Mantiene compatibilidad con los pagos existentes: cuando no se especifica efectivo recibido,
+        // se interpreta que se recibió exactamente el importe aplicado en córdobas.
+        if (amountReceivedNio == 0 && amountReceivedUsd == 0)
+        {
+            if (changeGivenNio > 0 || exchangeRate.HasValue)
+                throw new AppBadRequestException("Debe indicar el monto recibido antes de registrar cambio o tasa de cambio.");
+            return PaymentTender.InNio(allocation.GrossAmount);
+        }
+
+        if (amountReceivedUsd > 0)
+        {
+            if (!exchangeRate.HasValue || exchangeRate.Value <= 0)
+                throw new AppBadRequestException("Los pagos en dólares deben indicar una tasa de cambio positiva.");
+
+            var netAmount = amountReceivedUsd * exchangeRate.Value - changeGivenNio;
+            if (netAmount <= 0)
+                throw new AppBadRequestException("El cambio no puede ser igual o mayor al monto recibido.");
+
+            var convertedAmount = RoundMoney(netAmount);
+            var difference = RoundMoney(convertedAmount - allocation.GrossAmount);
+            if (Math.Abs(difference) > 0.50m)
+                throw new AppBadRequestException("El monto neto recibido difiere demasiado del pago aplicado. Registre el cambio correspondiente.");
+            if (convertedAmount <= 0)
+                throw new AppBadRequestException("El monto convertido del pago debe generar un movimiento financiero mayor que cero.");
+
+            return new PaymentTender(0, amountReceivedUsd, changeGivenNio, exchangeRate, difference);
+        }
+
+        if (exchangeRate.HasValue)
+            throw new AppBadRequestException("La tasa de cambio solo se permite cuando se reciben dólares.");
+        if (RoundMoney(amountReceivedNio - changeGivenNio) != allocation.GrossAmount)
+            throw new AppBadRequestException("El monto recibido en córdobas menos el cambio debe coincidir con el pago aplicado.");
+
+        return new PaymentTender(amountReceivedNio, 0, changeGivenNio, null, 0);
+    }
+
+    private static void ValidateTenderPaymentMethod(int paymentMethodId, PaymentTender tender)
+    {
+        if (tender.AmountReceivedUsd > 0 && paymentMethodId == (int)PaymentMethodOption.Card)
+            throw new AppBadRequestException("Los pagos con tarjeta solo se admiten en córdobas.");
+    }
+
     private static PaymentAllocation ResolveUpdatedAllocation(SalePaymentMovement payment, UpdateSalePaymentMovementDTO request)
     {
         if (request.HasProductAmount && (!request.ProductAmount.HasValue || request.ProductAmount.Value < 0) ||
@@ -293,6 +421,30 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
 
         return new PaymentAllocation(productAmount, shippingAmount, saleDeliveryId);
     }
+
+    private static PaymentTender ResolveUpdatedTender(
+        SalePaymentMovement payment,
+        int paymentMethodId,
+        PaymentAllocation allocation)
+    {
+        var grossAmountChanged = allocation.GrossAmount != payment.GrossAmount;
+        var paymentMethodChanged = paymentMethodId != payment.PaymentMethodId;
+        var hasRecordedChange = payment.ChangeGivenNio > 0 || payment.AmountReceivedNio != payment.GrossAmount;
+
+        if (hasRecordedChange && (grossAmountChanged || paymentMethodChanged))
+        {
+            throw new AppBadRequestException(
+                "No se puede cambiar el monto aplicado ni el metodo de un pago con cambio registrado. Reembolse el pago y registre uno nuevo.");
+        }
+
+        if (grossAmountChanged)
+            return PaymentTender.InNio(allocation.GrossAmount);
+
+        return PaymentTender.From(payment);
+    }
+
+    private static decimal RoundMoney(decimal amount)
+        => Math.Round(amount, 2, MidpointRounding.AwayFromZero);
 
     private static PaymentAllocation ResolveRefundAllocation(RefundSalePaymentMovementDTO request, decimal remainingProductAmount, decimal remainingShippingAmount, int? saleDeliveryId)
     {
@@ -336,8 +488,8 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
         }
 
         movement.MovementDate = payment.MovementDate;
-        movement.Amount = payment.NetReceivedAmount;
-        movement.ExchangeRate = await GetExchangeRateAsync(payment.MovementDate);
+        movement.Amount = ResolveFinancialAmount(payment);
+        movement.ExchangeRate = payment.ExchangeRate ?? await GetExchangeRateAsync(payment.MovementDate);
     }
 
     private async Task<decimal> GetExchangeRateAsync(DateTime movementDate)
@@ -360,10 +512,13 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
             MovementDirectionId = payment.MovementDirectionId,
             FinancialMovementTypeId = isIncome ? (int)FinancialMovementTypeOption.SalePayment : (int)FinancialMovementTypeOption.CustomerRefund,
             SalePaymentMovement = payment,
-            Amount = payment.NetReceivedAmount,
+            Amount = ResolveFinancialAmount(payment),
             ExchangeRate = exchangeRate
         };
     }
+
+    private static decimal ResolveFinancialAmount(SalePaymentMovement payment)
+        => payment.NetReceivedAmount + payment.ExchangeDifferenceNio;
 
     private static void EnsureSaleIsNotCancelled(Sale sale)
     {
@@ -379,6 +534,12 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
     {
         if (payment.MovementDirectionId != (int)MovementDirectionOptions.In || payment.ReversalMovements.Count > 0)
             throw new AppBadRequestException("No se puede actualizar un pago que ya tiene reembolsos o que no es de entrada.");
+    }
+
+    private static void EnsureForeignCurrencyPaymentIsNotUpdated(SalePaymentMovement payment)
+    {
+        if (payment.AmountReceivedUsd > 0)
+            throw new AppBadRequestException("No se puede actualizar un pago en dólares. Reembolse el pago y registre uno nuevo.");
     }
 
     private static void EnsurePaymentCanBeRefunded(SalePaymentMovement payment)
@@ -411,5 +572,22 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
     private sealed record PaymentAllocation(decimal ProductAmount, decimal ShippingAmount, int? SaleDeliveryId)
     {
         public decimal GrossAmount => ProductAmount + ShippingAmount;
+    }
+
+    private sealed record PaymentTender(
+        decimal AmountReceivedNio,
+        decimal AmountReceivedUsd,
+        decimal ChangeGivenNio,
+        decimal? ExchangeRate,
+        decimal ExchangeDifferenceNio)
+    {
+        public static PaymentTender InNio(decimal amount) => new(amount, 0, 0, null, 0);
+
+        public static PaymentTender From(SalePaymentMovement payment) => new(
+            payment.AmountReceivedNio,
+            payment.AmountReceivedUsd,
+            payment.ChangeGivenNio,
+            payment.ExchangeRate,
+            payment.ExchangeDifferenceNio);
     }
 }

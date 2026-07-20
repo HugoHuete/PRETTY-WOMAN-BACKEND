@@ -41,7 +41,9 @@ public class DashboardService(IApplicationDbContext context) : IDashboardService
             {
                 PaymentMethodId = group.Key.PaymentMethodId,
                 PaymentMethodName = group.Key.PaymentMethodName,
-                CollectedNio = group.Sum(payment => payment.GrossAmount)
+                // Cobros representa el ingreso financiero real; GrossAmount permanece
+                // reservado para el saldo comercial aplicado a la venta.
+                CollectedNio = group.Sum(payment => payment.NetReceivedAmount + payment.ExchangeDifferenceNio)
             })
             .OrderBy(summary => summary.PaymentMethodName)
             .ToListAsync(cancellationToken);

@@ -18,6 +18,11 @@ public class SalePaymentMovementConfiguration : IEntityTypeConfiguration<SalePay
         builder.Property(x => x.IncomeTaxPercentage).HasPrecision(5, 2);
         builder.Property(x => x.IncomeTaxAmount).HasPrecision(12, 2);
         builder.Property(x => x.NetReceivedAmount).HasPrecision(12, 2);
+        builder.Property(x => x.AmountReceivedNio).HasPrecision(12, 2);
+        builder.Property(x => x.AmountReceivedUsd).HasPrecision(12, 2);
+        builder.Property(x => x.ChangeGivenNio).HasPrecision(12, 2);
+        builder.Property(x => x.ExchangeRate).HasPrecision(10, 4);
+        builder.Property(x => x.ExchangeDifferenceNio).HasPrecision(12, 2);
         builder.Property(x => x.MovementDirectionId).HasDefaultValue((int)MovementDirectionOptions.In);
         builder.Property(x => x.UpdatedAt).IsConcurrencyToken();
 
@@ -57,6 +62,16 @@ public class SalePaymentMovementConfiguration : IEntityTypeConfiguration<SalePay
             t.HasCheckConstraint("ck_sale_payment_movements_net_received_amount_non_negative", "net_received_amount >= 0");
             t.HasCheckConstraint("ck_sale_payment_movements_commission_not_greater_than_amount", "commission_amount + income_tax_amount <= gross_amount");
             t.HasCheckConstraint("ck_sale_payment_movements_net_received_amount_matches_components", "net_received_amount = gross_amount - commission_amount - income_tax_amount");
+            t.HasCheckConstraint("ck_sale_payment_movements_amount_received_nio_non_negative", "amount_received_nio >= 0");
+            t.HasCheckConstraint("ck_sale_payment_movements_amount_received_usd_non_negative", "amount_received_usd >= 0");
+            t.HasCheckConstraint("ck_sale_payment_movements_change_given_nio_non_negative", "change_given_nio >= 0");
+            t.HasCheckConstraint(
+                "ck_sale_payment_movements_single_received_currency",
+                "(amount_received_nio > 0 AND amount_received_usd = 0) OR " +
+                "(amount_received_nio = 0 AND amount_received_usd > 0) OR " +
+                "((delivery_agency_reconciliation_id IS NOT NULL OR reversed_sale_payment_movement_id IS NOT NULL) " +
+                "AND amount_received_nio > 0 AND amount_received_usd > 0)");
+            t.HasCheckConstraint("ck_sale_payment_movements_exchange_rate_required_for_usd", "(amount_received_usd = 0 AND exchange_rate IS NULL) OR (amount_received_usd > 0 AND exchange_rate > 0)");
             t.HasCheckConstraint("ck_sale_payment_movements_in_does_not_reverse", $"movement_direction_id <> {(int)MovementDirectionOptions.In} OR reversed_sale_payment_movement_id IS NULL");
             t.HasCheckConstraint("ck_sale_payment_movements_card_refund_reverses_original", $"movement_direction_id <> {(int)MovementDirectionOptions.Out} OR payment_method_id <> {(int)PaymentMethodOption.Card} OR reversed_sale_payment_movement_id IS NOT NULL");
             t.HasCheckConstraint("ck_sale_payment_movements_card_requires_terminal", $"payment_method_id <> {(int)PaymentMethodOption.Card} OR payment_terminal_id IS NOT NULL");

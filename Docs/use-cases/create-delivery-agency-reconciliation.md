@@ -35,7 +35,7 @@ In this example, the customer owed C$400. The agency collected $20, applied C$36
 1. Validate the agency and require at least one delivery or return.
 2. Load the indicated deliveries and require that all belong to the agency, are completed or failed, and have not been reconciled before.
 3. Record the customer collection, USD collection rate, NIO change, and shipping cost on each delivery.
-4. For completed deliveries, create an agency-sourced cash payment for the amount actually collected. The payment applies to product debt first and then shipping debt.
+4. For completed deliveries, create an agency-sourced payment for the amount actually collected. The payment applies to product debt first and then shipping debt, while preserving `amountCollectedNio`, `amountCollectedUsd`, `changeGivenNio`, and `collectionExchangeRate` as the payment tender.
 5. Update the sale payment status without creating a financial movement for that payment.
 6. Calculate the settlement amounts from the delivery details: collected NIO/USD are remittances received; NIO change plus delivery shipping paid plus `returnShippingPaidToAgency` of the indicated returns are the amount paid to the agency. Returns must belong to that agency, be picked up or completed, and not have been reconciled before.
 7. Create the reconciliation and link every delivery, payment, and financial movement to it.
@@ -46,5 +46,6 @@ In this example, the customer owed C$400. The agency collected $20, applied C$36
 - `settlementExchangeRate` must be positive.
 - All monetary input is non-negative.
 - USD collection requires `collectionExchangeRate`; when no USD is collected, that field must be omitted.
+- An agency collection may combine NIO and USD in the same delivery. This exception is limited to agency reconciliation payments; direct sale payments still use one currency per movement.
 - Customer collection cannot exceed the delivery's `amountToCollect`.
 - Failed deliveries cannot record customer collections, but may have a shipping cost.

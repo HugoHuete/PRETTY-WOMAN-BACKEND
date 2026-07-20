@@ -180,6 +180,305 @@ public class SaleServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_RecordsUsdCashPaymentAsPaidWithoutRefundPending()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements =
+            [
+                new CreateSalePaymentMovementDTO
+                {
+                    PaymentMethodId = (int)PaymentMethodOption.Cash,
+                    ProductAmount = 800m,
+                    AmountReceivedUsd = 21.85m,
+                    ExchangeRate = 36.62m
+                }
+            ]
+        });
+
+        var sale = await context.Sales.Include(item => item.PaymentMovements).SingleAsync(item => item.Id == saleId);
+        var payment = Assert.Single(sale.PaymentMovements);
+        var movement = await context.FinancialMovements.SingleAsync(item => item.SalePaymentMovementId == payment.Id);
+
+        Assert.Equal((int)SalePaymentStatusOption.Paid, sale.SalePaymentStatusId);
+        Assert.Equal((int)SaleStatusOption.Completed, sale.SaleStatusId);
+        Assert.Equal(21.85m, payment.AmountReceivedUsd);
+        Assert.Equal(36.62m, payment.ExchangeRate);
+        Assert.Equal(0.15m, payment.ExchangeDifferenceNio);
+        Assert.Equal(800.15m, movement.Amount);
+        Assert.Equal(36.62m, movement.ExchangeRate);
+
+        var balance = await new FinancialService(context).GetCurrentBalanceAsync();
+        Assert.Equal(800.15m, balance.IncomeTotalNio);
+        Assert.Equal(800.15m, balance.BalanceNio);
+    }
+
+    [Fact]
+    public async Task CreateAsync_AcceptsUsdTransferAndRecordsConvertedFinancialAmount()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements =
+            [
+                new CreateSalePaymentMovementDTO
+                {
+                    PaymentMethodId = (int)PaymentMethodOption.Transfer,
+                    ProductAmount = 800m,
+                    AmountReceivedUsd = 21.85m,
+                    ExchangeRate = 36.62m
+                }
+            ]
+        });
+
+        var sale = await context.Sales.Include(item => item.PaymentMovements).SingleAsync(item => item.Id == saleId);
+        var payment = Assert.Single(sale.PaymentMovements);
+        var movement = await context.FinancialMovements.SingleAsync(item => item.SalePaymentMovementId == payment.Id);
+
+        Assert.Equal((int)SalePaymentStatusOption.Paid, sale.SalePaymentStatusId);
+        Assert.Equal((int)PaymentMethodOption.Transfer, payment.PaymentMethodId);
+        Assert.Equal(21.85m, payment.AmountReceivedUsd);
+        Assert.Equal(0.15m, payment.ExchangeDifferenceNio);
+        Assert.Equal(800.15m, movement.Amount);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsUsdCardPayment()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var service = CreateService(context);
+
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements =
+            [
+                new CreateSalePaymentMovementDTO
+                {
+                    PaymentMethodId = (int)PaymentMethodOption.Card,
+                    PaymentTerminalId = 1,
+                    ProductAmount = 800m,
+                    AmountReceivedUsd = 21.85m,
+                    ExchangeRate = 36.62m
+                }
+            ]
+        }));
+    }
+
+    [Fact]
+    public async Task CreateAsync_AcceptsSmallNegativeUsdExchangeDifferenceWithoutLeavingBalance()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements =
+            [
+                new CreateSalePaymentMovementDTO
+                {
+                    PaymentMethodId = (int)PaymentMethodOption.Cash,
+                    ProductAmount = 800m,
+                    AmountReceivedUsd = 21.84m,
+                    ExchangeRate = 36.62m
+                }
+            ]
+        });
+
+        var sale = await context.Sales.Include(item => item.PaymentMovements).SingleAsync(item => item.Id == saleId);
+        var payment = Assert.Single(sale.PaymentMovements);
+
+        Assert.Equal((int)SalePaymentStatusOption.Paid, sale.SalePaymentStatusId);
+        Assert.Equal(-0.22m, payment.ExchangeDifferenceNio);
+    }
+
+    [Fact]
+    public async Task CreateAsync_NormalizesUsdTenderToPersistedPrecisionBeforeCalculatingDifference()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements =
+            [
+                new CreateSalePaymentMovementDTO
+                {
+                    PaymentMethodId = (int)PaymentMethodOption.Cash,
+                    ProductAmount = 800m,
+                    AmountReceivedUsd = 21.845m,
+                    ExchangeRate = 36.61999m
+                }
+            ]
+        });
+
+        var payment = await context.SalePaymentMovements.SingleAsync(item => item.SaleId == saleId);
+
+        Assert.Equal(21.85m, payment.AmountReceivedUsd);
+        Assert.Equal(36.6200m, payment.ExchangeRate);
+        Assert.Equal(0.15m, payment.ExchangeDifferenceNio);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RoundsConvertedUsdTotalBeforeDerivingExchangeDifference()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 730.37m, unitCostNio: 400m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements =
+            [
+                new CreateSalePaymentMovementDTO
+                {
+                    PaymentMethodId = (int)PaymentMethodOption.Cash,
+                    ProductAmount = 730.37m,
+                    AmountReceivedUsd = 20.01m,
+                    ExchangeRate = 36.5m
+                }
+            ]
+        });
+
+        var payment = await context.SalePaymentMovements.SingleAsync(item => item.SaleId == saleId);
+        var movement = await context.FinancialMovements.SingleAsync(item => item.SalePaymentMovementId == payment.Id);
+
+        Assert.Equal(0m, payment.ExchangeDifferenceNio);
+        Assert.Equal(730.37m, movement.Amount);
+
+        var refundId = await service.RefundPaymentMovementAsync(saleId, payment.Id, new RefundSalePaymentMovementDTO());
+        var refundMovement = await context.FinancialMovements.SingleAsync(item => item.SalePaymentMovementId == refundId);
+        Assert.Equal(730.37m, refundMovement.Amount);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsUsdExchangeDifferenceOutsideTolerance()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var service = CreateService(context);
+
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements =
+            [
+                new CreateSalePaymentMovementDTO
+                {
+                    PaymentMethodId = (int)PaymentMethodOption.Cash,
+                    ProductAmount = 800m,
+                    AmountReceivedUsd = 21.83m,
+                    ExchangeRate = 36.62m
+                }
+            ]
+        }));
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsUsdTenderWhoseConvertedFinancialAmountRoundsToZero()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 0.10m, unitCostNio: 0.05m);
+        var service = CreateService(context);
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements =
+            [
+                new CreateSalePaymentMovementDTO
+                {
+                    PaymentMethodId = (int)PaymentMethodOption.Cash,
+                    ProductAmount = 0.10m,
+                    AmountReceivedUsd = 0.01m,
+                    ExchangeRate = 0.10m
+                }
+            ]
+        }));
+
+        Assert.Contains("movimiento financiero mayor que cero", exception.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task RefundPaymentMovementAsync_FullyReversesUsdTenderAtOriginalRate()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements =
+            [
+                new CreateSalePaymentMovementDTO
+                {
+                    PaymentMethodId = (int)PaymentMethodOption.Cash,
+                    ProductAmount = 800m,
+                    AmountReceivedUsd = 21.85m,
+                    ExchangeRate = 36.62m
+                }
+            ]
+        });
+        var paymentId = await context.SalePaymentMovements.Where(item => item.SaleId == saleId).Select(item => item.Id).SingleAsync();
+
+        var refundId = await service.RefundPaymentMovementAsync(saleId, paymentId, new RefundSalePaymentMovementDTO
+        {
+            PaymentMethodId = (int)PaymentMethodOption.Cash,
+            ProductAmount = 800m,
+            ShippingAmount = 0m
+        });
+
+        var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        var refund = await context.SalePaymentMovements.SingleAsync(item => item.Id == refundId);
+        var financialMovement = await context.FinancialMovements.SingleAsync(item => item.SalePaymentMovementId == refundId);
+        Assert.Equal((int)SalePaymentStatusOption.Unpaid, sale.SalePaymentStatusId);
+        Assert.Equal(21.85m, refund.AmountReceivedUsd);
+        Assert.Equal(36.62m, refund.ExchangeRate);
+        Assert.Equal(0.15m, refund.ExchangeDifferenceNio);
+        Assert.Equal(800.15m, financialMovement.Amount);
+        Assert.Equal(36.62m, financialMovement.ExchangeRate);
+
+        var balance = await new FinancialService(context).GetCurrentBalanceAsync();
+        Assert.Equal(800.15m, balance.IncomeTotalNio);
+        Assert.Equal(800.15m, balance.ExpenseTotalNio);
+        Assert.Equal(0m, balance.BalanceNio);
+    }
+
+    [Fact]
     public async Task RefundPaymentMovementAsync_ReopensCompletedInStoreSaleAndAllowsCancellation()
     {
         await using var context = CreateContext();
@@ -1077,6 +1376,79 @@ public class SaleServiceTests
     }
 
     [Fact]
+    public async Task UpdatePaymentMovementAsync_PreservesNioTenderWhenOnlyDateChanges()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements =
+            [
+                new CreateSalePaymentMovementDTO
+                {
+                    PaymentMethodId = (int)PaymentMethodOption.Cash,
+                    ProductAmount = 800m,
+                    AmountReceivedNio = 1000m,
+                    ChangeGivenNio = 200m
+                }
+            ]
+        });
+        var paymentId = await context.SalePaymentMovements.Where(item => item.SaleId == saleId).Select(item => item.Id).SingleAsync();
+        var newMovementDate = new DateTime(2026, 7, 11, 10, 0, 0, DateTimeKind.Utc);
+
+        await service.UpdatePaymentMovementAsync(
+            saleId,
+            paymentId,
+            new UpdateSalePaymentMovementDTO { MovementDate = newMovementDate });
+
+        var payment = await context.SalePaymentMovements.SingleAsync(item => item.Id == paymentId);
+        Assert.Equal(newMovementDate, payment.MovementDate);
+        Assert.Equal(1000m, payment.AmountReceivedNio);
+        Assert.Equal(200m, payment.ChangeGivenNio);
+    }
+
+    [Fact]
+    public async Task UpdatePaymentMovementAsync_RejectsAllocationChangeWhenCashChangeWasRecorded()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var service = CreateService(context);
+
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements =
+            [
+                new CreateSalePaymentMovementDTO
+                {
+                    PaymentMethodId = (int)PaymentMethodOption.Cash,
+                    ProductAmount = 800m,
+                    AmountReceivedNio = 1000m,
+                    ChangeGivenNio = 200m
+                }
+            ]
+        });
+        var paymentId = await context.SalePaymentMovements.Where(item => item.SaleId == saleId).Select(item => item.Id).SingleAsync();
+
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.UpdatePaymentMovementAsync(
+            saleId,
+            paymentId,
+            new UpdateSalePaymentMovementDTO { ProductAmount = 700m }));
+
+        var payment = await context.SalePaymentMovements.SingleAsync(item => item.Id == paymentId);
+        Assert.Equal(800m, payment.GrossAmount);
+        Assert.Equal(1000m, payment.AmountReceivedNio);
+        Assert.Equal(200m, payment.ChangeGivenNio);
+    }
+
+    [Fact]
     public async Task CreateAsync_RequiresATerminalForCardPayments()
     {
         await using var context = CreateContext();
@@ -1893,9 +2265,10 @@ public class SaleServiceTests
                 new ReconcileSaleDeliveryDTO
                 {
                     SaleDeliveryId = deliveryId,
-                    AmountCollectedUsd = 20m,
-                    CollectionExchangeRate = 36m,
-                    ChangeGivenNio = 170m,
+                    AmountCollectedNio = 100m,
+                    AmountCollectedUsd = 20.01m,
+                    CollectionExchangeRate = 36.5m,
+                    ChangeGivenNio = 280.37m,
                     ShippingPaidToAgency = 80m
                 }
             ]
@@ -1910,22 +2283,37 @@ public class SaleServiceTests
             .ToListAsync();
 
         Assert.Equal(reconciliationId, delivery.DeliveryAgencyReconciliationId);
-        Assert.Equal(20m, delivery.AmountCollectedUsd);
-        Assert.Equal(170m, delivery.ChangeGivenNio);
-        Assert.Equal(36m, delivery.CollectionExchangeRate);
+        Assert.Equal(100m, delivery.AmountCollectedNio);
+        Assert.Equal(20.01m, delivery.AmountCollectedUsd);
+        Assert.Equal(280.37m, delivery.ChangeGivenNio);
+        Assert.Equal(36.5m, delivery.CollectionExchangeRate);
         Assert.Equal(80m, delivery.ShippingPaidToAgency);
-        Assert.Equal(0m, reconciliation.AmountReceivedNio);
-        Assert.Equal(20m, reconciliation.AmountReceivedUsd);
-        Assert.Equal(250m, reconciliation.AmountPaidToAgencyNio);
+        Assert.Equal(100m, reconciliation.AmountReceivedNio);
+        Assert.Equal(20.01m, reconciliation.AmountReceivedUsd);
+        Assert.Equal(360.37m, reconciliation.AmountPaidToAgencyNio);
         Assert.Equal((int)SalePaymentStatusOption.Paid, sale.SalePaymentStatusId);
-        Assert.Contains(sale.PaymentMovements, item =>
-            item.DeliveryAgencyReconciliationId == reconciliationId &&
-            item.ProductAmount == 500m &&
-            item.ShippingAmount == 50m &&
-            item.GrossAmount == 550m);
+        var agencyPayment = Assert.Single(sale.PaymentMovements, item => item.DeliveryAgencyReconciliationId == reconciliationId);
+        Assert.Equal(500m, agencyPayment.ProductAmount);
+        Assert.Equal(50m, agencyPayment.ShippingAmount);
+        Assert.Equal(550m, agencyPayment.GrossAmount);
+        Assert.Equal(100m, agencyPayment.AmountReceivedNio);
+        Assert.Equal(20.01m, agencyPayment.AmountReceivedUsd);
+        Assert.Equal(280.37m, agencyPayment.ChangeGivenNio);
+        Assert.Equal(36.5m, agencyPayment.ExchangeRate);
+        Assert.Equal(0m, agencyPayment.ExchangeDifferenceNio);
         Assert.Equal(2, financialMovements.Count);
-        Assert.Contains(financialMovements, item => item.MovementDirectionId == (int)MovementDirectionOptions.In && item.Amount == 720m);
-        Assert.Contains(financialMovements, item => item.MovementDirectionId == (int)MovementDirectionOptions.Out && item.Amount == 250m);
+        Assert.Contains(financialMovements, item => item.MovementDirectionId == (int)MovementDirectionOptions.In && item.Amount == 820.36m);
+        Assert.Contains(financialMovements, item => item.MovementDirectionId == (int)MovementDirectionOptions.Out && item.Amount == 360.37m);
+
+        var refundId = await saleService.RefundPaymentMovementAsync(saleId, agencyPayment.Id, new RefundSalePaymentMovementDTO());
+        var refund = await context.SalePaymentMovements.SingleAsync(item => item.Id == refundId);
+        Assert.Equal(agencyPayment.Id, refund.ReversedSalePaymentMovementId);
+        Assert.Equal(100m, refund.AmountReceivedNio);
+        Assert.Equal(20.01m, refund.AmountReceivedUsd);
+        Assert.Equal(280.37m, refund.ChangeGivenNio);
+        Assert.Equal(36.5m, refund.ExchangeRate);
+        var refundFinancialMovement = await context.FinancialMovements.SingleAsync(item => item.SalePaymentMovementId == refundId);
+        Assert.Equal(550m, refundFinancialMovement.Amount);
     }
 
     [Fact]

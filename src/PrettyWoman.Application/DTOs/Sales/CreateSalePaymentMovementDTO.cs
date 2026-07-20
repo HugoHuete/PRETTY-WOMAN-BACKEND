@@ -8,4 +8,8 @@ public class CreateSalePaymentMovementDTO
     public decimal ProductAmount { get; set; }
     public decimal ShippingAmount { get; set; }
     public int? SaleDeliveryId { get; set; }
+    public decimal AmountReceivedNio { get; set; }
+    public decimal AmountReceivedUsd { get; set; }
+    public decimal ChangeGivenNio { get; set; }
+    public decimal? ExchangeRate { get; set; }
 }

@@ -20,4 +20,9 @@ public class SalePaymentMovementDTO
     public decimal IncomeTaxPercentage { get; set; }
     public decimal IncomeTaxAmount { get; set; }
     public decimal NetReceivedAmount { get; set; }
+    public decimal AmountReceivedNio { get; set; }
+    public decimal AmountReceivedUsd { get; set; }
+    public decimal ChangeGivenNio { get; set; }
+    public decimal? ExchangeRate { get; set; }
+    public decimal ExchangeDifferenceNio { get; set; }
 }
