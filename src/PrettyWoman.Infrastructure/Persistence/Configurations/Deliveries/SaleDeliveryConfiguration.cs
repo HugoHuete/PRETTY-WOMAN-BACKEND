@@ -36,6 +36,7 @@ public class SaleDeliveryConfiguration : IEntityTypeConfiguration<SaleDelivery>
         builder.HasIndex(x => x.DeliveryStatusId);
         builder.HasIndex(x => x.DeliveryAgencyReconciliationId).HasFilter("delivery_agency_reconciliation_id IS NOT NULL");
         builder.HasIndex(x => new { x.UserId, x.CreatedAt });
+        builder.HasIndex(x => new { x.SaleId, x.CreatedAt, x.Id });
         builder.HasIndex(x => x.SaleId)
             .IsUnique()
             .HasDatabaseName("ux_sale_deliveries_sale_id_active")

@@ -1116,6 +1116,14 @@ public class SaleService(
             salesQuery = salesQuery.Where(sale => sale.SalePaymentStatusId == query.SalePaymentStatusId.Value);
         if (query.SaleChannelId.HasValue)
             salesQuery = salesQuery.Where(sale => sale.SaleChannelId == query.SaleChannelId.Value);
+        if (query.DeliveryStatusId.HasValue)
+        {
+            salesQuery = salesQuery.Where(sale => sale.Deliveries
+                .OrderByDescending(delivery => delivery.CreatedAt)
+                .ThenByDescending(delivery => delivery.Id)
+                .Select(delivery => (int?)delivery.DeliveryStatusId)
+                .FirstOrDefault() == query.DeliveryStatusId.Value);
+        }
         if (query.ClientId.HasValue)
             salesQuery = salesQuery.Where(sale => sale.ClientId == query.ClientId.Value);
         if (query.StartDate.HasValue)

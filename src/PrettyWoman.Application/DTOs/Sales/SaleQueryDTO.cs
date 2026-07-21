@@ -7,6 +7,7 @@ public class SaleQueryDTO
     public int? SaleStatusId { get; set; }
     public int? SalePaymentStatusId { get; set; }
     public int? SaleChannelId { get; set; }
+    public int? DeliveryStatusId { get; set; }
     public int? ClientId { get; set; }
     public DateTime? StartDate { get; set; }
     public DateTime? EndDate { get; set; }

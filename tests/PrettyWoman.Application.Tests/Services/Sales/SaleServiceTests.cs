@@ -41,6 +41,80 @@ public class SaleServiceTests
     }
 
     [Fact]
+    public async Task GetAllAsync_FiltersByTheMostRecentlyCreatedDeliveryStatus()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var latestPendingSale = new Sale
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.ReadyForDelivery,
+            SalePaymentStatusId = (int)SalePaymentStatusOption.Unpaid,
+            UserId = "seller",
+            Subtotal = 100m,
+            Total = 100m
+        };
+        var latestFailedSale = new Sale
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.ReadyForDelivery,
+            SalePaymentStatusId = (int)SalePaymentStatusOption.Unpaid,
+            UserId = "seller",
+            Subtotal = 200m,
+            Total = 200m
+        };
+        var saleWithoutDeliveries = new Sale
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.Pending,
+            SalePaymentStatusId = (int)SalePaymentStatusOption.Unpaid,
+            UserId = "seller",
+            Subtotal = 300m,
+            Total = 300m
+        };
+        context.Sales.AddRange(latestPendingSale, latestFailedSale, saleWithoutDeliveries);
+        await context.SaveChangesAsync();
+
+        var olderDate = new DateTime(2026, 7, 10, 0, 0, 0, DateTimeKind.Utc);
+        var newerDate = olderDate.AddDays(1);
+        context.SaleDeliveries.AddRange(
+            new SaleDelivery
+            {
+                CreatedAt = olderDate, Code = "OLD-FAILED", SaleId = latestPendingSale.Id,
+                MunicipalityId = 1, DeliveryAgencyId = 1,
+                DeliveryStatusId = (int)DeliveryStatusCode.Failed, UserId = "seller"
+            },
+            new SaleDelivery
+            {
+                CreatedAt = newerDate, Code = "LATEST-PENDING", SaleId = latestPendingSale.Id,
+                MunicipalityId = 1, DeliveryAgencyId = 1,
+                DeliveryStatusId = (int)DeliveryStatusCode.Pending, UserId = "seller"
+            },
+            new SaleDelivery
+            {
+                CreatedAt = olderDate, Code = "OLD-PENDING", SaleId = latestFailedSale.Id,
+                MunicipalityId = 1, DeliveryAgencyId = 1,
+                DeliveryStatusId = (int)DeliveryStatusCode.Pending, UserId = "seller"
+            },
+            new SaleDelivery
+            {
+                CreatedAt = newerDate, Code = "LATEST-FAILED", SaleId = latestFailedSale.Id,
+                MunicipalityId = 1, DeliveryAgencyId = 1,
+                DeliveryStatusId = (int)DeliveryStatusCode.Failed, UserId = "seller"
+            });
+        await context.SaveChangesAsync();
+
+        var result = await CreateService(context).GetAllAsync(new SaleQueryDTO
+        {
+            DeliveryStatusId = (int)DeliveryStatusCode.Pending
+        });
+
+        var sale = Assert.Single(result.Items);
+        Assert.Equal(latestPendingSale.Id, sale.Id);
+        Assert.Equal(1, result.TotalCount);
+    }
+
+    [Fact]
     public async Task GetByIdAsync_IncludesDeliveryDataNeededByTheOperationsScreen()
     {
         await using var context = CreateContext();

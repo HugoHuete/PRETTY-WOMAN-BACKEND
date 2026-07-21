@@ -14,6 +14,8 @@ A delivery is active while its status is neither `Completed`, `Cancelled`, nor `
 - A local sale (`InStoreSale`) cannot have a delivery.
 - A sale cannot be changed to `InStoreSale` while it has an active delivery.
 
+`GET /api/v1/sales?deliveryStatusId={id}` filters sales by the status of their most recently created delivery. Recency is determined by `created_at` and then by `id` as a deterministic tie-breaker. Sales without deliveries do not match this filter.
+
 ## Sale states
 
 - Creating a delivery sets the sale to `ReadyForDelivery`. If the sale was `Pending`, its products move from `Available` to `Reserved`; an already reserved sale is not reserved twice.

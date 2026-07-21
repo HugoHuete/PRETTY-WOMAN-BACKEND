@@ -269,7 +269,7 @@ Antes de crear o filtrar movimientos financieros, cargar `GET /api/v1/finances/m
 
 | Flujo | Endpoint | Rol | Resultado |
 |---|---|---|---|
-| Listar / abrir venta | `GET /api/v1/sales`, `GET /api/v1/sales/{id}` | Admin, Vendedor | La consulta individual incluye productos, pagos, prendas en selección y `deliveries`. |
+| Listar / abrir venta | `GET /api/v1/sales`, `GET /api/v1/sales/{id}` | Admin, Vendedor | El listado acepta `deliveryStatusId` y lo compara con el estado del envío más reciente. La consulta individual incluye productos, pagos, prendas en selección y `deliveries`. |
 | Crear venta o reserva | `POST /api/v1/sales` | Admin, Vendedor | Devuelve `201` y el id. Para una reserva confirmada enviar `saleStatusId: 2` (`Reserved`). |
 | Registrar abono o pago | `POST /api/v1/sales/{id}/payment-movements` | Admin, Vendedor | Devuelve `201` y el id. El backend calcula el total y estado de pago. |
 | Crear envío | `POST /api/v1/sales/{id}/deliveries` | Admin, Vendedor | Devuelve `201` y el id; deja la venta `ReadyForDelivery` y reserva productos si estaba `Pending`. |
