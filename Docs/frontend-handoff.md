@@ -96,6 +96,8 @@ Los endpoints siguientes ya están implementados y son la base de las pantallas 
 
 ### Compras: faltantes confirmados y reembolso de proveedor
 
+`GET /api/v1/orders` devuelve un `PaginatedResult<OrderDTO>` y acepta `page`, `pageSize`, `purchaseDateFrom`, `purchaseDateTo`, `orderStatusId` y `supplierId`. Las fechas filtran por `purchaseDate`; `pageSize` se limita a 100.
+
 Ambas acciones son exclusivas de Admin. Se ejecutan desde el detalle de la orden; sus respuestas devuelven el `OrderDTO` actualizado, por lo que la UI debe reemplazar el estado local con esa respuesta o recargar `GET /api/v1/orders/{id}`.
 
 | Flujo | Endpoint | Cuándo mostrarlo | Resultado |

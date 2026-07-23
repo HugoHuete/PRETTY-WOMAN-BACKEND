@@ -20,6 +20,64 @@ public class OrderServiceTests
 
 
     [Fact]
+    public async Task GetAllAsync_PaginatesAndFiltersByPurchaseDateStatusAndSupplier()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var olderMatchingOrderId = await service.CreateAsync(CreateOrderRequest("SOHO-OLD", "Blusa anterior"));
+        var newerMatchingOrderId = await service.CreateAsync(CreateOrderRequest("SOHO-NEW", "Blusa nueva"));
+        var outsideDateOrderId = await service.CreateAsync(CreateOrderRequest("SOHO-OUT-DATE", "Blusa fuera de fecha"));
+        var otherStatusOrderId = await service.CreateAsync(CreateOrderRequest("SOHO-STATUS", "Blusa recibida"));
+        var otherSupplierOrderId = await service.CreateAsync(CreateOrderRequest("SOHO-SUPPLIER", "Blusa proveedor"));
+
+        var olderMatchingOrder = await context.Orders.FindAsync(olderMatchingOrderId);
+        olderMatchingOrder!.PurchaseDate = new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc);
+        olderMatchingOrder.OrderStatusId = (int)OrderStatusCode.Pending;
+        olderMatchingOrder.SupplierId = 1;
+
+        var newerMatchingOrder = await context.Orders.FindAsync(newerMatchingOrderId);
+        newerMatchingOrder!.PurchaseDate = new DateTime(2026, 7, 12, 0, 0, 0, DateTimeKind.Utc);
+        newerMatchingOrder.OrderStatusId = (int)OrderStatusCode.Pending;
+        newerMatchingOrder.SupplierId = 1;
+
+        var outsideDateOrder = await context.Orders.FindAsync(outsideDateOrderId);
+        outsideDateOrder!.PurchaseDate = new DateTime(2026, 7, 9, 0, 0, 0, DateTimeKind.Utc);
+        outsideDateOrder.OrderStatusId = (int)OrderStatusCode.Pending;
+        outsideDateOrder.SupplierId = 1;
+
+        var otherStatusOrder = await context.Orders.FindAsync(otherStatusOrderId);
+        otherStatusOrder!.PurchaseDate = new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc);
+        otherStatusOrder.OrderStatusId = (int)OrderStatusCode.Received;
+        otherStatusOrder.SupplierId = 1;
+
+        var otherSupplierOrder = await context.Orders.FindAsync(otherSupplierOrderId);
+        otherSupplierOrder!.PurchaseDate = new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc);
+        otherSupplierOrder.OrderStatusId = (int)OrderStatusCode.Pending;
+        otherSupplierOrder.SupplierId = 2;
+        await context.SaveChangesAsync();
+
+        var result = await service.GetAllAsync(new OrderQueryDTO
+        {
+            Page = 2,
+            PageSize = 1,
+            OrderStatusId = (int)OrderStatusCode.Pending,
+            SupplierId = 1,
+            PurchaseDateFrom = new DateTime(2026, 7, 10, 0, 0, 0, DateTimeKind.Utc),
+            PurchaseDateTo = new DateTime(2026, 7, 12, 23, 59, 59, DateTimeKind.Utc)
+        });
+
+        var order = Assert.Single(result.Items);
+        Assert.Equal(olderMatchingOrderId, order.Id);
+        Assert.Equal(2, result.Page);
+        Assert.Equal(1, result.PageSize);
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(2, result.TotalPages);
+        Assert.True(result.HasPreviousPage);
+        Assert.False(result.HasNextPage);
+    }
+
+    [Fact]
     public async Task CloseShortagesAsync_ClosesOrderAndRegistersSupplierRefund()
     {
         await using var context = CreateContext();
@@ -536,6 +594,7 @@ public class OrderServiceTests
     private static async Task SeedCatalogAsync(ApplicationDbContext context)
     {
         context.Suppliers.Add(new Supplier { Id = 1, Name = "SOHO" });
+        context.Suppliers.Add(new Supplier { Id = 2, Name = "SHEIN" });
         context.Categories.Add(new Category { Id = 1, Name = "Ropa" });
         context.Subcategories.Add(new Subcategory { Id = 1, CategoryId = 1, Name = "Pantalones" });
         context.SizeGroups.Add(new SizeGroup { Id = 1, Name = "Regular" });

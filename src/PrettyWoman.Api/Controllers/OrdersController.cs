@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Application.DTOs.Orders;
 using PrettyWoman.Application.Interfaces;
@@ -14,9 +15,9 @@ public class OrdersController(IOrderService orderService) : ControllerBase
     private readonly IOrderService _orderService = orderService;
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<OrderDTO>>> GetAll()
+    public async Task<ActionResult<PaginatedResult<OrderDTO>>> GetAll([FromQuery] OrderQueryDTO query)
     {
-        var orders = await _orderService.GetAllAsync();
+        var orders = await _orderService.GetAllAsync(query);
         return Ok(orders);
     }
 

@@ -1,6 +1,7 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.Common.Extensions;
+using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.DTOs.Orders;
 using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Interfaces;
@@ -362,9 +363,16 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         await _context.SaveChangesAsync();
     }
 
-    public async Task<IEnumerable<OrderDTO>> GetAllAsync()
+    public async Task<PaginatedResult<OrderDTO>> GetAllAsync(OrderQueryDTO query)
     {
-        var orders = await _context.Orders
+        NormalizePagination(query);
+
+        var ordersQuery = ApplyOrderFilters(_context.Orders
+            .AsNoTracking()
+            .AsQueryable(), query);
+
+        var totalCount = await ordersQuery.CountAsync();
+        var orders = await ordersQuery
             .Include(order => order.Supplier)
             .Include(order => order.OrderStatus)
             .Include(order => order.Products)
@@ -375,9 +383,18 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             .Include(order => order.PurchaseShortages)
             .Include(order => order.SupplierRefund)
             .OrderByDescending(order => order.PurchaseDate)
+            .ThenByDescending(order => order.Id)
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
             .ToListAsync();
 
-        return orders.Select(MapOrderDto).ToList();
+        return new PaginatedResult<OrderDTO>
+        {
+            Items = orders.Select(MapOrderDto).ToList(),
+            Page = query.Page,
+            PageSize = query.PageSize,
+            TotalCount = totalCount
+        };
     }
 
     public async Task<OrderDTO> GetByIdAsync(int id)
@@ -409,6 +426,39 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             .ToListAsync();
 
         return _mapper.Map<List<OrderTrackingNumberDTO>>(trackingNumbers);
+    }
+
+    private static IQueryable<Order> ApplyOrderFilters(IQueryable<Order> query, OrderQueryDTO filters)
+    {
+        if (filters.OrderStatusId.HasValue)
+        {
+            query = query.Where(order => order.OrderStatusId == filters.OrderStatusId.Value);
+        }
+
+        if (filters.SupplierId.HasValue)
+        {
+            query = query.Where(order => order.SupplierId == filters.SupplierId.Value);
+        }
+
+        if (filters.PurchaseDateFrom.HasValue)
+        {
+            var dateFrom = filters.PurchaseDateFrom.NormalizeToUtc()!.Value;
+            query = query.Where(order => order.PurchaseDate >= dateFrom);
+        }
+
+        if (filters.PurchaseDateTo.HasValue)
+        {
+            var dateTo = filters.PurchaseDateTo.NormalizeToUtc()!.Value;
+            query = query.Where(order => order.PurchaseDate <= dateTo);
+        }
+
+        return query;
+    }
+
+    private static void NormalizePagination(OrderQueryDTO query)
+    {
+        query.Page = Math.Max(query.Page, 1);
+        query.PageSize = Math.Clamp(query.PageSize, 1, 100);
     }
 
     private async Task SyncSupplierPaymentMovementAsync(Order order)
