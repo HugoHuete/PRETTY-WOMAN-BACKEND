@@ -111,7 +111,31 @@ public class SaleServiceTests
 
         var sale = Assert.Single(result.Items);
         Assert.Equal(latestPendingSale.Id, sale.Id);
+        Assert.Equal((int)DeliveryStatusCode.Pending, sale.LatestDeliveryStatusId);
+        Assert.Equal(nameof(DeliveryStatusCode.Pending), sale.LatestDeliveryStatusName);
         Assert.Equal(1, result.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_ReturnsNullLatestDeliveryStatusForSalesWithoutDeliveries()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Sales.Add(new Sale
+        {
+            SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            SaleStatusId = (int)SaleStatusOption.Completed,
+            SalePaymentStatusId = (int)SalePaymentStatusOption.Paid,
+            UserId = "seller",
+            Subtotal = 100m,
+            Total = 100m
+        });
+        await context.SaveChangesAsync();
+
+        var sale = Assert.Single((await CreateService(context).GetAllAsync(new SaleQueryDTO())).Items);
+
+        Assert.Null(sale.LatestDeliveryStatusId);
+        Assert.Null(sale.LatestDeliveryStatusName);
     }
 
     [Fact]

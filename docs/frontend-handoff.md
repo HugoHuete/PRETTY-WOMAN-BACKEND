@@ -269,6 +269,8 @@ Antes de crear o filtrar movimientos financieros, cargar `GET /api/v1/finances/m
 
 ### Ventas, pagos y envíos
 
+El listado devuelve `latestDeliveryStatusId` y `latestDeliveryStatusName`, tomados del envío más reciente; ambos son `null` si la venta no tiene envíos.
+
 | Flujo | Endpoint | Rol | Resultado |
 |---|---|---|---|
 | Listar / abrir venta | `GET /api/v1/sales`, `GET /api/v1/sales/{id}` | Admin, Vendedor | El listado acepta `deliveryStatusId` y lo compara con el estado del envío más reciente. La consulta individual incluye productos, pagos, prendas en selección y `deliveries`. |

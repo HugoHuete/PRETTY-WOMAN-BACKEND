@@ -43,9 +43,36 @@ public class SaleService(
             .Take(query.PageSize)
             .ToListAsync();
 
+        var saleDTOs = sales.Select(MapSaleDTO).ToList();
+        var saleIds = sales.Select(sale => sale.Id).ToList();
+        var latestDeliveryStatuses = await _context.SaleDeliveries
+            .AsNoTracking()
+            .Where(delivery => saleIds.Contains(delivery.SaleId))
+            .GroupBy(delivery => delivery.SaleId)
+            .Select(group => group
+                .OrderByDescending(delivery => delivery.CreatedAt)
+                .Select(delivery => new
+                {
+                    delivery.SaleId,
+                    delivery.DeliveryStatusId,
+                    DeliveryStatusName = delivery.DeliveryStatus!.Name
+                })
+                .First())
+            .ToListAsync();
+        var latestDeliveryStatusBySaleId = latestDeliveryStatuses
+            .ToDictionary(delivery => delivery.SaleId);
+
+        foreach (var saleDTO in saleDTOs)
+        {
+            if (!latestDeliveryStatusBySaleId.TryGetValue(saleDTO.Id, out var latestDelivery)) continue;
+
+            saleDTO.LatestDeliveryStatusId = latestDelivery.DeliveryStatusId;
+            saleDTO.LatestDeliveryStatusName = latestDelivery.DeliveryStatusName;
+        }
+
         return new PaginatedResult<SaleDTO>
         {
-            Items = sales.Select(MapSaleDTO).ToList(),
+            Items = saleDTOs,
             Page = query.Page,
             PageSize = query.PageSize,
             TotalCount = totalCount

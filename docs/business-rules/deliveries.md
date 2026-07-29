@@ -16,6 +16,8 @@ A delivery is active while its status is neither `Completed`, `Cancelled`, nor `
 
 `GET /api/v1/sales?deliveryStatusId={id}` filters sales by the status of their most recently created delivery. Recency is determined by `created_at` and then by `id` as a deterministic tie-breaker. Sales without deliveries do not match this filter.
 
+The sales listing returns that same delivery status in `latestDeliveryStatusId` and `latestDeliveryStatusName`. Both fields are `null` for sales without deliveries.
+
 ## Sale states
 
 - Creating a delivery sets the sale to `ReadyForDelivery`. If the sale was `Pending`, its products move from `Available` to `Reserved`; an already reserved sale is not reserved twice.
