@@ -69,7 +69,7 @@ public class OrderReceiptServiceTests
         Assert.Equal((int)InventoryStockBucketOption.Available, inventoryMovement.ToStockBucketId);
         Assert.Equal(2, inventoryMovement.Quantity);
         Assert.Equal(orderId, inventoryMovement.OrderId);
-        Assert.Equal("Recepción parcial", inventoryMovement.Comments);
+        Assert.Null(inventoryMovement.Comments);
         Assert.Equal(365m, warehouseShippingMovement.Amount);
         Assert.Equal(productReceipt.Id, warehouseShippingMovement.ProductReceiptId);
         Assert.Equal(orderId, warehouseShippingMovement.OrderId);
@@ -320,7 +320,7 @@ public class OrderReceiptServiceTests
         Assert.True(receivedProduct.IsSurplus);
         Assert.Equal((int)InventoryMovementTypeOption.PurchaseReceived, inventoryMovement.InventoryMovementTypeId);
         Assert.Equal(3, inventoryMovement.Quantity);
-        Assert.Equal("Vino una unidad adicional no solicitada.", inventoryMovement.Comments);
+        Assert.Null(inventoryMovement.Comments);
         Assert.Equal(12m, product.UnitCostUsd);
     }
 
@@ -421,7 +421,7 @@ public class OrderReceiptServiceTests
         });
 
         var inventoryMovement = await context.InventoryMovements.SingleAsync();
-        Assert.Equal("Sobrante registrado al recibir la compra.", inventoryMovement.Comments);
+        Assert.Null(inventoryMovement.Comments);
     }
 
     private static CreateOrderDTO CreateOrderRequest(int quantity)
