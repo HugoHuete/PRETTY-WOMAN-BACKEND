@@ -29,9 +29,9 @@ public class OrdersController(IOrderService orderService) : ControllerBase
     }
 
     [HttpGet("{id:int}/tracking-numbers")]
-    public async Task<ActionResult<IEnumerable<OrderTrackingNumberDTO>>> GetTrackingNumbers(int id)
+    public async Task<ActionResult<IEnumerable<OrderTrackingNumberDTO>>> GetTrackingNumbers(int id, [FromQuery] bool? isReceived)
     {
-        var trackingNumbers = await _orderService.GetTrackingNumbersAsync(id);
+        var trackingNumbers = await _orderService.GetTrackingNumbersAsync(id, isReceived);
         return Ok(trackingNumbers);
     }
 

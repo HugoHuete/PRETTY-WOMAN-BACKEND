@@ -415,13 +415,22 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         return MapOrderDto(order);
     }
 
-    public async Task<IEnumerable<OrderTrackingNumberDTO>> GetTrackingNumbersAsync(int orderId)
+    public async Task<IEnumerable<OrderTrackingNumberDTO>> GetTrackingNumbersAsync(int orderId, bool? isReceived = null)
     {
         await EnsureOrderExistsAsync(orderId);
 
-        var trackingNumbers = await _context.OrderTrackingNumbers
+        var query = _context.OrderTrackingNumbers
             .Include(tracking => tracking.ShippingCompany)
-            .Where(tracking => tracking.OrderId == orderId)
+            .Where(tracking => tracking.OrderId == orderId);
+
+        if (isReceived.HasValue)
+        {
+            query = isReceived.Value
+                ? query.Where(tracking => tracking.ProductReceiptId.HasValue)
+                : query.Where(tracking => !tracking.ProductReceiptId.HasValue);
+        }
+
+        var trackingNumbers = await query
             .OrderBy(tracking => tracking.Id)
             .ToListAsync();
 

@@ -531,6 +531,42 @@ public class OrderServiceTests
     }
 
     [Fact]
+    public async Task GetTrackingNumbersAsync_FiltersByReceiptStatus()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.ShippingCompanies.Add(new ShippingCompany { Id = 1, Name = "Cargo Express" });
+        var service = CreateService(context);
+        var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-TRACKINGS", "Vestido"));
+        var receipt = new ProductReceipt { OrderId = orderId, ReceivedDate = DateTime.UtcNow };
+        context.ProductReceipts.Add(receipt);
+        await context.SaveChangesAsync();
+        context.OrderTrackingNumbers.AddRange(
+            new OrderTrackingNumber
+            {
+                OrderId = orderId,
+                ShippingCompanyId = 1,
+                TrackingNumber = "TRACK-RECEIVED",
+                ProductReceiptId = receipt.Id
+            },
+            new OrderTrackingNumber
+            {
+                OrderId = orderId,
+                ShippingCompanyId = 1,
+                TrackingNumber = "TRACK-PENDING"
+            });
+        await context.SaveChangesAsync();
+
+        var all = (await service.GetTrackingNumbersAsync(orderId)).ToList();
+        var received = (await service.GetTrackingNumbersAsync(orderId, isReceived: true)).ToList();
+        var pending = (await service.GetTrackingNumbersAsync(orderId, isReceived: false)).ToList();
+
+        Assert.Equal(2, all.Count);
+        Assert.Equal("TRACK-RECEIVED", Assert.Single(received).TrackingNumber);
+        Assert.Equal("TRACK-PENDING", Assert.Single(pending).TrackingNumber);
+    }
+
+    [Fact]
     public async Task AddTrackingNumbersAsync_RejectsReceiptFromAnotherOrder()
     {
         await using var context = CreateContext();
