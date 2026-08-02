@@ -116,7 +116,6 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
 
     public async Task<OrderDTO> CloseShortagesAsync(int id, CloseOrderShortagesDTO closeShortagesDTO)
     {
-        closeShortagesDTO.Comments = closeShortagesDTO.Comments.NormalizeOptional();
         closeShortagesDTO.Items ??= [];
 
         var order = await GetOrderForShortageUpdateAsync(id);
@@ -167,8 +166,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                 ProductId = product.Id,
                 Quantity = shortageQuantity,
                 LossAmountNio = lossAmountNio,
-                ShortageDate = shortageDate,
-                Comments = item.Comments.NormalizeOptional() ?? closeShortagesDTO.Comments
+                ShortageDate = shortageDate
             });
 
             product.MerchandiseTotalCostNio = originalMerchandiseTotalNio - lossAmountNio;
@@ -811,7 +809,6 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                 Quantity = shortage.Quantity,
                 LossAmountNio = shortage.LossAmountNio,
                 ShortageDate = shortage.ShortageDate,
-                Comments = shortage.Comments,
                 RefundStatus = refundStatus
             })
             .ToList();

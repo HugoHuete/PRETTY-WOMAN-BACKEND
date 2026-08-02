@@ -8,7 +8,6 @@ public class PurchaseShortage : IAuditableEntity
     public int Quantity { get; set; }
     public decimal LossAmountNio { get; set; }
     public DateTime ShortageDate { get; set; }
-    public string? Comments { get; set; }
 
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }

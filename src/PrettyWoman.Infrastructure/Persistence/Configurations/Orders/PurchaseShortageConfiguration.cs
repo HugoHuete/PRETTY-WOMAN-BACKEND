@@ -9,7 +9,6 @@ public class PurchaseShortageConfiguration : IEntityTypeConfiguration<PurchaseSh
     public void Configure(EntityTypeBuilder<PurchaseShortage> builder)
     {
         builder.Property(x => x.LossAmountNio).HasPrecision(14, 2);
-        builder.Property(x => x.Comments).HasMaxLength(300);
 
         builder.HasOne(x => x.Order)
             .WithMany(x => x.PurchaseShortages)

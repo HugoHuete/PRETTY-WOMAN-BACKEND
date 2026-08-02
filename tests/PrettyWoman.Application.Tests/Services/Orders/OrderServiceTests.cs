@@ -86,6 +86,7 @@ public class OrderServiceTests
         var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-FALTANTE", "Blusa faltante"));
         var order = await context.Orders.Include(item => item.Products).SingleAsync(item => item.Id == orderId);
         var product = order.Products.Single();
+        order.Comments = "Compra parcial confirmada con el proveedor.";
         product.ReceivedQuantity = 1;
         product.AvailableQuantity = 1;
         order.OrderStatusId = (int)OrderStatusCode.PartiallyReceived;
@@ -116,6 +117,7 @@ public class OrderServiceTests
         Assert.Equal(92m, refundedOrder.NetShortageLossNio);
         Assert.Equal(PurchaseShortageRefundStatusOption.PartiallyRefunded, refundedOrder.PurchaseShortages.Single().RefundStatus);
         Assert.Equal((int)OrderStatusCode.Received, refundedOrder.OrderStatusId);
+        Assert.Equal("Compra parcial confirmada con el proveedor.", refundedOrder.Comments);
         var movement = await context.FinancialMovements.SingleAsync(item => item.FinancialMovementTypeId == (int)FinancialMovementTypeOption.SupplierRefund);
         Assert.Equal((int)MovementDirectionOptions.In, movement.MovementDirectionId);
         Assert.Equal(200m, movement.Amount);

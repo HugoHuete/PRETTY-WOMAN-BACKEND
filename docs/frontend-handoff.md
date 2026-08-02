@@ -115,17 +115,15 @@ Este flujo no permite escoger una cantidad parcial ni cerrar solo algunas varian
 ```json
 {
   "closedAt": "2026-07-19T18:00:00Z",
-  "comments": "El proveedor confirmó los faltantes.",
   "items": [
     {
-      "productId": 123,
-      "comments": "Talla M agotada en origen."
+      "productId": 123
     }
   ]
 }
 ```
 
-- `closedAt` y los comentarios son opcionales; cada comentario de línea prevalece sobre el comentario general.
+- `closedAt` es opcional. Para notas generales de la compra, usar `comments` al crear o actualizar la orden.
 - La UI no envía la cantidad faltante ni el costo perdido: son valores calculados por el backend.
 - Pedir confirmación explícita: la orden queda `Received` y no permite nuevas recepciones normales.
 - La pérdida considera únicamente el costo de mercancía faltante. El envío ya asignado se conserva; la UI no debe recalcular costos ni pérdidas.
@@ -190,7 +188,6 @@ purchaseShortages: Array<{
   quantity: number
   lossAmountNio: number
   shortageDate: string
-  comments: string | null
   refundStatus: 1 | 2 | 3 | 4
 }>
 ```

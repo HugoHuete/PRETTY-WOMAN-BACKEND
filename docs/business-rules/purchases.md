@@ -212,7 +212,7 @@ Si el proveedor confirma que una parte de la línea nunca será entregada, la ca
 
 ## Regla: faltantes confirmados y reembolso del proveedor
 
-Cuando el proveedor confirme que una parte de una orden no llegará, el administrador debe cerrar los faltantes pendientes. Por cada variante pendiente se crea un `purchase_shortage` con la cantidad faltante, la fecha y el costo perdido congelado en `loss_amount_nio`.
+Cuando el proveedor confirme que una parte de una orden no llegará, el administrador debe cerrar los faltantes pendientes. Por cada variante pendiente se crea un `purchase_shortage` con la cantidad faltante, la fecha y el costo perdido congelado en `loss_amount_nio`. Los comentarios se mantienen únicamente en la orden, no en cada faltante.
 
 Al cerrar faltantes con pérdida, la cantidad final de la variante queda igual a la cantidad realmente recibida y la orden pasa a `PendingRefund`: no admite más recepciones normales y queda pendiente de resolver el reembolso. El faltante no crea un nuevo egreso financiero: el pago original ya se registró como `SupplierPayment`.
 
