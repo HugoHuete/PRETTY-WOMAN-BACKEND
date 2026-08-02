@@ -11,28 +11,13 @@ public class OrderDTO
     public int SupplierId { get; set; }
     public int PurchaseCurrencyId { get; set; }
     public string? PurchaseCurrencyName { get; set; }
-
-    [Range(0, double.MaxValue, ErrorMessage = "El monto USD debe ser mayor o igual a cero.")]
     public decimal AmountUsd { get; set; }
-
-    [Range(0, double.MaxValue, ErrorMessage = "El total de mercaderia en cordobas debe ser mayor o igual a cero.")]
     public decimal MerchandiseTotalNio { get; set; }
-
-    [Range(0, double.MaxValue, ErrorMessage = "El monto recibido en cordobas debe ser mayor o igual a cero.")]
     public decimal ReceivedAmountNio { get; set; }
-
-    [Range(0, double.MaxValue, ErrorMessage = "El costo de envio del proveedor a bodega en dolares debe ser mayor o igual a cero.")]
     public decimal SupplierShippingCostUsd { get; set; }
-
-    [Range(0, double.MaxValue, ErrorMessage = "El costo de envio de bodega a Nicaragua en dolares debe ser mayor o igual a cero.")]
     public decimal WarehouseShippingCostUsd { get; set; }
-
-    [Range(0, double.MaxValue, ErrorMessage = "El costo total en cordobas debe ser mayor o igual a cero.")]
     public decimal TotalCostNio { get; set; }
-
     public string? Comments { get; set; }
-
-    [Range(typeof(decimal), "0.01", "1000", ErrorMessage = "La tasa de cambio debe ser mayor que cero.")]
     public decimal ExchangeRate { get; set; }
 
     public string? OrderStatusName { get; set; }
