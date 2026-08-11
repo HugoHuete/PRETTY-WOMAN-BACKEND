@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.Common.Extensions;
+using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.DTOs.Discounts;
 using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Interfaces;
@@ -97,41 +98,51 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         await _context.SaveChangesAsync();
     }
 
-    public async Task<IEnumerable<DiscountCampaignDTO>> GetAllAsync(bool? enabled = null)
+    public async Task<PaginatedResult<DiscountCampaignSummaryDTO>> GetAllAsync(DiscountCampaignQueryDTO query)
     {
-        var discountCampaigns = await _context.DiscountCampaigns
-            .AsNoTracking()
-            .Where(campaign => !enabled.HasValue || campaign.Enabled == enabled.Value)
-            .OrderByDescending(campaign => campaign.StartDate)
-            .ThenBy(campaign => campaign.Name)
-            .Select(campaign => new DiscountCampaignDTO
-            {
-                Id = campaign.Id,
-                Name = campaign.Name,
-                StartDate = campaign.StartDate,
-                EndDate = campaign.EndDate,
-                Enabled = campaign.Enabled,
-                CreatedAt = campaign.CreatedAt,
-                UpdatedAt = campaign.UpdatedAt,
-                CreatedById = campaign.CreatedById,
-                UpdatedById = campaign.UpdatedById,
-                Products = campaign.DiscountCampaignProducts
-                    .OrderBy(product => product.ProductDetail != null ? product.ProductDetail.Name : string.Empty)
-                    .Select(product => new DiscountCampaignProductDTO
-                    {
-                        Id = product.Id,
-                        ProductDetailId = product.ProductDetailId,
-                        ProductName = product.ProductDetail != null ? product.ProductDetail.Name : null,
-                        ProductCode = product.ProductDetail != null ? product.ProductDetail.Code : null,
-                        DiscountTypeId = product.DiscountTypeId,
-                        DiscountTypeName = product.DiscountType != null ? product.DiscountType.Name : null,
-                        DiscountValue = product.DiscountValue
-                    })
-                    .ToList()
-            })
-            .ToListAsync();
+        NormalizePagination(query);
 
-        return discountCampaigns;
+        var campaignsQuery = _context.DiscountCampaigns
+            .AsNoTracking()
+            .Where(campaign => !query.Enabled.HasValue || campaign.Enabled == query.Enabled.Value);
+
+        var totalCount = await campaignsQuery.CountAsync();
+        var skip = (long)(query.Page - 1) * query.PageSize;
+        List<DiscountCampaignSummaryDTO> campaigns;
+        if (skip >= totalCount)
+        {
+            campaigns = [];
+        }
+        else
+        {
+            campaigns = await campaignsQuery
+                .OrderByDescending(campaign => campaign.StartDate)
+                .ThenBy(campaign => campaign.Name)
+                .ThenBy(campaign => campaign.Id)
+                .Skip((int)skip)
+                .Take(query.PageSize)
+                .Select(campaign => new DiscountCampaignSummaryDTO
+                {
+                    Id = campaign.Id,
+                    Name = campaign.Name,
+                    StartDate = campaign.StartDate,
+                    EndDate = campaign.EndDate,
+                    Enabled = campaign.Enabled,
+                    CreatedAt = campaign.CreatedAt,
+                    UpdatedAt = campaign.UpdatedAt,
+                    CreatedById = campaign.CreatedById,
+                    UpdatedById = campaign.UpdatedById
+                })
+                .ToListAsync();
+        }
+
+        return new PaginatedResult<DiscountCampaignSummaryDTO>
+        {
+            Items = campaigns,
+            Page = query.Page,
+            PageSize = query.PageSize,
+            TotalCount = totalCount
+        };
     }
 
     public async Task<DiscountCampaignDTO> GetByIdAsync(int id)
@@ -196,6 +207,12 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         }
 
         return name;
+    }
+
+    private static void NormalizePagination(DiscountCampaignQueryDTO query)
+    {
+        query.Page = Math.Max(query.Page, 1);
+        query.PageSize = query.PageSize < 1 ? 20 : Math.Min(query.PageSize, 100);
     }
 
     private async Task ValidateProductDetailsAsync(IReadOnlyCollection<CreateDiscountCampaignProductDTO> products)

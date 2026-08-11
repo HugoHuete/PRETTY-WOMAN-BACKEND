@@ -262,6 +262,48 @@ Las acciones de imágenes e historial están disponibles para Admin y Vendedor d
 
 Después de subir, ordenar o eliminar, actualizar la colección con la respuesta o recargar el detalle. Usar `thumbnailUrl` en listas y `webUrl` para vista ampliada.
 
+### Descuentos: campañas
+
+La pantalla de campañas es exclusiva de Admin. Para el listado usar `GET /api/v1/discountcampaigns`, que devuelve un `PaginatedResult<DiscountCampaignSummaryDTO>`.
+
+```http
+GET /api/v1/discountcampaigns?page=1&pageSize=20
+GET /api/v1/discountcampaigns?page=2&pageSize=10&enabled=true
+GET /api/v1/discountcampaigns?enabled=false
+```
+
+`page` y `pageSize` son opcionales; sus valores predeterminados son `1` y `20`. `pageSize` se normaliza al rango `1..100` (un valor menor de `1` usa `20`, y uno mayor de `100` usa `100`). `enabled` también es opcional: omitirlo devuelve campañas habilitadas y deshabilitadas; `true` o `false` filtra por ese estado.
+
+La respuesta paginada tiene la forma:
+
+```json
+{
+  "items": [
+    {
+      "id": 12,
+      "name": "Rebajas de agosto",
+      "startDate": "2026-08-01T00:00:00Z",
+      "endDate": "2026-08-31T23:59:59Z",
+      "enabled": true,
+      "createdAt": "2026-07-28T15:30:00Z",
+      "updatedAt": null,
+      "createdById": "user-id",
+      "updatedById": null
+    }
+  ],
+  "page": 1,
+  "pageSize": 20,
+  "totalCount": 1,
+  "totalPages": 1,
+  "hasPreviousPage": false,
+  "hasNextPage": false
+}
+```
+
+Los elementos de `items` son resúmenes: **no incluyen `products`**. Usarlos para la tabla, el filtro y la paginación sin solicitar ni asumir el detalle de prendas.
+
+Para abrir o editar una campaña, `GET /api/v1/discountcampaigns/{id}` mantiene la respuesta de detalle `DiscountCampaignDTO`, que **sí incluye `products`**. Cada producto contiene `id`, `productDetailId`, `productName`, `productCode`, `discountTypeId`, `discountTypeName` y `discountValue`.
+
 ### Finanzas: catálogo de tipos de movimiento
 
 Antes de crear o filtrar movimientos financieros, cargar `GET /api/v1/finances/movement-types`. Devuelve una lista de `{ id, name }`; la UI debe usar estos ids y nombres, no hardcodear tipos. Los movimientos automáticos —por ejemplo `SupplierRefund` o `WarehouseShippingPayment`— se muestran en el listado financiero, pero no deben crearse manualmente desde la pantalla de movimientos.

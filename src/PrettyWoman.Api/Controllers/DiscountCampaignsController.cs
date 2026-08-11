@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Application.DTOs.Discounts;
 using PrettyWoman.Application.Interfaces;
@@ -14,9 +15,10 @@ public class DiscountCampaignsController(IDiscountCampaignService discountCampai
     private readonly IDiscountCampaignService _discountCampaignService = discountCampaignService;
 
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<DiscountCampaignDTO>>> GetAll([FromQuery] bool? enabled)
+    public async Task<ActionResult<PaginatedResult<DiscountCampaignSummaryDTO>>> GetAll(
+        [FromQuery] DiscountCampaignQueryDTO query)
     {
-        var discountCampaigns = await _discountCampaignService.GetAllAsync(enabled);
+        var discountCampaigns = await _discountCampaignService.GetAllAsync(query);
         return Ok(discountCampaigns);
     }
 

@@ -243,6 +243,171 @@ public class DiscountCampaignServiceTests
         Assert.False(campaign.Enabled);
     }
 
+    [Fact]
+    public async Task GetAllAsync_ReturnsAPagedCampaignSummaryWithoutProducts()
+    {
+        await using var context = CreateContext();
+        context.DiscountCampaigns.AddRange(
+            new DiscountCampaign
+            {
+                Name = "Promo enero",
+                StartDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                EndDate = new DateTime(2026, 1, 31, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new DiscountCampaign
+            {
+                Name = "Promo febrero",
+                StartDate = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+                EndDate = new DateTime(2026, 2, 28, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new DiscountCampaign
+            {
+                Name = "Promo marzo",
+                StartDate = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                EndDate = new DateTime(2026, 3, 31, 0, 0, 0, DateTimeKind.Utc)
+            });
+        await context.SaveChangesAsync();
+
+        var result = await CreateService(context).GetAllAsync(new DiscountCampaignQueryDTO
+        {
+            Page = 2,
+            PageSize = 1
+        });
+
+        var campaign = Assert.Single(result.Items);
+        Assert.IsType<DiscountCampaignSummaryDTO>(campaign);
+        Assert.Null(typeof(DiscountCampaignSummaryDTO).GetProperty("Products"));
+        Assert.Equal("Promo febrero", campaign.Name);
+        Assert.Equal(2, result.Page);
+        Assert.Equal(1, result.PageSize);
+        Assert.Equal(3, result.TotalCount);
+        Assert.Equal(3, result.TotalPages);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_FiltersCampaignsByEnabledWhenProvided()
+    {
+        await using var context = CreateContext();
+        context.DiscountCampaigns.AddRange(
+            new DiscountCampaign
+            {
+                Name = "Promo habilitada",
+                StartDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                EndDate = new DateTime(2026, 1, 31, 0, 0, 0, DateTimeKind.Utc),
+                Enabled = true
+            },
+            new DiscountCampaign
+            {
+                Name = "Promo deshabilitada",
+                StartDate = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+                EndDate = new DateTime(2026, 2, 28, 0, 0, 0, DateTimeKind.Utc),
+                Enabled = false
+            });
+        await context.SaveChangesAsync();
+
+        var disabled = await CreateService(context).GetAllAsync(new DiscountCampaignQueryDTO { Enabled = false });
+        var all = await CreateService(context).GetAllAsync(new DiscountCampaignQueryDTO { Enabled = null });
+
+        Assert.Single(disabled.Items);
+        Assert.False(disabled.Items.Single().Enabled);
+        Assert.Equal(1, disabled.TotalCount);
+        Assert.Equal(2, all.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_ReturnsProjectedProducts()
+    {
+        await using var context = CreateContext();
+        var product = await AddProductAsync(context, "Vestido detalle", 108);
+        await AddDiscountTypesAsync(context);
+        var campaign = new DiscountCampaign
+        {
+            Name = "Promo detalle",
+            StartDate = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc),
+            EndDate = new DateTime(2026, 8, 31, 0, 0, 0, DateTimeKind.Utc),
+            DiscountCampaignProducts =
+            [
+                new DiscountCampaignProduct
+                {
+                    ProductDetailId = product.ProductDetailId,
+                    DiscountTypeId = (int)DiscountTypeOption.Percentage,
+                    DiscountValue = 20
+                }
+            ]
+        };
+        context.DiscountCampaigns.Add(campaign);
+        await context.SaveChangesAsync();
+
+        var result = await CreateService(context).GetByIdAsync(campaign.Id);
+
+        var detail = Assert.Single(result.Products);
+        Assert.Equal(product.ProductDetailId, detail.ProductDetailId);
+        Assert.Equal("Vestido detalle", detail.ProductName);
+        Assert.Equal(product.ProductDetail!.Code, detail.ProductCode);
+        Assert.Equal((int)DiscountTypeOption.Percentage, detail.DiscountTypeId);
+        Assert.Equal(nameof(DiscountTypeOption.Percentage), detail.DiscountTypeName);
+        Assert.Equal(20, detail.DiscountValue);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_NormalizesPaginationAndHandlesExtremePages()
+    {
+        await using var context = CreateContext();
+        context.DiscountCampaigns.AddRange(
+            new DiscountCampaign
+            {
+                Name = "Promo uno",
+                StartDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
+                EndDate = new DateTime(2026, 1, 31, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new DiscountCampaign
+            {
+                Name = "Promo dos",
+                StartDate = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
+                EndDate = new DateTime(2026, 2, 28, 0, 0, 0, DateTimeKind.Utc)
+            },
+            new DiscountCampaign
+            {
+                Name = "Promo tres",
+                StartDate = new DateTime(2026, 3, 1, 0, 0, 0, DateTimeKind.Utc),
+                EndDate = new DateTime(2026, 3, 31, 0, 0, 0, DateTimeKind.Utc)
+            });
+        await context.SaveChangesAsync();
+        var service = CreateService(context);
+
+        var normalized = await service.GetAllAsync(new DiscountCampaignQueryDTO { Page = 0, PageSize = 101 });
+        var defaulted = await service.GetAllAsync(new DiscountCampaignQueryDTO { Page = 0, PageSize = 0 });
+        var middle = await service.GetAllAsync(new DiscountCampaignQueryDTO { Page = 2, PageSize = 1 });
+        var extreme = await service.GetAllAsync(new DiscountCampaignQueryDTO { Page = int.MaxValue, PageSize = 100 });
+
+        Assert.Equal(1, normalized.Page);
+        Assert.Equal(100, normalized.PageSize);
+        Assert.Equal(20, defaulted.PageSize);
+        Assert.False(normalized.HasPreviousPage);
+        Assert.False(normalized.HasNextPage);
+        Assert.True(middle.HasPreviousPage);
+        Assert.True(middle.HasNextPage);
+        Assert.Empty(extreme.Items);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_UsesNameAndIdAsStableTieBreakers()
+    {
+        await using var context = CreateContext();
+        var startDate = new DateTime(2026, 4, 1, 0, 0, 0, DateTimeKind.Utc);
+        context.DiscountCampaigns.AddRange(
+            new DiscountCampaign { Name = "B", StartDate = startDate, EndDate = startDate.AddDays(1) },
+            new DiscountCampaign { Name = "A", StartDate = startDate, EndDate = startDate.AddDays(1) },
+            new DiscountCampaign { Name = "A", StartDate = startDate, EndDate = startDate.AddDays(1) });
+        await context.SaveChangesAsync();
+
+        var result = await CreateService(context).GetAllAsync(new DiscountCampaignQueryDTO { PageSize = 3 });
+
+        Assert.Equal(["A", "A", "B"], result.Items.Select(item => item.Name).ToArray());
+        var duplicateIds = result.Items.Where(item => item.Name == "A").Select(item => item.Id).ToArray();
+        Assert.Equal(duplicateIds.OrderBy(id => id), duplicateIds);
+    }
+
     private static DiscountCampaignService CreateService(ApplicationDbContext context)
     {
         return new DiscountCampaignService(context);
