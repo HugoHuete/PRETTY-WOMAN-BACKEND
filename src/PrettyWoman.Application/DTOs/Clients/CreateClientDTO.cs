@@ -13,6 +13,6 @@ public class CreateClientDTO
     public string? InstagramUser { get; set; }
     public string? MessengerUser { get; set; }
     public string? Address { get; set; }
-    public bool IsFriend { get; set; }
+    public bool IsFriend { get; set; } = false;
     public string? Comments { get; set; }
 }
