@@ -44,10 +44,17 @@ public class DiscountCampaignsController(IDiscountCampaignService discountCampai
         return NoContent();
     }
 
-    [HttpPatch("{id:int}/disable")]
-    public async Task<IActionResult> Disable(int id)
+    [HttpPatch("{id:int}/cancel")]
+    public async Task<IActionResult> Cancel(int id)
     {
-        await _discountCampaignService.DisableAsync(id);
+        await _discountCampaignService.CancelAsync(id);
+        return NoContent();
+    }
+
+    [HttpPatch("{id:int}/reactivate")]
+    public async Task<IActionResult> Reactivate(int id)
+    {
+        await _discountCampaignService.ReactivateAsync(id);
         return NoContent();
     }
 }

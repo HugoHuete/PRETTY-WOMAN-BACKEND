@@ -245,7 +245,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
     {
         return productDetail.DiscountCampaignProducts
             .Where(discount =>
-                discount.DiscountCampaign is { Enabled: true } &&
+                discount.DiscountCampaign is { CancelledAt: null } &&
                 discount.DiscountCampaign.StartDate <= now &&
                 discount.DiscountCampaign.EndDate >= now)
             .Select(discount => new ActiveDiscountDTO(

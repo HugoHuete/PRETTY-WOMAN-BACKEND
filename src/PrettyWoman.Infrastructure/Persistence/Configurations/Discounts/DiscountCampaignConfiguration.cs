@@ -14,7 +14,7 @@ public class DiscountCampaignConfiguration : IEntityTypeConfiguration<DiscountCa
             .IsRequired()
             .HasMaxLength(200);
         
-        builder.HasIndex(x => new {x.Enabled, x.StartDate, x.EndDate});
+        builder.HasIndex(x => new { x.CancelledAt, x.StartDate, x.EndDate });
 
         builder.ToTable(t =>
         {

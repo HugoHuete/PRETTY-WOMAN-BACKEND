@@ -102,6 +102,28 @@ public class ProductServiceTests
     }
 
     [Fact]
+    public async Task GetAllAsync_IgnoresCancelledAndOutOfRangeCampaigns()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var service = CreateService(context);
+
+        var activeProduct = Assert.Single((await service.GetAllAsync(new ProductQueryDTO { Code = 1001 })).Items);
+        var futureProduct = Assert.Single((await service.GetAllAsync(new ProductQueryDTO { Code = 1002 })).Items);
+
+        Assert.All(activeProduct.Products, product =>
+        {
+            Assert.Equal(585m, product.DiscountedSalePrice);
+            Assert.Equal(1, product.DiscountCampaignId);
+        });
+        Assert.All(futureProduct.Products, product =>
+        {
+            Assert.Null(product.DiscountedSalePrice);
+            Assert.Null(product.DiscountCampaignId);
+        });
+    }
+
+    [Fact]
     public async Task GetByIdAsync_ReturnsProductDetailWithProductsPrimaryImageAndDiscountedPrice()
     {
         await using var context = CreateContext();
@@ -322,7 +344,6 @@ public class ProductServiceTests
                 Name = "Promo vigente",
                 StartDate = now.AddDays(-1),
                 EndDate = now.AddDays(1),
-                Enabled = true,
                 DiscountCampaignProducts =
                 [
                     new DiscountCampaignProduct
@@ -339,7 +360,6 @@ public class ProductServiceTests
                 Name = "Promo futura",
                 StartDate = now.AddDays(1),
                 EndDate = now.AddDays(2),
-                Enabled = true,
                 DiscountCampaignProducts =
                 [
                     new DiscountCampaignProduct
@@ -347,6 +367,23 @@ public class ProductServiceTests
                         ProductDetail = blouse,
                         DiscountTypeId = (int)DiscountTypeOption.FixedPrice,
                         DiscountValue = 300m
+                    }
+                ]
+            },
+            new DiscountCampaign
+            {
+                Id = 3,
+                Name = "Promo cancelada",
+                StartDate = now.AddDays(-1),
+                EndDate = now.AddDays(1),
+                CancelledAt = now.AddHours(-1),
+                DiscountCampaignProducts =
+                [
+                    new DiscountCampaignProduct
+                    {
+                        ProductDetail = pants,
+                        DiscountTypeId = (int)DiscountTypeOption.FixedPrice,
+                        DiscountValue = 1m
                     }
                 ]
             });

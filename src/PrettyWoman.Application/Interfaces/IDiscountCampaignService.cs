@@ -9,5 +9,6 @@ public interface IDiscountCampaignService
     Task<PaginatedResult<DiscountCampaignSummaryDTO>> GetAllAsync(DiscountCampaignQueryDTO query);
     Task<int> CreateAsync(CreateDiscountCampaignDTO createDiscountCampaignDTO);
     Task UpdateAsync(int id, UpdateDiscountCampaignDTO updateDiscountCampaignDTO);
-    Task DisableAsync(int id);
+    Task CancelAsync(int id);
+    Task ReactivateAsync(int id);
 }

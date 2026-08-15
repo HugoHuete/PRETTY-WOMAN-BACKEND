@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PrettyWoman.Application.Common.Discounts;
 using PrettyWoman.Application.Common.Extensions;
 using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.DTOs.Discounts;
@@ -24,7 +25,7 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             Name = createDiscountCampaignDTO.Name,
             StartDate = createDiscountCampaignDTO.StartDate,
             EndDate = createDiscountCampaignDTO.EndDate,
-            Enabled = createDiscountCampaignDTO.Enabled,
+            CancelledAt = null,
             DiscountCampaignProducts = createDiscountCampaignDTO.Products
                 .Select(product => new DiscountCampaignProduct
                 {
@@ -55,7 +56,6 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         discountCampaign.Name = updateDiscountCampaignDTO.Name;
         discountCampaign.StartDate = updateDiscountCampaignDTO.StartDate;
         discountCampaign.EndDate = updateDiscountCampaignDTO.EndDate;
-        discountCampaign.Enabled = updateDiscountCampaignDTO.Enabled;
 
         var existingProductsByProductDetailId = discountCampaign.DiscountCampaignProducts
             .ToDictionary(product => product.ProductDetailId);
@@ -89,12 +89,21 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         await _context.SaveChangesAsync();
     }
 
-    public async Task DisableAsync(int id)
+    public async Task CancelAsync(int id)
     {
         var discountCampaign = await _context.DiscountCampaigns.FirstOrDefaultAsync(campaign => campaign.Id == id)
             ?? throw new AppNotFoundException($"La campania de descuento con id '{id}' no existe.");
 
-        discountCampaign.Enabled = false;
+        discountCampaign.CancelledAt = DateTime.UtcNow;
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task ReactivateAsync(int id)
+    {
+        var discountCampaign = await _context.DiscountCampaigns.FirstOrDefaultAsync(campaign => campaign.Id == id)
+            ?? throw new AppNotFoundException($"La campania de descuento con id '{id}' no existe.");
+
+        discountCampaign.CancelledAt = null;
         await _context.SaveChangesAsync();
     }
 
@@ -102,9 +111,31 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
     {
         NormalizePagination(query);
 
+        if (query.Status.HasValue && !Enum.IsDefined(query.Status.Value))
+        {
+            throw new AppBadRequestException("El estado de la campania de descuento no es válido.");
+        }
+
+        var now = DateTime.UtcNow;
+
         var campaignsQuery = _context.DiscountCampaigns
             .AsNoTracking()
-            .Where(campaign => !query.Enabled.HasValue || campaign.Enabled == query.Enabled.Value);
+            .AsQueryable();
+
+        if (query.Status.HasValue)
+        {
+            campaignsQuery = query.Status.Value switch
+            {
+                DiscountCampaignStatusOption.Scheduled => campaignsQuery.Where(campaign =>
+                    !campaign.CancelledAt.HasValue && campaign.StartDate > now),
+                DiscountCampaignStatusOption.Active => campaignsQuery.Where(campaign =>
+                    !campaign.CancelledAt.HasValue && campaign.StartDate <= now && campaign.EndDate >= now),
+                DiscountCampaignStatusOption.Finished => campaignsQuery.Where(campaign =>
+                    !campaign.CancelledAt.HasValue && campaign.EndDate < now),
+                DiscountCampaignStatusOption.Cancelled => campaignsQuery.Where(campaign => campaign.CancelledAt.HasValue),
+                _ => campaignsQuery
+            };
+        }
 
         var totalCount = await campaignsQuery.CountAsync();
         var skip = (long)(query.Page - 1) * query.PageSize;
@@ -115,25 +146,17 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         }
         else
         {
-            campaigns = await campaignsQuery
+            var campaignEntities = await campaignsQuery
                 .OrderByDescending(campaign => campaign.StartDate)
                 .ThenBy(campaign => campaign.Name)
                 .ThenBy(campaign => campaign.Id)
                 .Skip((int)skip)
                 .Take(query.PageSize)
-                .Select(campaign => new DiscountCampaignSummaryDTO
-                {
-                    Id = campaign.Id,
-                    Name = campaign.Name,
-                    StartDate = campaign.StartDate,
-                    EndDate = campaign.EndDate,
-                    Enabled = campaign.Enabled,
-                    CreatedAt = campaign.CreatedAt,
-                    UpdatedAt = campaign.UpdatedAt,
-                    CreatedById = campaign.CreatedById,
-                    UpdatedById = campaign.UpdatedById
-                })
                 .ToListAsync();
+
+            campaigns = campaignEntities
+                .Select(campaign => MapSummary(campaign, now))
+                .ToList();
         }
 
         return new PaginatedResult<DiscountCampaignSummaryDTO>
@@ -149,36 +172,65 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
     {
         var discountCampaign = await _context.DiscountCampaigns
             .AsNoTracking()
-            .Where(campaign => campaign.Id == id)
-            .Select(campaign => new DiscountCampaignDTO
-            {
-                Id = campaign.Id,
-                Name = campaign.Name,
-                StartDate = campaign.StartDate,
-                EndDate = campaign.EndDate,
-                Enabled = campaign.Enabled,
-                CreatedAt = campaign.CreatedAt,
-                UpdatedAt = campaign.UpdatedAt,
-                CreatedById = campaign.CreatedById,
-                UpdatedById = campaign.UpdatedById,
-                Products = campaign.DiscountCampaignProducts
-                    .OrderBy(product => product.ProductDetail != null ? product.ProductDetail.Name : string.Empty)
-                    .Select(product => new DiscountCampaignProductDTO
-                    {
-                        Id = product.Id,
-                        ProductDetailId = product.ProductDetailId,
-                        ProductName = product.ProductDetail != null ? product.ProductDetail.Name : null,
-                        ProductCode = product.ProductDetail != null ? product.ProductDetail.Code : null,
-                        DiscountTypeId = product.DiscountTypeId,
-                        DiscountTypeName = product.DiscountType != null ? product.DiscountType.Name : null,
-                        DiscountValue = product.DiscountValue
-                    })
-                    .ToList()
-            })
-            .FirstOrDefaultAsync()
+            .Include(campaign => campaign.DiscountCampaignProducts)
+                .ThenInclude(product => product.ProductDetail)
+            .Include(campaign => campaign.DiscountCampaignProducts)
+                .ThenInclude(product => product.DiscountType)
+            .FirstOrDefaultAsync(campaign => campaign.Id == id)
             ?? throw new AppNotFoundException($"La campania de descuento con id '{id}' no existe.");
 
-        return discountCampaign;
+        return MapDetail(discountCampaign, DateTime.UtcNow);
+    }
+
+    private static DiscountCampaignSummaryDTO MapSummary(DiscountCampaign campaign, DateTime now)
+    {
+        var status = DiscountCampaignStatusResolver.Resolve(campaign, now);
+
+        return new DiscountCampaignSummaryDTO
+        {
+            Id = campaign.Id,
+            Name = campaign.Name,
+            StartDate = campaign.StartDate,
+            EndDate = campaign.EndDate,
+            StatusId = (int)status,
+            StatusName = status.ToString(),
+            CreatedAt = campaign.CreatedAt,
+            UpdatedAt = campaign.UpdatedAt,
+            CreatedById = campaign.CreatedById,
+            UpdatedById = campaign.UpdatedById
+        };
+    }
+
+    private static DiscountCampaignDTO MapDetail(DiscountCampaign campaign, DateTime now)
+    {
+        var status = DiscountCampaignStatusResolver.Resolve(campaign, now);
+
+        return new DiscountCampaignDTO
+        {
+            Id = campaign.Id,
+            Name = campaign.Name,
+            StartDate = campaign.StartDate,
+            EndDate = campaign.EndDate,
+            StatusId = (int)status,
+            StatusName = status.ToString(),
+            CreatedAt = campaign.CreatedAt,
+            UpdatedAt = campaign.UpdatedAt,
+            CreatedById = campaign.CreatedById,
+            UpdatedById = campaign.UpdatedById,
+            Products = campaign.DiscountCampaignProducts
+                .OrderBy(product => product.ProductDetail?.Name ?? string.Empty)
+                .Select(product => new DiscountCampaignProductDTO
+                {
+                    Id = product.Id,
+                    ProductDetailId = product.ProductDetailId,
+                    ProductName = product.ProductDetail?.Name,
+                    ProductCode = product.ProductDetail?.Code,
+                    DiscountTypeId = product.DiscountTypeId,
+                    DiscountTypeName = product.DiscountType?.Name,
+                    DiscountValue = product.DiscountValue
+                })
+                .ToList()
+        };
     }
 
     private static void NormalizeAndValidateCampaign(CreateDiscountCampaignDTO discountCampaignDTO)

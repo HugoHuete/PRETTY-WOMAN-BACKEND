@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PrettyWoman.Application.Common.Discounts;
 using PrettyWoman.Application.DTOs.Discounts;
 using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Services;
@@ -11,6 +12,65 @@ namespace PrettyWoman.Application.Tests.Services.Discounts;
 public class DiscountCampaignServiceTests
 {
     [Fact]
+    public void Resolve_ReturnsCancelled_WhenCampaignHasBeenCancelled()
+    {
+        var campaign = CreateCampaign(
+            startDate: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
+            endDate: new DateTime(2026, 6, 30, 0, 0, 0, DateTimeKind.Utc),
+            cancelledAt: new DateTime(2026, 5, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        var status = DiscountCampaignStatusResolver.Resolve(
+            campaign,
+            new DateTime(2026, 6, 15, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(DiscountCampaignStatusOption.Cancelled, status);
+    }
+
+    [Fact]
+    public void Resolve_ReturnsScheduled_WhenCampaignHasNotStarted()
+    {
+        var campaign = CreateCampaign(
+            startDate: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
+            endDate: new DateTime(2026, 6, 30, 0, 0, 0, DateTimeKind.Utc));
+
+        var status = DiscountCampaignStatusResolver.Resolve(
+            campaign,
+            new DateTime(2026, 5, 31, 23, 59, 59, DateTimeKind.Utc));
+
+        Assert.Equal(DiscountCampaignStatusOption.Scheduled, status);
+    }
+
+    [Theory]
+    [InlineData(2026, 6, 1)]
+    [InlineData(2026, 6, 30)]
+    public void Resolve_ReturnsActive_WhenNowIsWithinCampaignDateRange(int year, int month, int day)
+    {
+        var campaign = CreateCampaign(
+            startDate: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
+            endDate: new DateTime(2026, 6, 30, 0, 0, 0, DateTimeKind.Utc));
+
+        var status = DiscountCampaignStatusResolver.Resolve(
+            campaign,
+            new DateTime(year, month, day, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(DiscountCampaignStatusOption.Active, status);
+    }
+
+    [Fact]
+    public void Resolve_ReturnsFinished_WhenCampaignHasEnded()
+    {
+        var campaign = CreateCampaign(
+            startDate: new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
+            endDate: new DateTime(2026, 6, 30, 0, 0, 0, DateTimeKind.Utc));
+
+        var status = DiscountCampaignStatusResolver.Resolve(
+            campaign,
+            new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc));
+
+        Assert.Equal(DiscountCampaignStatusOption.Finished, status);
+    }
+
+    [Fact]
     public async Task CreateAsync_CreatesCampaignWithProductsAndTrimmedName()
     {
         await using var context = CreateContext();
@@ -21,8 +81,8 @@ public class DiscountCampaignServiceTests
         var campaignId = await service.CreateAsync(new CreateDiscountCampaignDTO
         {
             Name = "  Promo verano  ",
-            StartDate = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
-            EndDate = new DateTime(2026, 6, 30, 0, 0, 0, DateTimeKind.Utc),
+            StartDate = DateTime.UtcNow.AddDays(-3),
+            EndDate = DateTime.UtcNow.AddDays(-2),
             Products =
             [
                 new CreateDiscountCampaignProductDTO
@@ -40,9 +100,14 @@ public class DiscountCampaignServiceTests
 
         Assert.Equal(campaign.Id, campaignId);
         Assert.Equal("Promo verano", campaign.Name);
-        Assert.True(campaign.Enabled);
+        Assert.Null(campaign.CancelledAt);
         Assert.Single(campaign.DiscountCampaignProducts);
         Assert.Equal(product.ProductDetailId, campaign.DiscountCampaignProducts.Single().ProductDetailId);
+
+        var result = await service.GetByIdAsync(campaignId);
+
+        Assert.Equal((int)DiscountCampaignStatusOption.Finished, result.StatusId);
+        Assert.Equal(nameof(DiscountCampaignStatusOption.Finished), result.StatusName);
     }
 
     [Fact]
@@ -89,7 +154,7 @@ public class DiscountCampaignServiceTests
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(new CreateDiscountCampaignDTO
         {
-            Name = "Promo inv·lida",
+            Name = "Promo inv√°lida",
             StartDate = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
             EndDate = new DateTime(2026, 6, 30, 0, 0, 0, DateTimeKind.Utc),
             Products =
@@ -111,13 +176,14 @@ public class DiscountCampaignServiceTests
     {
         await using var context = CreateContext();
         var firstProduct = await AddProductAsync(context, "Vestido", 104);
-        var secondProduct = await AddProductAsync(context, "PantalÛn", 105);
+        var secondProduct = await AddProductAsync(context, "Pantal√≥n", 105);
         await AddDiscountTypesAsync(context);
         var campaign = new DiscountCampaign
         {
             Name = "Promo",
             StartDate = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
             EndDate = new DateTime(2026, 6, 30, 0, 0, 0, DateTimeKind.Utc),
+            CancelledAt = new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc),
             DiscountCampaignProducts =
             [
                 new DiscountCampaignProduct
@@ -137,7 +203,6 @@ public class DiscountCampaignServiceTests
             Name = "  Promo actualizada  ",
             StartDate = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc),
             EndDate = new DateTime(2026, 7, 31, 0, 0, 0, DateTimeKind.Utc),
-            Enabled = false,
             Products =
             [
                 new UpdateDiscountCampaignProductDTO
@@ -154,7 +219,7 @@ public class DiscountCampaignServiceTests
             .SingleAsync();
 
         Assert.Equal("Promo actualizada", updatedCampaign.Name);
-        Assert.False(updatedCampaign.Enabled);
+        Assert.Equal(new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc), updatedCampaign.CancelledAt);
         Assert.Single(updatedCampaign.DiscountCampaignProducts);
         Assert.Equal(secondProduct.ProductDetailId, updatedCampaign.DiscountCampaignProducts.Single().ProductDetailId);
         Assert.Equal((int)DiscountTypeOption.FixedPrice, updatedCampaign.DiscountCampaignProducts.Single().DiscountTypeId);
@@ -165,7 +230,7 @@ public class DiscountCampaignServiceTests
     {
         await using var context = CreateContext();
         var firstProduct = await AddProductAsync(context, "Vestido", 106);
-        var secondProduct = await AddProductAsync(context, "PantalÛn", 107);
+        var secondProduct = await AddProductAsync(context, "Pantal√≥n", 107);
         await AddDiscountTypesAsync(context);
         var campaign = new DiscountCampaign
         {
@@ -200,7 +265,6 @@ public class DiscountCampaignServiceTests
             Name = "Promo actualizada",
             StartDate = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc),
             EndDate = new DateTime(2026, 7, 31, 0, 0, 0, DateTimeKind.Utc),
-            Enabled = true,
             Products =
             [
                 new UpdateDiscountCampaignProductDTO
@@ -224,23 +288,93 @@ public class DiscountCampaignServiceTests
     }
 
     [Fact]
-    public async Task DisableAsync_DisablesCampaign()
+    public async Task CancelAsync_CancelsCampaign()
     {
         await using var context = CreateContext();
         var campaign = new DiscountCampaign
         {
             Name = "Promo",
-            StartDate = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
-            EndDate = new DateTime(2026, 6, 30, 0, 0, 0, DateTimeKind.Utc),
-            Enabled = true
+            StartDate = DateTime.UtcNow.AddDays(-1),
+            EndDate = DateTime.UtcNow.AddDays(1)
         };
         context.DiscountCampaigns.Add(campaign);
         await context.SaveChangesAsync();
         var service = CreateService(context);
 
-        await service.DisableAsync(campaign.Id);
+        await service.CancelAsync(campaign.Id);
 
-        Assert.False(campaign.Enabled);
+        Assert.NotNull(campaign.CancelledAt);
+
+        var result = await service.GetByIdAsync(campaign.Id);
+
+        Assert.Equal((int)DiscountCampaignStatusOption.Cancelled, result.StatusId);
+        Assert.Equal(nameof(DiscountCampaignStatusOption.Cancelled), result.StatusName);
+    }
+
+    [Fact]
+    public async Task ReactivateAsync_ReactivatesFutureCampaignAsScheduled()
+    {
+        await using var context = CreateContext();
+        var campaign = new DiscountCampaign
+        {
+            Name = "Promo futura",
+            StartDate = DateTime.UtcNow.AddDays(2),
+            EndDate = DateTime.UtcNow.AddDays(3),
+            CancelledAt = DateTime.UtcNow.AddDays(-1)
+        };
+        context.DiscountCampaigns.Add(campaign);
+        await context.SaveChangesAsync();
+
+        await CreateService(context).ReactivateAsync(campaign.Id);
+
+        var result = await CreateService(context).GetByIdAsync(campaign.Id);
+
+        Assert.Null(campaign.CancelledAt);
+        Assert.Equal((int)DiscountCampaignStatusOption.Scheduled, result.StatusId);
+        Assert.Equal(nameof(DiscountCampaignStatusOption.Scheduled), result.StatusName);
+    }
+
+    [Fact]
+    public async Task ReactivateAsync_ReactivatesExpiredCampaignAsFinished()
+    {
+        await using var context = CreateContext();
+        var campaign = new DiscountCampaign
+        {
+            Name = "Promo finalizada",
+            StartDate = DateTime.UtcNow.AddDays(-3),
+            EndDate = DateTime.UtcNow.AddDays(-2),
+            CancelledAt = DateTime.UtcNow.AddDays(-1)
+        };
+        context.DiscountCampaigns.Add(campaign);
+        await context.SaveChangesAsync();
+
+        await CreateService(context).ReactivateAsync(campaign.Id);
+
+        var result = await CreateService(context).GetByIdAsync(campaign.Id);
+
+        Assert.Null(campaign.CancelledAt);
+        Assert.Equal((int)DiscountCampaignStatusOption.Finished, result.StatusId);
+        Assert.Equal(nameof(DiscountCampaignStatusOption.Finished), result.StatusName);
+    }
+
+    [Fact]
+    public async Task CancelAsync_ThrowsWhenCampaignDoesNotExist()
+    {
+        await using var context = CreateContext();
+
+        var exception = await Assert.ThrowsAsync<AppNotFoundException>(() => CreateService(context).CancelAsync(999));
+
+        Assert.Equal("La campania de descuento con id '999' no existe.", exception.Message);
+    }
+
+    [Fact]
+    public async Task ReactivateAsync_ThrowsWhenCampaignDoesNotExist()
+    {
+        await using var context = CreateContext();
+
+        var exception = await Assert.ThrowsAsync<AppNotFoundException>(() => CreateService(context).ReactivateAsync(999));
+
+        Assert.Equal("La campania de descuento con id '999' no existe.", exception.Message);
     }
 
     [Fact]
@@ -278,6 +412,8 @@ public class DiscountCampaignServiceTests
         Assert.IsType<DiscountCampaignSummaryDTO>(campaign);
         Assert.Null(typeof(DiscountCampaignSummaryDTO).GetProperty("Products"));
         Assert.Equal("Promo febrero", campaign.Name);
+        Assert.Equal((int)DiscountCampaignStatusOption.Finished, campaign.StatusId);
+        Assert.Equal(nameof(DiscountCampaignStatusOption.Finished), campaign.StatusName);
         Assert.Equal(2, result.Page);
         Assert.Equal(1, result.PageSize);
         Assert.Equal(3, result.TotalCount);
@@ -285,33 +421,64 @@ public class DiscountCampaignServiceTests
     }
 
     [Fact]
-    public async Task GetAllAsync_FiltersCampaignsByEnabledWhenProvided()
+    public async Task GetAllAsync_FiltersCampaignsByStatusWhenProvided()
     {
         await using var context = CreateContext();
+        var now = DateTime.UtcNow;
         context.DiscountCampaigns.AddRange(
             new DiscountCampaign
             {
-                Name = "Promo habilitada",
-                StartDate = new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc),
-                EndDate = new DateTime(2026, 1, 31, 0, 0, 0, DateTimeKind.Utc),
-                Enabled = true
+                Name = "Promo programada",
+                StartDate = now.AddDays(2),
+                EndDate = now.AddDays(3)
             },
             new DiscountCampaign
             {
-                Name = "Promo deshabilitada",
-                StartDate = new DateTime(2026, 2, 1, 0, 0, 0, DateTimeKind.Utc),
-                EndDate = new DateTime(2026, 2, 28, 0, 0, 0, DateTimeKind.Utc),
-                Enabled = false
+                Name = "Promo activa",
+                StartDate = now.AddDays(-1),
+                EndDate = now.AddDays(1)
+            },
+            new DiscountCampaign
+            {
+                Name = "Promo finalizada",
+                StartDate = now.AddDays(-3),
+                EndDate = now.AddDays(-2)
+            },
+            new DiscountCampaign
+            {
+                Name = "Promo cancelada",
+                StartDate = now.AddDays(-1),
+                EndDate = now.AddDays(1),
+                CancelledAt = now.AddDays(-1)
             });
         await context.SaveChangesAsync();
 
-        var disabled = await CreateService(context).GetAllAsync(new DiscountCampaignQueryDTO { Enabled = false });
-        var all = await CreateService(context).GetAllAsync(new DiscountCampaignQueryDTO { Enabled = null });
+        var scheduled = await CreateService(context).GetAllAsync(new DiscountCampaignQueryDTO { Status = DiscountCampaignStatusOption.Scheduled });
+        var active = await CreateService(context).GetAllAsync(new DiscountCampaignQueryDTO { Status = DiscountCampaignStatusOption.Active });
+        var finished = await CreateService(context).GetAllAsync(new DiscountCampaignQueryDTO { Status = DiscountCampaignStatusOption.Finished });
+        var cancelled = await CreateService(context).GetAllAsync(new DiscountCampaignQueryDTO { Status = DiscountCampaignStatusOption.Cancelled });
+        var all = await CreateService(context).GetAllAsync(new DiscountCampaignQueryDTO { Status = null });
 
-        Assert.Single(disabled.Items);
-        Assert.False(disabled.Items.Single().Enabled);
-        Assert.Equal(1, disabled.TotalCount);
-        Assert.Equal(2, all.TotalCount);
+        Assert.Collection(scheduled.Items, item => Assert.Equal("Promo programada", item.Name));
+        Assert.Collection(active.Items, item => Assert.Equal("Promo activa", item.Name));
+        Assert.Collection(finished.Items, item => Assert.Equal("Promo finalizada", item.Name));
+        Assert.Collection(cancelled.Items, item => Assert.Equal("Promo cancelada", item.Name));
+        Assert.Equal(1, scheduled.TotalCount);
+        Assert.Equal(1, active.TotalCount);
+        Assert.Equal(1, finished.TotalCount);
+        Assert.Equal(1, cancelled.TotalCount);
+        Assert.Equal(4, all.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_ThrowsWhenStatusIsNotDefined()
+    {
+        await using var context = CreateContext();
+
+        await Assert.ThrowsAsync<AppBadRequestException>(() => CreateService(context).GetAllAsync(new DiscountCampaignQueryDTO
+        {
+            Status = (DiscountCampaignStatusOption)999
+        }));
     }
 
     [Fact]
@@ -323,8 +490,8 @@ public class DiscountCampaignServiceTests
         var campaign = new DiscountCampaign
         {
             Name = "Promo detalle",
-            StartDate = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc),
-            EndDate = new DateTime(2026, 8, 31, 0, 0, 0, DateTimeKind.Utc),
+            StartDate = DateTime.UtcNow.AddDays(-1),
+            EndDate = DateTime.UtcNow.AddDays(1),
             DiscountCampaignProducts =
             [
                 new DiscountCampaignProduct
@@ -347,6 +514,8 @@ public class DiscountCampaignServiceTests
         Assert.Equal((int)DiscountTypeOption.Percentage, detail.DiscountTypeId);
         Assert.Equal(nameof(DiscountTypeOption.Percentage), detail.DiscountTypeName);
         Assert.Equal(20, detail.DiscountValue);
+        Assert.Equal((int)DiscountCampaignStatusOption.Active, result.StatusId);
+        Assert.Equal(nameof(DiscountCampaignStatusOption.Active), result.StatusName);
     }
 
     [Fact]
@@ -411,6 +580,17 @@ public class DiscountCampaignServiceTests
     private static DiscountCampaignService CreateService(ApplicationDbContext context)
     {
         return new DiscountCampaignService(context);
+    }
+
+    private static DiscountCampaign CreateCampaign(DateTime startDate, DateTime endDate, DateTime? cancelledAt = null)
+    {
+        return new DiscountCampaign
+        {
+            Name = "Promo",
+            StartDate = startDate,
+            EndDate = endDate,
+            CancelledAt = cancelledAt
+        };
     }
 
     private static async Task AddDiscountTypesAsync(ApplicationDbContext context)

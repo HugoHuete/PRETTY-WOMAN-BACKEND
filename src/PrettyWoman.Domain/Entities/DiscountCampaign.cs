@@ -6,7 +6,7 @@ public class DiscountCampaign : IAuditableEntity
     public required string Name { get; set; }
     public DateTime StartDate { get; set; } = DateTime.UtcNow;
     public DateTime EndDate { get; set; }
-    public bool Enabled { get; set; } = true;
+    public DateTime? CancelledAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
     public string? CreatedById { get; set; }

@@ -81,7 +81,7 @@ Puede trabajar con:
 | Compras | Faltantes y reembolso | Admin | Cerrar cantidades que el proveedor confirmó que no llegarán; registrar reembolso posterior | Orden, variantes pendientes, pérdida y reembolso | `POST /api/v1/orders/{id}/shortages/close`, `POST /api/v1/orders/{id}/supplier-refund` |
 | Ventas | Postventa | Admin | Gestionar selección, cambios, devoluciones y reembolsos | Venta, líneas, inventario, pagos y entregas | Rutas `/sales/{id}/selection-holds`, `/exchanges`, `/returns` y reembolsos de pago |
 | Proveedores | Proveedores | Admin | Listar, crear, editar | Proveedores | `GET /api/v1/suppliers`, `POST /api/v1/suppliers`, `PUT /api/v1/suppliers/{id}` |
-| Descuentos | Campanas | Admin | Listar, crear, editar, deshabilitar | Campanas de descuento | `GET /api/v1/discountcampaigns`, `POST /api/v1/discountcampaigns`, `PUT /api/v1/discountcampaigns/{id}`, `PATCH /api/v1/discountcampaigns/{id}/disable` |
+| Descuentos | Campanas | Admin | Listar, crear, editar, cancelar y reactivar | Campanas de descuento | `GET /api/v1/discountcampaigns`, `POST /api/v1/discountcampaigns`, `PUT /api/v1/discountcampaigns/{id}`, `PATCH /api/v1/discountcampaigns/{id}/cancel`, `PATCH /api/v1/discountcampaigns/{id}/reactivate` |
 | Finanzas | Balance | Admin | Ver balance actual | Balance financiero | `GET /api/v1/finances/current-balance` |
 | Finanzas | Movimientos | Admin | Listar, filtrar, crear, editar, eliminar | Movimientos, tipos de movimiento | `GET /api/v1/finances/movement-types`, `GET /api/v1/finances/movements`, `POST /api/v1/finances/movements`, `PUT /api/v1/finances/movements/{id}`, `DELETE /api/v1/finances/movements/{id}` |
 | Finanzas | Prestamos | Admin | Listar, crear, editar, eliminar, registrar pagos | Prestamos, duenos, pagos | `GET /api/v1/loans`, `POST /api/v1/loans`, `PUT /api/v1/loans/{id}`, `DELETE /api/v1/loans/{id}`, `POST /api/v1/loans/{id}/payments` |
@@ -268,11 +268,13 @@ La pantalla de campañas es exclusiva de Admin. Para el listado usar `GET /api/v
 
 ```http
 GET /api/v1/discountcampaigns?page=1&pageSize=20
-GET /api/v1/discountcampaigns?page=2&pageSize=10&enabled=true
-GET /api/v1/discountcampaigns?enabled=false
+GET /api/v1/discountcampaigns?page=2&pageSize=10&status=Scheduled
+GET /api/v1/discountcampaigns?status=Cancelled
 ```
 
-`page` y `pageSize` son opcionales; sus valores predeterminados son `1` y `20`. `pageSize` se normaliza al rango `1..100` (un valor menor de `1` usa `20`, y uno mayor de `100` usa `100`). `enabled` también es opcional: omitirlo devuelve campañas habilitadas y deshabilitadas; `true` o `false` filtra por ese estado.
+`page` y `pageSize` son opcionales; sus valores predeterminados son `1` y `20`. `pageSize` se normaliza al rango `1..100` (un valor menor de `1` usa `20`, y uno mayor de `100` usa `100`). `status` también es opcional: omitirlo devuelve campañas de todos los estados. Acepta exactamente `Scheduled`, `Active`, `Finished` o `Cancelled`.
+
+El estado efectivo se calcula automáticamente: una campaña no cancelada es `Scheduled` antes de `startDate`, `Active` desde `startDate` hasta `endDate` (inclusive), y `Finished` después de `endDate`. Una campaña cancelada es `Cancelled` sin importar sus fechas.
 
 La respuesta paginada tiene la forma:
 
@@ -284,7 +286,8 @@ La respuesta paginada tiene la forma:
       "name": "Rebajas de agosto",
       "startDate": "2026-08-01T00:00:00Z",
       "endDate": "2026-08-31T23:59:59Z",
-      "enabled": true,
+      "statusId": 2,
+      "statusName": "Active",
       "createdAt": "2026-07-28T15:30:00Z",
       "updatedAt": null,
       "createdById": "user-id",
@@ -302,7 +305,9 @@ La respuesta paginada tiene la forma:
 
 Los elementos de `items` son resúmenes: **no incluyen `products`**. Usarlos para la tabla, el filtro y la paginación sin solicitar ni asumir el detalle de prendas.
 
-Para abrir o editar una campaña, `GET /api/v1/discountcampaigns/{id}` mantiene la respuesta de detalle `DiscountCampaignDTO`, que **sí incluye `products`**. Cada producto contiene `id`, `productDetailId`, `productName`, `productCode`, `discountTypeId`, `discountTypeName` y `discountValue`.
+Para abrir o editar una campaña, `GET /api/v1/discountcampaigns/{id}` mantiene la respuesta de detalle `DiscountCampaignDTO`, que **sí incluye `products`**, `statusId` y `statusName`. Cada producto contiene `id`, `productDetailId`, `productName`, `productCode`, `discountTypeId`, `discountTypeName` y `discountValue`.
+
+Para cancelar usar `PATCH /api/v1/discountcampaigns/{id}/cancel`; para reactivar, `PATCH /api/v1/discountcampaigns/{id}/reactivate`. Ambos devuelven `204 No Content`. Reactivar elimina la cancelación, pero no fuerza `Active`: el backend vuelve a calcular el estado según las fechas, por lo que puede resultar `Scheduled`, `Active` o `Finished`.
 
 ### Finanzas: catálogo de tipos de movimiento
 
