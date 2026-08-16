@@ -6,6 +6,8 @@ public class ProductReceiptDetail
     public int ProductReceiptId { get; set; }
     public int ProductId { get; set; }
     public decimal Quantity { get; set; }
+    public decimal Weight { get; set; } = 1;
+    public decimal AllocatedWarehouseShippingCostNio { get; set; }
 
     public ProductReceipt? ProductReceipt { get; set; }
     public Product? Product { get; set; }

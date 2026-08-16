@@ -5,6 +5,8 @@ public class ProductReceipt : IAuditableEntity
     public int Id { get; set; }
     public int OrderId { get; set; }
     public DateTime ReceivedDate { get; set; }
+    public decimal WarehouseShippingCostUsd { get; set; }
+    public decimal WarehouseShippingCostNio { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
     public string? CreatedById { get; set; }

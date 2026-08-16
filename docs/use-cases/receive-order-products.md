@@ -20,6 +20,47 @@ POST /api/v1/orders/{orderId}/receipts
 
 El endpoint cubre recepciones parciales y completas. La diferencia está en las cantidades enviadas.
 
+Si el costo final del envío todavía no está disponible o fue registrado incorrectamente, el administrador puede corregir una recepción existente:
+
+```http
+PATCH /api/v1/orders/{orderId}/receipts/{receiptId}
+```
+
+Con trackings, el request debe incluir exactamente los trackings asociados a la recepción y su nuevo `shippingCostUsd` individual:
+
+```json
+{
+  "trackingNumbers": [
+    { "id": 12, "shippingCostUsd": 31.5 },
+    { "id": 13, "shippingCostUsd": 18 }
+  ]
+}
+```
+
+Sin trackings, se envía el nuevo total directamente:
+
+```json
+{
+  "warehouseShippingCostUsd": 18
+}
+```
+
+Para corregir también la distribución, se pueden enviar exactamente los detalles de producto de la recepción con su nuevo peso estimado por unidad:
+
+```json
+{
+  "warehouseShippingCostUsd": 18,
+  "products": [
+    { "productReceiptDetailId": 21, "weight": 1.5 },
+    { "productReceiptDetailId": 22, "weight": 3 }
+  ]
+}
+```
+
+El peso se multiplica por la cantidad recibida (`weight * quantity`). El campo `products` es opcional; si se envía, debe incluir exactamente todos los detalles de la recepción y cada peso debe ser mayor que cero.
+
+La corrección no cambia la fecha, productos ni cantidades recibidas. Recalcula el costo de los productos y todas sus líneas históricas de venta. Los precios, pagos y movimientos financieros de las ventas permanecen iguales. El movimiento `WarehouseShippingPayment` de la compra se actualiza, crea o elimina según el nuevo costo.
+
 ## Tablas involucradas
 
 - `orders`
@@ -176,3 +217,15 @@ Este endpoint no crea un movimiento financiero ni un `supplier_refund`; deja los
 - Tracking inexistente o que no pertenece a la orden.
 - Tracking duplicado en el request.
 - Tracking ya recepcionado.
+
+## Corregir el costo de una recepción
+
+- Solo Admin puede corregir costos.
+- La recepción debe pertenecer a la orden indicada y la orden no puede estar cancelada.
+- No se pueden agregar o quitar trackings, productos ni cantidades.
+- El costo proveedor -> bodega no cambia; solo se corrige el envío bodega -> Nicaragua.
+- Cada detalle conserva el peso usado y el costo asignado para permitir correcciones exactas.
+- Se puede corregir el peso estimado por unidad enviando `products[].productReceiptDetailId` y `products[].weight`; si se envía la lista, debe incluir todos los detalles de la recepción.
+- La redistribución usa `weight * quantity` y conserva la cantidad recibida.
+- El costo corregido se redistribuye entre los detalles y actualiza `products.unit_cost_nio`, `products.unit_cost_usd` y las líneas `sale_details`/`sale_products` relacionadas.
+- Las ventas conservan su precio, descuentos, total cobrado, pagos y movimientos financieros.

@@ -279,6 +279,24 @@ La orden debe pasar a `PartiallyReceived` cuando al menos una unidad haya sido r
 
 La orden debe pasar a `Received` cuando todos sus productos hayan sido recibidos completamente, o después de resolver el reembolso de faltantes confirmados.
 
+## Regla: corrección del costo de envío de una recepción
+
+El costo bodega -> Nicaragua de una recepción puede corregirse después de registrarla mediante:
+
+`PATCH /api/v1/orders/{orderId}/receipts/{receiptId}`
+
+Si la recepción tiene trackings, el request debe incluir exactamente esos trackings y el nuevo costo USD de cada uno. Si no tiene trackings, debe incluir el nuevo `warehouseShippingCostUsd` directo.
+
+La recepción conserva sus productos, cantidades y fecha. El costo proveedor -> bodega no se modifica. El backend recalcula el costo USD/NIO de la recepción, la distribución por detalle, `orders.warehouse_shipping_cost_usd`, `orders.total_cost_nio` y los costos de los productos de la orden.
+
+Cada `product_receipt_detail` conserva el peso unitario y `allocated_warehouse_shipping_cost_nio` usados en la distribución. Esto permite recalcular sin depender de los datos originales del request.
+
+La corrección puede incluir una lista `products` con `productReceiptDetailId` y `weight` para cambiar el peso estimado por unidad. Si se incluye, debe contener exactamente todos los detalles de la recepción y cada peso debe ser mayor que cero. La distribución se recalcula usando `weight * quantity`; la cantidad recibida no cambia.
+
+El movimiento financiero `WarehouseShippingPayment` asociado a la recepción se actualiza al nuevo monto NIO. Si el costo pasa a cero, no debe quedar un egreso de envío asociado; si pasa de cero a positivo, se crea el movimiento.
+
+La corrección debe ejecutarse de forma atómica y rechazar costos negativos, trackings ajenos, duplicados, omitidos o agregados, además de cualquier cambio en productos o cantidades.
+
 La orden debe pasar a `PendingRefund` cuando se cierran faltantes con pérdida: ya no hay unidades por recibir, pero falta registrar el reembolso único del proveedor o confirmar que no existirá.
 
 Una orden cancelada no debe permitir nuevas recepciones.

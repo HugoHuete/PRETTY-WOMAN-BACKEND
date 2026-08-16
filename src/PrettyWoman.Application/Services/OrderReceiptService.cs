@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using PrettyWoman.Application.Common.Extensions;
 using PrettyWoman.Application.DTOs.Orders;
 using PrettyWoman.Application.Exceptions;
@@ -38,7 +39,9 @@ public class OrderReceiptService(
         var receipt = new ProductReceipt
         {
             OrderId = order.Id,
-            ReceivedDate = receiptDate
+            ReceivedDate = receiptDate,
+            WarehouseShippingCostUsd = warehouseShippingCostUsd,
+            WarehouseShippingCostNio = warehouseShippingCostNio
         };
 
         foreach (var item in receivedProducts)
@@ -63,7 +66,9 @@ public class OrderReceiptService(
             receipt.ProductReceiptDetails.Add(new ProductReceiptDetail
             {
                 Product = item.Product,
-                Quantity = item.Quantity
+                Quantity = item.Quantity,
+                Weight = item.Weight,
+                AllocatedWarehouseShippingCostNio = warehouseShippingAllocations[item.Product.Id]
             });
         }
 
@@ -107,6 +112,129 @@ public class OrderReceiptService(
             TrackingNumberIds = GetReceivedTrackingNumbers(order, receiveOrderDTO)
                 .Select(tracking => tracking.Id)
                 .ToList()
+        };
+    }
+
+    public async Task<OrderReceiptDTO> UpdateShippingCostAsync(int orderId, int receiptId, UpdateOrderReceiptDTO updateOrderReceiptDTO)
+    {
+        updateOrderReceiptDTO.TrackingNumbers ??= [];
+        updateOrderReceiptDTO.Products ??= [];
+
+        var order = await _context.Orders
+            .Include(item => item.Products)
+            .FirstOrDefaultAsync(item => item.Id == orderId)
+            ?? throw new AppNotFoundException($"La orden con id '{orderId}' no existe.");
+
+        if (order.OrderStatusId == (int)OrderStatusCode.Cancelled)
+        {
+            throw new AppBadRequestException("No se puede corregir una recepción de una orden cancelada.");
+        }
+
+        var receipt = await _context.ProductReceipts
+            .Include(item => item.ProductReceiptDetails)
+            .Include(item => item.OrderTrackingNumbers)
+            .FirstOrDefaultAsync(item => item.Id == receiptId && item.OrderId == orderId)
+            ?? throw new AppNotFoundException($"La recepción con id '{receiptId}' no existe en la orden.");
+
+        var affectedProductIds = receipt.ProductReceiptDetails
+            .Select(detail => detail.ProductId)
+            .Distinct()
+            .ToList();
+        var oldAllocationByProduct = receipt.ProductReceiptDetails
+            .GroupBy(detail => detail.ProductId)
+            .ToDictionary(group => group.Key, group => group.Sum(detail => detail.AllocatedWarehouseShippingCostNio));
+
+        var warehouseShippingCostUsd = ResolveUpdatedWarehouseShippingCost(receipt, updateOrderReceiptDTO);
+        var warehouseShippingCostNio = Math.Round(warehouseShippingCostUsd * order.ExchangeRate, 2);
+        ApplyUpdatedTrackingCosts(receipt, updateOrderReceiptDTO);
+        ApplyUpdatedProductWeights(receipt, updateOrderReceiptDTO);
+        ApplyShippingAllocations(receipt, warehouseShippingCostNio);
+        receipt.WarehouseShippingCostUsd = warehouseShippingCostUsd;
+
+        var newAllocationByProduct = receipt.ProductReceiptDetails
+            .GroupBy(detail => detail.ProductId)
+            .ToDictionary(group => group.Key, group => group.Sum(detail => detail.AllocatedWarehouseShippingCostNio));
+
+        foreach (var product in order.Products.Where(product => affectedProductIds.Contains(product.Id)))
+        {
+            var oldAllocation = oldAllocationByProduct[product.Id];
+            var newAllocation = newAllocationByProduct[product.Id];
+            product.AllocatedShippingCostNio += newAllocation - oldAllocation;
+            product.TotalCostNio = product.MerchandiseTotalCostNio + product.AllocatedShippingCostNio;
+            product.UnitCostNio = CalculateUnitCostNio(product);
+            product.UnitCostUsd = order.ExchangeRate == 0
+                ? 0
+                : Math.Round(product.UnitCostNio / order.ExchangeRate, 2);
+        }
+
+        foreach (var product in order.Products)
+        {
+            product.TotalCostNio = product.MerchandiseTotalCostNio + product.AllocatedShippingCostNio;
+        }
+
+        order.WarehouseShippingCostUsd = await _context.ProductReceipts
+            .Where(item => item.OrderId == orderId)
+            .SumAsync(item => item.Id == receiptId ? warehouseShippingCostUsd : item.WarehouseShippingCostUsd);
+        order.TotalCostNio = order.Products.Sum(product => product.TotalCostNio);
+
+        await RecalculateSaleProductsAsync(affectedProductIds, order.Products);
+        await SyncWarehouseShippingFinancialMovementAsync(order, receipt, warehouseShippingCostNio);
+
+        IDbContextTransaction? transaction = null;
+        try
+        {
+            try
+            {
+                transaction = await _context.BeginTransactionAsync();
+            }
+            catch (InvalidOperationException exception) when (exception.Message.Contains("Transactions are not supported", StringComparison.OrdinalIgnoreCase))
+            {
+                // EF Core InMemory does not support transactions; production providers do.
+            }
+
+            await _context.SaveChangesAsync();
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync();
+            }
+        }
+        catch
+        {
+            if (transaction is not null)
+            {
+                await transaction.RollbackAsync();
+            }
+
+            throw;
+        }
+        finally
+        {
+            if (transaction is not null)
+            {
+                await transaction.DisposeAsync();
+            }
+        }
+
+        return new OrderReceiptDTO
+        {
+            Id = receipt.Id,
+            OrderId = receipt.OrderId,
+            ReceivedDate = receipt.ReceivedDate,
+            CreatedAt = receipt.CreatedAt,
+            WarehouseShippingCostUsd = receipt.WarehouseShippingCostUsd,
+            WarehouseShippingCostNio = receipt.WarehouseShippingCostNio,
+            OrderStatusId = order.OrderStatusId,
+            Products = receipt.ProductReceiptDetails
+                .Select(detail => new OrderReceiptProductDTO
+                {
+                    ProductReceiptDetailId = detail.Id,
+                    ProductId = detail.ProductId,
+                    Quantity = (int)detail.Quantity,
+                    Weight = detail.Weight,
+                    AllocatedWarehouseShippingCostNio = detail.AllocatedWarehouseShippingCostNio
+                })
+                .ToList(),
+            TrackingNumberIds = receipt.OrderTrackingNumbers.Select(tracking => tracking.Id).ToList()
         };
     }
 
@@ -295,6 +423,175 @@ public class OrderReceiptService(
     {
         var receivedCostQuantity = Math.Max(product.Quantity, product.ReceivedQuantity);
         return receivedCostQuantity == 0 ? 0 : Math.Round(product.TotalCostNio / receivedCostQuantity, 6);
+    }
+
+    private static decimal ResolveUpdatedWarehouseShippingCost(ProductReceipt receipt, UpdateOrderReceiptDTO updateOrderReceiptDTO)
+    {
+        var hasTrackings = receipt.OrderTrackingNumbers.Count != 0;
+        if (hasTrackings)
+        {
+            if (updateOrderReceiptDTO.WarehouseShippingCostUsd.HasValue)
+            {
+                throw new AppBadRequestException("Cuando la recepción tiene trackings, el costo debe registrarse por tracking.");
+            }
+
+            ValidateTrackingSet(receipt, updateOrderReceiptDTO.TrackingNumbers);
+            if (updateOrderReceiptDTO.TrackingNumbers.Any(tracking => tracking.ShippingCostUsd < 0))
+            {
+                throw new AppBadRequestException("El costo de envío no puede ser negativo.");
+            }
+
+            return updateOrderReceiptDTO.TrackingNumbers.Sum(tracking => tracking.ShippingCostUsd);
+        }
+
+        if (updateOrderReceiptDTO.TrackingNumbers.Count != 0)
+        {
+            throw new AppBadRequestException("La recepción no tiene trackings; envíe el costo directo de envío.");
+        }
+
+        if (!updateOrderReceiptDTO.WarehouseShippingCostUsd.HasValue)
+        {
+            throw new AppBadRequestException("Debe enviar el nuevo costo directo de envío.");
+        }
+
+        if (updateOrderReceiptDTO.WarehouseShippingCostUsd.Value < 0)
+        {
+            throw new AppBadRequestException("El costo de envío no puede ser negativo.");
+        }
+
+        return updateOrderReceiptDTO.WarehouseShippingCostUsd.Value;
+    }
+
+    private static void ValidateTrackingSet(ProductReceipt receipt, ICollection<UpdateOrderReceiptTrackingNumberDTO> trackingDTOs)
+    {
+        var duplicateTracking = trackingDTOs
+            .GroupBy(tracking => tracking.Id)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateTracking is not null)
+        {
+            throw new AppBadRequestException("No puede enviar trackings duplicados en la corrección.");
+        }
+
+        var receiptTrackingIds = receipt.OrderTrackingNumbers.Select(tracking => tracking.Id).ToHashSet();
+        var requestedTrackingIds = trackingDTOs.Select(tracking => tracking.Id).ToHashSet();
+        if (!requestedTrackingIds.SetEquals(receiptTrackingIds))
+        {
+            throw new AppBadRequestException("Debe enviar exactamente los trackings asociados a la recepción.");
+        }
+    }
+
+    private static void ApplyUpdatedTrackingCosts(ProductReceipt receipt, UpdateOrderReceiptDTO updateOrderReceiptDTO)
+    {
+        var shippingCostByTrackingId = updateOrderReceiptDTO.TrackingNumbers
+            .ToDictionary(tracking => tracking.Id, tracking => tracking.ShippingCostUsd);
+
+        foreach (var tracking in receipt.OrderTrackingNumbers)
+        {
+            if (shippingCostByTrackingId.TryGetValue(tracking.Id, out var shippingCostUsd))
+            {
+                tracking.ShippingCost = shippingCostUsd;
+            }
+        }
+    }
+
+    private static void ApplyUpdatedProductWeights(ProductReceipt receipt, UpdateOrderReceiptDTO updateOrderReceiptDTO)
+    {
+        if (updateOrderReceiptDTO.Products.Count == 0)
+        {
+            return;
+        }
+
+        var duplicateDetail = updateOrderReceiptDTO.Products
+            .GroupBy(product => product.ProductReceiptDetailId)
+            .FirstOrDefault(group => group.Count() > 1);
+        if (duplicateDetail is not null)
+        {
+            throw new AppBadRequestException("No puede enviar detalles de producto duplicados en la corrección.");
+        }
+
+        if (updateOrderReceiptDTO.Products.Any(product => product.Weight <= 0))
+        {
+            throw new AppBadRequestException("El peso del producto debe ser mayor que cero.");
+        }
+
+        var receiptDetailById = receipt.ProductReceiptDetails.ToDictionary(detail => detail.Id);
+        var requestedDetailIds = updateOrderReceiptDTO.Products
+            .Select(product => product.ProductReceiptDetailId)
+            .ToHashSet();
+        if (!requestedDetailIds.SetEquals(receiptDetailById.Keys))
+        {
+            throw new AppBadRequestException("Debe enviar exactamente los detalles de producto de la recepción.");
+        }
+
+        foreach (var product in updateOrderReceiptDTO.Products)
+        {
+            receiptDetailById[product.ProductReceiptDetailId].Weight = product.Weight;
+        }
+    }
+
+    private static void ApplyShippingAllocations(ProductReceipt receipt, decimal warehouseShippingCostNio)
+    {
+        var totalWeight = receipt.ProductReceiptDetails.Sum(detail => detail.Weight * detail.Quantity);
+        var assigned = 0m;
+        var details = receipt.ProductReceiptDetails.OrderBy(detail => detail.Id).ToList();
+
+        for (var index = 0; index < details.Count; index++)
+        {
+            var detail = details[index];
+            var allocation = index == details.Count - 1
+                ? warehouseShippingCostNio - assigned
+                : totalWeight == 0
+                    ? 0
+                    : Math.Round(warehouseShippingCostNio * detail.Weight * detail.Quantity / totalWeight, 2);
+
+            detail.AllocatedWarehouseShippingCostNio = allocation;
+            assigned += allocation;
+        }
+
+        receipt.WarehouseShippingCostNio = warehouseShippingCostNio;
+    }
+
+    private async Task RecalculateSaleProductsAsync(ICollection<int> productIds, ICollection<Product> products)
+    {
+        var unitCostByProductId = products
+            .Where(product => productIds.Contains(product.Id))
+            .ToDictionary(product => product.Id, product => product.UnitCostNio);
+        var saleProducts = await _context.SaleProducts
+            .Where(saleProduct => productIds.Contains(saleProduct.ProductId))
+            .ToListAsync();
+
+        foreach (var saleProduct in saleProducts)
+        {
+            saleProduct.UnitCostAtSale = unitCostByProductId[saleProduct.ProductId];
+            saleProduct.TotalCostAtSale = saleProduct.UnitCostAtSale * saleProduct.Quantity;
+            saleProduct.GrossProfit = saleProduct.LineTotal - saleProduct.TotalCostAtSale;
+        }
+    }
+
+    private async Task SyncWarehouseShippingFinancialMovementAsync(Order order, ProductReceipt receipt, decimal amountNio)
+    {
+        var movement = await _context.FinancialMovements
+            .FirstOrDefaultAsync(item => item.ProductReceiptId == receipt.Id && item.FinancialMovementTypeId == (int)FinancialMovementTypeOption.WarehouseShippingPayment);
+
+        if (amountNio <= 0)
+        {
+            if (movement is not null)
+            {
+                _context.FinancialMovements.Remove(movement);
+            }
+
+            return;
+        }
+
+        if (movement is null)
+        {
+            await _context.FinancialMovements.AddAsync(CreateWarehouseShippingMovement(order, receipt, amountNio, null, receipt.ReceivedDate));
+            return;
+        }
+
+        movement.Amount = amountNio;
+        movement.ExchangeRate = order.ExchangeRate;
+        movement.OrderId = order.Id;
     }
 
     private static FinancialMovement CreateWarehouseShippingMovement(Order order, ProductReceipt receipt, decimal amountNio, string? comments, DateTime date)

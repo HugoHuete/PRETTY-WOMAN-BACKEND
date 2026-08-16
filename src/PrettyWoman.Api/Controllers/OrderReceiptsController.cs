@@ -19,4 +19,14 @@ public class OrderReceiptsController(IOrderReceiptService orderReceiptService) :
         var receipt = await _orderReceiptService.ReceiveAsync(orderId, receiveOrderDTO);
         return Ok(receipt);
     }
+
+    [HttpPatch("{receiptId:int}")]
+    public async Task<ActionResult<OrderReceiptDTO>> UpdateShippingCost(
+        int orderId,
+        int receiptId,
+        [FromBody] UpdateOrderReceiptDTO updateOrderReceiptDTO)
+    {
+        var receipt = await _orderReceiptService.UpdateShippingCostAsync(orderId, receiptId, updateOrderReceiptDTO);
+        return Ok(receipt);
+    }
 }

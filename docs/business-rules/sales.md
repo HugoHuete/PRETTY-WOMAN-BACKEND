@@ -64,6 +64,20 @@ Este valor no debe recalcularse posteriormente aunque cambie el costo almacenado
 
 Esto permite que los reportes históricos conserven el costo que se conocía y utilizaba al momento de la venta.
 
+## Regla: corrección posterior del costo de compra
+
+Como cada producto pertenece a una única compra, una corrección administrativa del costo de envío de esa compra actualiza el costo de todas las líneas históricas que contienen el producto.
+
+Para cada línea afectada se recalcula:
+
+`UnitCostAtSale = Product.UnitCostNio`
+
+`TotalCostAtSale = UnitCostAtSale × Quantity`
+
+`GrossProfit = LineTotal - TotalCostAtSale`
+
+El precio original, descuentos, precio final, total cobrado, pagos y movimientos financieros de la venta no cambian. La actualización también aplica a ventas canceladas, devueltas o relacionadas con cambios, porque sus líneas conservan el costo histórico recalculable del producto.
+
 ## Regla: cálculo de una línea de venta
 
 El total de una línea debe calcularse después de aplicar descuentos:

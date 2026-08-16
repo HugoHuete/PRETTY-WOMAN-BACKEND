@@ -123,6 +123,12 @@ gross_profit - payment_commission_total
 
 Los gastos operativos se registran en `financial_movements` con tipo `Expense` y categoría en `expense_categories`.
 
+## Corrección del costo de envío de compras
+
+El movimiento financiero `WarehouseShippingPayment` representa el egreso del envío bodega -> Nicaragua de una recepción. Una corrección de recepción actualiza ese movimiento, pero no modifica los movimientos financieros de pagos de ventas: esos movimientos representan el dinero recibido del cliente, no el costo ni la ganancia.
+
+La corrección actualiza el costo de inventario y las líneas de venta relacionadas. El precio cobrado y el importe de cada pago permanecen sin cambios.
+
 ## Préstamos
 
 Préstamos recibidos no son ganancia.
