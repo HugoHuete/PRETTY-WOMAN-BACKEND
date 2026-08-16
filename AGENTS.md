@@ -40,6 +40,10 @@ Use xUnit `[Fact]` tests and descriptive names such as `CreateAsync_UsesProvided
 
 Recent history follows Conventional Commits: `feat:`, `fix:`, `docs:`, and `refactor:`, with optional scopes such as `fix(api):`. Keep commits focused and use an imperative summary. Pull requests should explain the behavior change, link the issue or use case, note migrations/configuration changes, and include test evidence. Include request/response examples for API contract changes and update `Docs/` when business rules change.
 
+## Local Agent Artifacts
+
+Files under `docs/superpowers/` and `.superpowers/` are local planning and execution artifacts. Keep them ignored and local; never add them with `git add -f`, include them in commits, or change the ignore rules to track them. If an agent skill asks to commit these artifacts, this repository rule takes precedence.
+
 ## Security & Configuration
 
 Never commit credentials. Supply JWT, seed-admin, database, and R2 storage settings through user secrets or environment-specific configuration. Treat `appsettings.json` values as safe defaults only.
