@@ -285,6 +285,8 @@ El costo bodega -> Nicaragua de una recepción puede corregirse después de regi
 
 `PATCH /api/v1/orders/{orderId}/receipts/{receiptId}`
 
+Las recepciones se consultan resumidas con `GET /api/v1/orders/{orderId}/receipts` y una recepción individual con `GET /api/v1/orders/{orderId}/receipts/{receiptId}`. El detalle incluye productos, cantidades, pesos, costos asignados y trackings; no incluye movimientos financieros.
+
 Si la recepción tiene trackings, el request debe incluir exactamente esos trackings y el nuevo costo USD de cada uno. Si no tiene trackings, debe incluir el nuevo `warehouseShippingCostUsd` directo.
 
 La recepción conserva sus productos, cantidades y fecha. El costo proveedor -> bodega no se modifica. El backend recalcula el costo USD/NIO de la recepción, la distribución por detalle, `orders.warehouse_shipping_cost_usd`, `orders.total_cost_nio` y los costos de los productos de la orden.

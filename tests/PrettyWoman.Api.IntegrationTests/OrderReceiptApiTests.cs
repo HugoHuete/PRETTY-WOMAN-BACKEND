@@ -11,6 +11,21 @@ namespace PrettyWoman.Api.IntegrationTests;
 public class OrderReceiptApiTests(PrettyWomanApiFactory factory)
 {
     [Fact]
+    public async Task Employee_CannotReadOrderReceipts()
+    {
+        await factory.EnsureEmployeeAsync();
+        using var client = await CreateAuthenticatedClientAsync(
+            PrettyWomanApiFactory.EmployeeEmail,
+            PrettyWomanApiFactory.EmployeePassword);
+
+        var listResponse = await client.GetAsync("/api/v1/orders/1/receipts");
+        var detailResponse = await client.GetAsync("/api/v1/orders/1/receipts/1");
+
+        Assert.Equal(HttpStatusCode.Forbidden, listResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, detailResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task Employee_CannotUpdateOrderReceiptShippingCost()
     {
         await factory.EnsureEmployeeAsync();

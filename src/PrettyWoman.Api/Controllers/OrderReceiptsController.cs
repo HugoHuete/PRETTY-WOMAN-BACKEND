@@ -13,6 +13,20 @@ public class OrderReceiptsController(IOrderReceiptService orderReceiptService) :
 {
     private readonly IOrderReceiptService _orderReceiptService = orderReceiptService;
 
+    [HttpGet]
+    public async Task<ActionResult<ICollection<OrderReceiptSummaryDTO>>> GetAll(int orderId)
+    {
+        var receipts = await _orderReceiptService.GetAllAsync(orderId);
+        return Ok(receipts);
+    }
+
+    [HttpGet("{receiptId:int}")]
+    public async Task<ActionResult<OrderReceiptDTO>> GetById(int orderId, int receiptId)
+    {
+        var receipt = await _orderReceiptService.GetByIdAsync(orderId, receiptId);
+        return Ok(receipt);
+    }
+
     [HttpPost]
     public async Task<ActionResult<OrderReceiptDTO>> Receive(int orderId, [FromBody] ReceiveOrderDTO receiveOrderDTO)
     {

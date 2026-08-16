@@ -11,4 +11,5 @@ public class OrderReceiptDTO
     public int OrderStatusId { get; set; }
     public ICollection<OrderReceiptProductDTO> Products { get; set; } = [];
     public ICollection<int> TrackingNumberIds { get; set; } = [];
+    public ICollection<OrderTrackingNumberDTO> TrackingNumbers { get; set; } = [];
 }

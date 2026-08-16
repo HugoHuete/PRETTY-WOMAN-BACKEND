@@ -16,6 +16,45 @@ public class OrderReceiptService(
     private readonly IApplicationDbContext _context = context;
     private readonly IInventoryService _inventoryService = inventoryService;
 
+    public async Task<ICollection<OrderReceiptSummaryDTO>> GetAllAsync(int orderId)
+    {
+        if (!await _context.Orders.AnyAsync(order => order.Id == orderId))
+        {
+            throw new AppNotFoundException($"La orden con id '{orderId}' no existe.");
+        }
+
+        return await _context.ProductReceipts
+            .Where(receipt => receipt.OrderId == orderId)
+            .OrderByDescending(receipt => receipt.ReceivedDate)
+            .ThenByDescending(receipt => receipt.Id)
+            .Select(receipt => new OrderReceiptSummaryDTO
+            {
+                Id = receipt.Id,
+                OrderId = receipt.OrderId,
+                ReceivedDate = receipt.ReceivedDate,
+                CreatedAt = receipt.CreatedAt,
+                WarehouseShippingCostUsd = receipt.WarehouseShippingCostUsd,
+                WarehouseShippingCostNio = receipt.WarehouseShippingCostNio,
+                ProductCount = receipt.ProductReceiptDetails.Count(),
+                TotalQuantity = receipt.ProductReceiptDetails.Sum(detail => (decimal?)detail.Quantity) ?? 0,
+                TrackingCount = receipt.OrderTrackingNumbers.Count()
+            })
+            .ToListAsync();
+    }
+
+    public async Task<OrderReceiptDTO> GetByIdAsync(int orderId, int receiptId)
+    {
+        var receipt = await _context.ProductReceipts
+            .Include(item => item.Order)
+            .Include(item => item.ProductReceiptDetails)
+            .Include(item => item.OrderTrackingNumbers)
+                .ThenInclude(item => item.ShippingCompany)
+            .FirstOrDefaultAsync(item => item.Id == receiptId && item.OrderId == orderId)
+            ?? throw new AppNotFoundException($"La recepción con id '{receiptId}' no existe en la orden.");
+
+        return MapReceipt(receipt);
+    }
+
     public async Task<OrderReceiptDTO> ReceiveAsync(int orderId, ReceiveOrderDTO receiveOrderDTO)
     {
         NormalizeFields(receiveOrderDTO);
@@ -250,6 +289,46 @@ public class OrderReceiptService(
         {
             throw new AppBadRequestException("La orden no admite más recepciones normales.");
         }
+    }
+
+    private static OrderReceiptDTO MapReceipt(ProductReceipt receipt)
+    {
+        return new OrderReceiptDTO
+        {
+            Id = receipt.Id,
+            OrderId = receipt.OrderId,
+            ReceivedDate = receipt.ReceivedDate,
+            CreatedAt = receipt.CreatedAt,
+            WarehouseShippingCostUsd = receipt.WarehouseShippingCostUsd,
+            WarehouseShippingCostNio = receipt.WarehouseShippingCostNio,
+            OrderStatusId = receipt.Order?.OrderStatusId ?? 0,
+            Products = receipt.ProductReceiptDetails
+                .Select(detail => new OrderReceiptProductDTO
+                {
+                    ProductReceiptDetailId = detail.Id,
+                    ProductId = detail.ProductId,
+                    Quantity = (int)detail.Quantity,
+                    Weight = detail.Weight,
+                    AllocatedWarehouseShippingCostNio = detail.AllocatedWarehouseShippingCostNio
+                })
+                .ToList(),
+            TrackingNumberIds = receipt.OrderTrackingNumbers.Select(tracking => tracking.Id).ToList(),
+            TrackingNumbers = receipt.OrderTrackingNumbers
+                .Select(tracking => new OrderTrackingNumberDTO
+                {
+                    Id = tracking.Id,
+                    OrderId = tracking.OrderId,
+                    ShippingCompanyId = tracking.ShippingCompanyId,
+                    TrackingNumber = tracking.TrackingNumber,
+                    SupplierShipmentDate = tracking.SupplierShipmentDate,
+                    WarehouseDeliveryDate = tracking.WarehouseDeliveryDate,
+                    ProductReceiptId = tracking.ProductReceiptId,
+                    Weight = tracking.Weight,
+                    ShippingCost = tracking.ShippingCost,
+                    ShippingCompanyName = tracking.ShippingCompany?.Name
+                })
+                .ToList()
+        };
     }
 
     private static List<ReceivedProduct> ValidateAndGetProducts(Order order, ICollection<ReceiveOrderProductDTO> receivedProductDTOs)

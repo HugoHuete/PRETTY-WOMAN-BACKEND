@@ -79,6 +79,72 @@ public class OrderReceiptServiceTests
         Assert.Equal(orderId, warehouseShippingMovement.OrderId);
     }
 
+    [Fact]
+    public async Task GetAllAsync_ReturnsGeneralInformationForOrderReceipts()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var orderService = new OrderService(context, Mapper);
+        var receiptService = CreateReceiptService(context);
+        var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 4));
+        var product = await context.Products.SingleAsync();
+
+        await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            WarehouseShippingCostUsd = 10m,
+            Products = [new ReceiveOrderProductDTO { ProductId = product.Id, Quantity = 1 }]
+        });
+        await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            WarehouseShippingCostUsd = 5m,
+            Products = [new ReceiveOrderProductDTO { ProductId = product.Id, Quantity = 2 }]
+        });
+
+        var receipts = await receiptService.GetAllAsync(orderId);
+
+        Assert.Equal(2, receipts.Count);
+        var firstReceipt = receipts.Single(receipt => receipt.WarehouseShippingCostUsd == 10m);
+        Assert.Equal(1, firstReceipt.ProductCount);
+        Assert.Equal(1, firstReceipt.TotalQuantity);
+        Assert.Equal(0, firstReceipt.TrackingCount);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_ReturnsReceiptProductsWeightsAndTrackings()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var orderService = new OrderService(context, Mapper);
+        var receiptService = CreateReceiptService(context);
+        var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
+        var product = await context.Products.SingleAsync();
+        context.OrderTrackingNumbers.Add(new OrderTrackingNumber
+        {
+            OrderId = orderId,
+            ShippingCompanyId = 1,
+            TrackingNumber = "TRACK-DETAIL"
+        });
+        await context.SaveChangesAsync();
+        var tracking = await context.OrderTrackingNumbers.SingleAsync();
+
+        var created = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            TrackingNumbers = [new ReceiveOrderTrackingNumberDTO { Id = tracking.Id, ShippingCostUsd = 12m, Weight = 8.5m }],
+            Products = [new ReceiveOrderProductDTO { ProductId = product.Id, Quantity = 2, Weight = 2.5m }]
+        });
+
+        var receipt = await receiptService.GetByIdAsync(orderId, created.Id);
+
+        Assert.Equal(created.Id, receipt.Id);
+        Assert.Single(receipt.Products);
+        Assert.Equal(2.5m, receipt.Products.Single().Weight);
+        Assert.Equal(2, receipt.Products.Single().Quantity);
+        Assert.Single(receipt.TrackingNumbers);
+        Assert.Equal("TRACK-DETAIL", receipt.TrackingNumbers.Single().TrackingNumber);
+        Assert.Equal(8.5m, receipt.TrackingNumbers.Single().Weight);
+        Assert.Equal(12m, receipt.TrackingNumbers.Single().ShippingCost);
+    }
+
 
     [Fact]
     public async Task ReceiveAsync_InterpretsUnspecifiedReceivedDateAsBusinessLocalTime()

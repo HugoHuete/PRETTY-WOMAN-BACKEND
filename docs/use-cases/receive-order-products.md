@@ -14,6 +14,22 @@ Registrar la recepción física de productos comprados, actualizar inventario, r
 
 ## Endpoint
 
+Para consultar las recepciones de una orden:
+
+```http
+GET /api/v1/orders/{orderId}/receipts
+```
+
+Devuelve un listado resumido con fecha, costos de envío, cantidad de líneas, unidades y trackings.
+
+Para consultar una recepción específica:
+
+```http
+GET /api/v1/orders/{orderId}/receipts/{receiptId}
+```
+
+Devuelve el detalle completo con productos, cantidades, pesos, costo asignado y trackings con su peso y costo individual. No incluye movimientos financieros.
+
 ```http
 POST /api/v1/orders/{orderId}/receipts
 ```
