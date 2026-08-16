@@ -77,7 +77,7 @@ public class InventoryAdjustmentApiTests(PrettyWomanApiFactory factory)
     [Fact]
     public async Task Admin_CanCreateAndQueryInventoryAdjustment()
     {
-        var product = await _factory.SeedProductAsync(quantity: 4, receivedQuantity: 4, availableQuantity: 4);
+        var productVariant = await _factory.SeedProductAsync(quantity: 4, receivedQuantity: 4, availableQuantity: 4);
         using var admin = await CreateAdminClientAsync();
         var adjustmentDate = DateTime.UtcNow.AddMinutes(-10);
 
@@ -91,7 +91,7 @@ public class InventoryAdjustmentApiTests(PrettyWomanApiFactory factory)
             [
                 new CreateInventoryAdjustmentItemDTO
                 {
-                    ProductId = product.ProductId,
+                    ProductId = productVariant.ProductId,
                     FromStockBucketId = (int)InventoryStockBucketOption.Available,
                     ToStockBucketId = (int)InventoryStockBucketOption.OutOfInventory,
                     Quantity = 2,
@@ -104,7 +104,7 @@ public class InventoryAdjustmentApiTests(PrettyWomanApiFactory factory)
         var adjustmentId = await createResponse.Content.ReadFromJsonAsync<int>();
         Assert.True(adjustmentId > 0);
 
-        var stock = await _factory.GetProductStockAsync(product.ProductId);
+        var stock = await _factory.GetProductStockAsync(productVariant.ProductId);
         Assert.Equal(4, stock.ReceivedQuantity);
         Assert.Equal(2, stock.AvailableQuantity);
         Assert.Equal(0, stock.ReservedQuantity);
@@ -121,7 +121,7 @@ public class InventoryAdjustmentApiTests(PrettyWomanApiFactory factory)
         Assert.Equal("AJ-INTEGRATION-001", detail.Reference);
         Assert.Equal("Ajuste creado desde prueba de integración.", detail.Comments);
         var item = Assert.Single(detail.Items);
-        Assert.Equal(product.ProductId, item.ProductId);
+        Assert.Equal(productVariant.ProductId, item.ProductId);
         Assert.Equal((int)InventoryStockBucketOption.Available, item.FromStockBucketId);
         Assert.Equal(nameof(InventoryStockBucketOption.Available), item.FromStockBucketName);
         Assert.Equal((int)InventoryStockBucketOption.OutOfInventory, item.ToStockBucketId);
@@ -129,7 +129,7 @@ public class InventoryAdjustmentApiTests(PrettyWomanApiFactory factory)
         Assert.Equal(2, item.Quantity);
         Assert.True(item.InventoryMovementId > 0);
 
-        var listResponse = await admin.GetAsync($"/api/v1/inventory-adjustments?productId={product.ProductId}");
+        var listResponse = await admin.GetAsync($"/api/v1/inventory-adjustments?productId={productVariant.ProductId}");
         Assert.Equal(HttpStatusCode.OK, listResponse.StatusCode);
         var list = await listResponse.Content.ReadFromJsonAsync<PaginatedResult<InventoryAdjustmentDTO>>();
 
@@ -141,7 +141,7 @@ public class InventoryAdjustmentApiTests(PrettyWomanApiFactory factory)
     [Fact]
     public async Task Admin_CannotCreateAdjustmentWhenSourceBucketHasInsufficientStock()
     {
-        var product = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1);
+        var productVariant = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1);
         using var admin = await CreateAdminClientAsync();
 
         var response = await admin.PostAsJsonAsync("/api/v1/inventory-adjustments", new CreateInventoryAdjustmentDTO
@@ -151,7 +151,7 @@ public class InventoryAdjustmentApiTests(PrettyWomanApiFactory factory)
             [
                 new CreateInventoryAdjustmentItemDTO
                 {
-                    ProductId = product.ProductId,
+                    ProductId = productVariant.ProductId,
                     FromStockBucketId = (int)InventoryStockBucketOption.Available,
                     ToStockBucketId = (int)InventoryStockBucketOption.OutOfInventory,
                     Quantity = 2
@@ -161,7 +161,7 @@ public class InventoryAdjustmentApiTests(PrettyWomanApiFactory factory)
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
-        var stock = await _factory.GetProductStockAsync(product.ProductId);
+        var stock = await _factory.GetProductStockAsync(productVariant.ProductId);
         Assert.Equal(1, stock.ReceivedQuantity);
         Assert.Equal(1, stock.AvailableQuantity);
         Assert.Equal(0, stock.ReservedQuantity);

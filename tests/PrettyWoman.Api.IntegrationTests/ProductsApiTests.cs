@@ -8,18 +8,18 @@ using PrettyWoman.Application.DTOs.Products;
 namespace PrettyWoman.Api.IntegrationTests;
 
 [Collection(ApiIntegrationCollection.Name)]
-public class ProductDetailsApiTests(PrettyWomanApiFactory factory)
+public class ProductsApiTests(PrettyWomanApiFactory factory)
 {
     private readonly PrettyWomanApiFactory _factory = factory;
 
     [Fact]
     public async Task EmployeeCanUpdateVariantPriceWithoutChangingProductHistory()
     {
-        var product = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        var productVariant = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
         using var client = await CreateEmployeeClientAsync();
 
         var response = await client.PatchAsJsonAsync(
-            $"/api/v1/product-details/{product.ProductDetailId}/variants/{product.ProductId}/price",
+            $"/api/v1/products/{productVariant.ProductId}/variants/{productVariant.ProductVariantId}/price",
             new UpdateProductPriceDTO { SalePrice = 750m });
 
         Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
@@ -31,11 +31,11 @@ public class ProductDetailsApiTests(PrettyWomanApiFactory factory)
     [InlineData(-1)]
     public async Task UpdateVariantPrice_RejectsNonPositivePrice(decimal salePrice)
     {
-        var product = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        var productVariant = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
         using var client = await CreateEmployeeClientAsync();
 
         var response = await client.PatchAsJsonAsync(
-            $"/api/v1/product-details/{product.ProductDetailId}/variants/{product.ProductId}/price",
+            $"/api/v1/products/{productVariant.ProductId}/variants/{productVariant.ProductVariantId}/price",
             new UpdateProductPriceDTO { SalePrice = salePrice });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
@@ -44,11 +44,11 @@ public class ProductDetailsApiTests(PrettyWomanApiFactory factory)
     [Fact]
     public async Task UnauthenticatedUserCannotUpdateVariantPrice()
     {
-        var product = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        var productVariant = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
         using var client = _factory.CreateClient();
 
         var response = await client.PatchAsJsonAsync(
-            $"/api/v1/product-details/{product.ProductDetailId}/variants/{product.ProductId}/price",
+            $"/api/v1/products/{productVariant.ProductId}/variants/{productVariant.ProductVariantId}/price",
             new UpdateProductPriceDTO { SalePrice = 750m });
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);

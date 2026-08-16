@@ -30,7 +30,7 @@ public class InventoryMovement : IAuditableEntity
     public InventoryMovementType? InventoryMovementType { get; set; }
     public InventoryStockBucket? FromStockBucket { get; set; }
     public InventoryStockBucket? ToStockBucket { get; set; }
-    public Product? Product { get; set; }
+    public ProductVariant? ProductVariant { get; set; }
     public Order? Order { get; set; }
     public SaleProduct? SaleProduct { get; set; }
     public ProductHold? ProductHold { get; set; }

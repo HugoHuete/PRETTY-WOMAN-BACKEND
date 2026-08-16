@@ -17,5 +17,5 @@ public class CreateOrderDTO
     [Range(1, 2, ErrorMessage = "La moneda de compra debe ser USD o NIO.")]
     public int PurchaseCurrencyId { get; set; } = 1;
 
-    public ICollection<CreateOrderProductDetailDTO> ProductDetails { get; set; } = [];
+    public ICollection<CreateOrderProductDTO> Products { get; set; } = [];
 }

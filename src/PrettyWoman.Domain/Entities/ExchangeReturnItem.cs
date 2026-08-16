@@ -22,5 +22,5 @@ public class ExchangeReturnItem : IAuditableEntity
 
     public SaleExchange? SaleExchange { get; set; }
     public SaleProduct? OriginalSaleProduct { get; set; }
-    public Product? Product { get; set; }
+    public ProductVariant? ProductVariant { get; set; }
 }

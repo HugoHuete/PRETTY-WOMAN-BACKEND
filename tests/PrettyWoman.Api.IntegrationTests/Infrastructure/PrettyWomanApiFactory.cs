@@ -107,7 +107,7 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
         using var scope = Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var suffix = Guid.NewGuid().ToString("N")[..8];
-        var nextProductDetailCode = (await context.ProductDetails.MaxAsync(item => (int?)item.Code) ?? 0) + 1;
+        var nextProductCode = (await context.Products.MaxAsync(item => (int?)item.Code) ?? 0) + 1;
 
         if (!await context.DollarExchangeRates.AnyAsync(rate => rate.Enabled && rate.StartDate <= DateTime.UtcNow))
         {
@@ -135,17 +135,17 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
             MerchandiseTotalNio = quantity * 400m,
             TotalCostNio = quantity * 400m
         };
-        var detail = new ProductDetail
+        var detail = new Product
         {
             SupplierProductCode = $"SKU-{suffix}",
-            Code = nextProductDetailCode,
+            Code = nextProductCode,
             Name = $"Producto integración {suffix}",
             Subcategory = subcategory
         };
-        var product = new Product
+        var productVariant = new ProductVariant
         {
             Order = order,
-            ProductDetail = detail,
+            Product = detail,
             Size = size,
             Quantity = quantity,
             ReceivedQuantity = receivedQuantity,
@@ -156,19 +156,19 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
             SalePrice = salePrice
         };
 
-        context.Products.Add(product);
+        context.ProductVariants.Add(productVariant);
         await context.SaveChangesAsync();
 
-        return new SeededProduct(order.Id, detail.Id, product.Id);
+        return new SeededProduct(order.Id, detail.Id, productVariant.Id);
     }
 
     public async Task<ProductStock> GetProductStockAsync(int productId)
     {
         using var scope = Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-        var product = await context.Products.SingleAsync(item => item.Id == productId);
+        var productVariant = await context.ProductVariants.SingleAsync(item => item.Id == productId);
 
-        return new ProductStock(product.ReceivedQuantity, product.AvailableQuantity, product.ReservedQuantity, product.UnavailableQuantity);
+        return new ProductStock(productVariant.ReceivedQuantity, productVariant.AvailableQuantity, productVariant.ReservedQuantity, productVariant.UnavailableQuantity);
     }
 
     public async Task<DeliveryLocation> SeedDeliveryLocationAsync()
@@ -201,7 +201,7 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
         Environment.SetEnvironmentVariable(name, value);
     }
 
-    public sealed record SeededProduct(int OrderId, int ProductDetailId, int ProductId);
+    public sealed record SeededProduct(int OrderId, int ProductId, int ProductVariantId);
     public sealed record ProductStock(int ReceivedQuantity, int AvailableQuantity, int ReservedQuantity, int UnavailableQuantity);
     public sealed record DeliveryLocation(int MunicipalityId, int DeliveryAgencyId);
 }

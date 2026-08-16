@@ -2,7 +2,7 @@ using System.ComponentModel.DataAnnotations;
 
 namespace PrettyWoman.Application.DTOs.Orders;
 
-public class CreateOrderProductDetailDTO
+public class CreateOrderProductDTO
 {
     public int? Id { get; set; } // Used when updating orders
 

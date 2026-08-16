@@ -27,7 +27,7 @@ public class InventoryService(IApplicationDbContext context) : IInventoryService
     ];
 
     public InventoryMovement Move(
-        Product product,
+        ProductVariant productVariant,
         InventoryStockBucketOption fromStockBucket,
         InventoryStockBucketOption toStockBucket,
         int quantity,
@@ -38,18 +38,18 @@ public class InventoryService(IApplicationDbContext context) : IInventoryService
         ValidateRequest(fromStockBucket, toStockBucket, quantity, movementType);
 
         var projected = new ProjectedInventory(
-            product.ReceivedQuantity,
-            product.AvailableQuantity,
-            product.ReservedQuantity,
-            product.UnavailableQuantity);
+            productVariant.ReceivedQuantity,
+            productVariant.AvailableQuantity,
+            productVariant.ReservedQuantity,
+            productVariant.UnavailableQuantity);
 
-        projected = RemoveFromSource(product.Id, projected, fromStockBucket, quantity);
+        projected = RemoveFromSource(productVariant.Id, projected, fromStockBucket, quantity);
         projected = AddToDestination(projected, toStockBucket, quantity);
-        ValidateProjectedInventory(product, projected);
+        ValidateProjectedInventory(productVariant, projected);
 
         var movement = new InventoryMovement
         {
-            Product = product,
+            ProductVariant = productVariant,
             InventoryMovementTypeId = (int)movementType,
             FromStockBucketId = (int)fromStockBucket,
             ToStockBucketId = (int)toStockBucket,
@@ -60,10 +60,10 @@ public class InventoryService(IApplicationDbContext context) : IInventoryService
 
         _context.InventoryMovements.Add(movement);
 
-        product.ReceivedQuantity = projected.ReceivedQuantity;
-        product.AvailableQuantity = projected.AvailableQuantity;
-        product.ReservedQuantity = projected.ReservedQuantity;
-        product.UnavailableQuantity = projected.UnavailableQuantity;
+        productVariant.ReceivedQuantity = projected.ReceivedQuantity;
+        productVariant.AvailableQuantity = projected.AvailableQuantity;
+        productVariant.ReservedQuantity = projected.ReservedQuantity;
+        productVariant.UnavailableQuantity = projected.UnavailableQuantity;
 
         return movement;
     }
@@ -182,14 +182,14 @@ public class InventoryService(IApplicationDbContext context) : IInventoryService
         return currentQuantity - quantity;
     }
 
-    private static void ValidateProjectedInventory(Product product, ProjectedInventory inventory)
+    private static void ValidateProjectedInventory(ProductVariant productVariant, ProjectedInventory inventory)
     {
         if (inventory.ReceivedQuantity < 0 ||
             inventory.AvailableQuantity < 0 ||
             inventory.ReservedQuantity < 0 ||
             inventory.UnavailableQuantity < 0)
         {
-            throw new AppBadRequestException($"La transición dejaría cantidades negativas en la variante con id '{product.Id}'.");
+            throw new AppBadRequestException($"La transición dejaría cantidades negativas en la variante con id '{productVariant.Id}'.");
         }
 
         var activeQuantity =
@@ -200,7 +200,7 @@ public class InventoryService(IApplicationDbContext context) : IInventoryService
         if (activeQuantity > inventory.ReceivedQuantity)
         {
             throw new AppBadRequestException(
-                $"La transición dejaría más inventario activo que recibido en la variante con id '{product.Id}'.");
+                $"La transición dejaría más inventario activo que recibido en la variante con id '{productVariant.Id}'.");
         }
     }
 

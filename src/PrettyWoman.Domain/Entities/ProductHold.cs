@@ -20,7 +20,7 @@ public class ProductHold : IAuditableEntity
     public string? UpdatedById { get; set; }
     
 
-    public Product? Product { get; set; }
+    public ProductVariant? ProductVariant { get; set; }
     public ProductHoldStatus? ProductHoldStatus { get; set; }
     public Sale? Sale { get; set; }
 }

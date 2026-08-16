@@ -40,12 +40,12 @@ public class InventoryAdjustmentServiceTests
             .Include(item => item.Items)
                 .ThenInclude(item => item.InventoryMovement)
             .SingleAsync(item => item.Id == id);
-        var product = await context.Products.SingleAsync(item => item.Id == 1);
+        var productVariant = await context.ProductVariants.SingleAsync(item => item.Id == 1);
         var movement = await context.InventoryMovements.SingleAsync();
         var adjustmentItem = Assert.Single(adjustment.Items);
 
-        Assert.Equal(4, product.ReceivedQuantity);
-        Assert.Equal(4, product.AvailableQuantity);
+        Assert.Equal(4, productVariant.ReceivedQuantity);
+        Assert.Equal(4, productVariant.AvailableQuantity);
         Assert.Equal((int)InventoryMovementTypeOption.AdjustmentTransfer, movement.InventoryMovementTypeId);
         Assert.Equal((int)InventoryStockBucketOption.External, movement.FromStockBucketId);
         Assert.Equal((int)InventoryStockBucketOption.Available, movement.ToStockBucketId);
@@ -84,8 +84,8 @@ public class InventoryAdjustmentServiceTests
             ]
         });
 
-        var correctProduct = await context.Products.SingleAsync(item => item.Id == 2);
-        var wrongProduct = await context.Products.SingleAsync(item => item.Id == 3);
+        var correctProduct = await context.ProductVariants.SingleAsync(item => item.Id == 2);
+        var wrongProduct = await context.ProductVariants.SingleAsync(item => item.Id == 3);
         var movements = await context.InventoryMovements.OrderBy(item => item.Id).ToListAsync();
 
         Assert.Equal(0, correctProduct.AvailableQuantity);
@@ -157,13 +157,13 @@ public class InventoryAdjustmentServiceTests
 
         var result = await service.GetAllAsync(new InventoryAdjustmentQueryDTO
         {
-            ProductId = 3,
+            ProductVariantId = 3,
             InventoryAdjustmentReasonId = (int)InventoryAdjustmentReasonOption.FoundItem
         });
 
         var adjustment = Assert.Single(result.Items);
         Assert.Equal((int)InventoryAdjustmentReasonOption.FoundItem, adjustment.InventoryAdjustmentReasonId);
-        Assert.Equal(3, Assert.Single(adjustment.Items).ProductId);
+        Assert.Equal(3, Assert.Single(adjustment.Items).ProductVariantId);
     }
 
     private static InventoryAdjustmentService CreateService(ApplicationDbContext context)
@@ -178,21 +178,21 @@ public class InventoryAdjustmentServiceTests
         context.SizeGroups.Add(sizeGroup);
         context.Sizes.Add(smallSize);
 
-        var productDetail = new ProductDetail
+        var product = new Product
         {
             Id = 1,
             SupplierProductCode = "BLA-001",
             Code = 1001,
             Name = "Blazer",
             SubcategoryId = 1,
-            Products =
+            ProductVariants =
             [
-                new Product { Id = 1, SizeId = 1, Size = smallSize, Quantity = 5, ReceivedQuantity = 2, AvailableQuantity = 2, SalePrice = 800m },
-                new Product { Id = 2, SizeId = 1, Size = smallSize, Quantity = 1, ReceivedQuantity = 1, AvailableQuantity = 1, SalePrice = 800m },
-                new Product { Id = 3, SizeId = 1, Size = smallSize, Quantity = 1, ReceivedQuantity = 1, AvailableQuantity = 0, SalePrice = 800m }
+                new ProductVariant { Id = 1, SizeId = 1, Size = smallSize, Quantity = 5, ReceivedQuantity = 2, AvailableQuantity = 2, SalePrice = 800m },
+                new ProductVariant { Id = 2, SizeId = 1, Size = smallSize, Quantity = 1, ReceivedQuantity = 1, AvailableQuantity = 1, SalePrice = 800m },
+                new ProductVariant { Id = 3, SizeId = 1, Size = smallSize, Quantity = 1, ReceivedQuantity = 1, AvailableQuantity = 0, SalePrice = 800m }
             ]
         };
-        context.ProductDetails.Add(productDetail);
+        context.Products.Add(product);
 
         context.InventoryAdjustmentReasons.AddRange(
             new InventoryAdjustmentReason { Id = (int)InventoryAdjustmentReasonOption.ManualCorrection, Name = nameof(InventoryAdjustmentReasonOption.ManualCorrection) },

@@ -119,7 +119,7 @@ public class DashboardSummaryTests(PrettyWomanApiFactory factory)
 
     private async Task SeedDashboardDataAsync(DateTime date)
     {
-        var product = await _factory.SeedProductAsync(quantity: 2, receivedQuantity: 2, availableQuantity: 2);
+        var productVariant = await _factory.SeedProductAsync(quantity: 2, receivedQuantity: 2, availableQuantity: 2);
         var location = await _factory.SeedDeliveryLocationAsync();
         using var scope = _factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -155,7 +155,7 @@ public class DashboardSummaryTests(PrettyWomanApiFactory factory)
             },
             new ProductHold
             {
-                ProductId = product.ProductId,
+                ProductId = productVariant.ProductId,
                 Quantity = 2,
                 HoldDate = date,
                 HoldReason = "Reserva de integración",
@@ -173,7 +173,7 @@ public class DashboardSummaryTests(PrettyWomanApiFactory factory)
             },
             new ProductInventoryIssue
             {
-                ProductId = product.ProductId,
+                ProductId = productVariant.ProductId,
                 ProductInventoryIssueTypeId = (int)ProductInventoryIssueTypeOption.Damaged,
                 ProductInventoryIssueStatusId = (int)ProductInventoryIssueStatusOption.Open,
                 Quantity = 1,

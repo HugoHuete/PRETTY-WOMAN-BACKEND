@@ -26,14 +26,14 @@ public class ProductServiceTests
             SizeId = 2
         });
 
-        var productDetail = Assert.Single(result.Items);
-        var product = Assert.Single(productDetail.Products);
+        var product = Assert.Single(result.Items);
+        var productVariant = Assert.Single(product.Variants);
 
-        Assert.Equal("Pantalon cargo", productDetail.Name);
-        Assert.Equal("pantalon-primary.jpg", productDetail.PrimaryImageUrl);
-        Assert.Equal(2, product.SizeId);
-        Assert.Equal("Negro", product.Variant);
-        Assert.Equal(1, product.UnavailableQuantity);
+        Assert.Equal("Pantalon cargo", product.Name);
+        Assert.Equal("pantalon-primary.jpg", product.PrimaryImageUrl);
+        Assert.Equal(2, productVariant.SizeId);
+        Assert.Equal("Negro", productVariant.Variant);
+        Assert.Equal(1, productVariant.UnavailableQuantity);
     }
 
     [Fact]
@@ -48,11 +48,11 @@ public class ProductServiceTests
             Availability = ProductAvailabilityFilter.Reserved
         });
 
-        var productDetail = Assert.Single(result.Items);
-        var product = Assert.Single(productDetail.Products);
+        var product = Assert.Single(result.Items);
+        var productVariant = Assert.Single(product.Variants);
 
-        Assert.Equal("Blusa satin", productDetail.Name);
-        Assert.Equal(1, product.ReservedQuantity);
+        Assert.Equal("Blusa satin", product.Name);
+        Assert.Equal(1, productVariant.ReservedQuantity);
     }
 
     [Fact]
@@ -64,9 +64,9 @@ public class ProductServiceTests
 
         var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1002 });
 
-        var productDetail = Assert.Single(result.Items);
-        Assert.Equal("Blusa satin", productDetail.Name);
-        Assert.Equal(1002, productDetail.Code);
+        var product = Assert.Single(result.Items);
+        Assert.Equal("Blusa satin", product.Name);
+        Assert.Equal(1002, product.Code);
     }
 
     [Fact]
@@ -78,9 +78,9 @@ public class ProductServiceTests
 
         var result = await service.GetAllAsync(new ProductQueryDTO { DiscountCampaignId = 2 });
 
-        var productDetail = Assert.Single(result.Items);
-        Assert.Equal("Blusa satin", productDetail.Name);
-        Assert.All(productDetail.Products, product => Assert.Null(product.DiscountedSalePrice));
+        var product = Assert.Single(result.Items);
+        Assert.Equal("Blusa satin", product.Name);
+        Assert.All(product.Variants, productVariant => Assert.Null(productVariant.DiscountedSalePrice));
     }
 
     [Fact]
@@ -92,13 +92,13 @@ public class ProductServiceTests
 
         var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1001 });
 
-        var productDetail = Assert.Single(result.Items);
-        Assert.All(productDetail.Products, product =>
+        var product = Assert.Single(result.Items);
+        Assert.All(product.Variants, productVariant =>
         {
-            Assert.Equal(650m, product.SalePrice);
-            Assert.Equal(585m, product.DiscountedSalePrice);
-            Assert.Equal(1, product.DiscountCampaignId);
-            Assert.Equal("Promo vigente", product.DiscountCampaignName);
+            Assert.Equal(650m, productVariant.SalePrice);
+            Assert.Equal(585m, productVariant.DiscountedSalePrice);
+            Assert.Equal(1, productVariant.DiscountCampaignId);
+            Assert.Equal("Promo vigente", productVariant.DiscountCampaignName);
         });
     }
 
@@ -112,41 +112,41 @@ public class ProductServiceTests
         var activeProduct = Assert.Single((await service.GetAllAsync(new ProductQueryDTO { Code = 1001 })).Items);
         var futureProduct = Assert.Single((await service.GetAllAsync(new ProductQueryDTO { Code = 1002 })).Items);
 
-        Assert.All(activeProduct.Products, product =>
+        Assert.All(activeProduct.Variants, productVariant =>
         {
-            Assert.Equal(585m, product.DiscountedSalePrice);
-            Assert.Equal(1, product.DiscountCampaignId);
+            Assert.Equal(585m, productVariant.DiscountedSalePrice);
+            Assert.Equal(1, productVariant.DiscountCampaignId);
         });
-        Assert.All(futureProduct.Products, product =>
+        Assert.All(futureProduct.Variants, productVariant =>
         {
-            Assert.Null(product.DiscountedSalePrice);
-            Assert.Null(product.DiscountCampaignId);
+            Assert.Null(productVariant.DiscountedSalePrice);
+            Assert.Null(productVariant.DiscountCampaignId);
         });
     }
 
     [Fact]
-    public async Task GetByIdAsync_ReturnsProductDetailWithProductsPrimaryImageAndDiscountedPrice()
+    public async Task GetByIdAsync_ReturnsProductWithProductsPrimaryImageAndDiscountedPrice()
     {
         await using var context = CreateContext();
         await SeedProductsAsync(context);
         var service = CreateService(context);
-        var productDetailId = await context.ProductDetails
-            .Where(productDetail => productDetail.Name == "Pantalon cargo")
-            .Select(productDetail => productDetail.Id)
+        var productId = await context.Products
+            .Where(product => product.Name == "Pantalon cargo")
+            .Select(product => product.Id)
             .SingleAsync();
 
-        var result = await service.GetByIdAsync(productDetailId);
+        var result = await service.GetByIdAsync(productId);
 
         Assert.Equal("Pantalon cargo", result.Name);
         Assert.Equal("Pantalones", result.SubcategoryName);
         Assert.Equal("Ropa", result.CategoryName);
         Assert.Equal("pantalon-primary.jpg", result.PrimaryImageUrl);
-        Assert.Equal(2, result.Products.Count);
-        Assert.All(result.Products, product => Assert.Equal(585m, product.DiscountedSalePrice));
+        Assert.Equal(2, result.Variants.Count);
+        Assert.All(result.Variants, productVariant => Assert.Equal(585m, productVariant.DiscountedSalePrice));
     }
 
     [Fact]
-    public async Task GetByIdAsync_ThrowsWhenProductDetailDoesNotExist()
+    public async Task GetByIdAsync_ThrowsWhenProductDoesNotExist()
     {
         await using var context = CreateContext();
         var service = CreateService(context);
@@ -165,13 +165,13 @@ public class ProductServiceTests
 
         await service.UpdatePriceAsync(1, 1, new UpdateProductPriceDTO { SalePrice = 750m });
 
-        Assert.Equal(750m, await context.Products
-            .Where(product => product.Id == 1)
-            .Select(product => product.SalePrice)
+        Assert.Equal(750m, await context.ProductVariants
+            .Where(productVariant => productVariant.Id == 1)
+            .Select(productVariant => productVariant.SalePrice)
             .SingleAsync());
-        Assert.Equal(650m, await context.Products
-            .Where(product => product.Id == 2)
-            .Select(product => product.SalePrice)
+        Assert.Equal(650m, await context.ProductVariants
+            .Where(productVariant => productVariant.Id == 2)
+            .Select(productVariant => productVariant.SalePrice)
             .SingleAsync());
     }
 
@@ -189,7 +189,7 @@ public class ProductServiceTests
     }
 
     [Fact]
-    public async Task UpdatePriceAsync_ThrowsWhenVariantBelongsToAnotherProductDetail()
+    public async Task UpdatePriceAsync_ThrowsWhenVariantBelongsToAnotherProduct()
     {
         await using var context = CreateContext();
         await SeedProductsAsync(context);
@@ -217,7 +217,7 @@ public class ProductServiceTests
             TotalCostAtSale = 400m,
             GrossProfit = 100m
         };
-        context.Sales.Add(new Sale { UserId = "seller", Products = [saleProduct] });
+        context.Sales.Add(new Sale { UserId = "seller", ProductVariants = [saleProduct] });
         await context.SaveChangesAsync();
         var service = CreateService(context);
 
@@ -226,11 +226,11 @@ public class ProductServiceTests
         var persistedSaleProduct = await context.SaleProducts.SingleAsync();
         Assert.Equal(500m, persistedSaleProduct.OriginalUnitPrice);
         Assert.Equal(500m, persistedSaleProduct.FinalUnitPrice);
-        Assert.Equal(750m, await context.Products.Where(product => product.Id == 1).Select(product => product.SalePrice).SingleAsync());
+        Assert.Equal(750m, await context.ProductVariants.Where(productVariant => productVariant.Id == 1).Select(productVariant => productVariant.SalePrice).SingleAsync());
     }
 
     [Fact]
-    public async Task GetInventoryMovementsAsync_ReturnsMovementsForAllProductDetailVariants()
+    public async Task GetInventoryMovementsAsync_ReturnsMovementsForAllProductVariants()
     {
         await using var context = CreateContext();
         await SeedProductsAsync(context);
@@ -241,8 +241,8 @@ public class ProductServiceTests
         Assert.Equal(2, result.Count);
 
         Assert.Equal("Movimiento mas reciente", result[0].Comments);
-        Assert.Equal(2, result[0].ProductId);
-        Assert.Equal(1, result[0].ProductDetailId);
+        Assert.Equal(1, result[0].ProductId);
+        Assert.Equal(2, result[0].ProductVariantId);
         Assert.Equal("Pantalon cargo", result[0].ProductName);
         Assert.Equal(1001, result[0].ProductCode);
         Assert.Equal(2, result[0].SizeId);
@@ -257,7 +257,7 @@ public class ProductServiceTests
         Assert.Equal(7, result[0].ProductInventoryIssueId);
 
         Assert.Equal("Movimiento anterior", result[1].Comments);
-        Assert.Equal(1, result[1].ProductId);
+        Assert.Equal(1, result[1].ProductVariantId);
         Assert.Equal((int)InventoryMovementTypeOption.PurchaseReceived, result[1].InventoryMovementTypeId);
         Assert.Equal(3, result[1].Quantity);
         Assert.Equal(12, result[1].OrderId);
@@ -273,13 +273,13 @@ public class ProductServiceTests
         var result = (await service.GetInventoryMovementsAsync(1, 2)).ToList();
 
         var movement = Assert.Single(result);
-        Assert.Equal(2, movement.ProductId);
+        Assert.Equal(2, movement.ProductVariantId);
         Assert.Equal("M", movement.SizeName);
         Assert.Equal("Movimiento mas reciente", movement.Comments);
     }
 
     [Fact]
-    public async Task GetInventoryMovementsAsync_ThrowsWhenProductIdDoesNotBelongToProductDetail()
+    public async Task GetInventoryMovementsAsync_ThrowsWhenProductIdDoesNotBelongToProduct()
     {
         await using var context = CreateContext();
         await SeedProductsAsync(context);
@@ -290,7 +290,7 @@ public class ProductServiceTests
         Assert.Equal("La variante con id '3' no existe para el producto con id '1'.", exception.Message);
     }
     [Fact]
-    public async Task GetInventoryMovementsAsync_ThrowsWhenProductDetailDoesNotExist()
+    public async Task GetInventoryMovementsAsync_ThrowsWhenProductDoesNotExist()
     {
         await using var context = CreateContext();
         await SeedProductsAsync(context);
@@ -320,7 +320,7 @@ public class ProductServiceTests
             new Size { Id = 1, Name = "S", SizeGroupId = 1, DisplayOrder = 1 },
             new Size { Id = 2, Name = "M", SizeGroupId = 1, DisplayOrder = 2 });
 
-        var pants = new ProductDetail
+        var pants = new Product
         {
             Id = 1,
             SupplierProductCode = "PANT-001",
@@ -332,40 +332,40 @@ public class ProductServiceTests
                 new ProductImage { MediaAsset = CreateMediaAsset("pantalon-secondary.jpg"), SortOrder = 0, IsPrimary = false },
                 new ProductImage { MediaAsset = CreateMediaAsset("pantalon-primary.jpg"), SortOrder = 1, IsPrimary = true }
             ],
-            Products =
+            ProductVariants =
             [
-                new Product { SizeId = 1, Variant = "Negro", Quantity = 3, ReceivedQuantity = 3, AvailableQuantity = 2, SalePrice = 650m },
-                new Product { SizeId = 2, Variant = "Negro", Quantity = 1, ReceivedQuantity = 1, UnavailableQuantity = 1, SalePrice = 650m }
+                new ProductVariant { SizeId = 1, Variant = "Negro", Quantity = 3, ReceivedQuantity = 3, AvailableQuantity = 2, SalePrice = 650m },
+                new ProductVariant { SizeId = 2, Variant = "Negro", Quantity = 1, ReceivedQuantity = 1, UnavailableQuantity = 1, SalePrice = 650m }
             ]
         };
 
-        var blouse = new ProductDetail
+        var blouse = new Product
         {
             Id = 2,
             SupplierProductCode = "BLU-001",
             Code = 1002,
             Name = "Blusa satin",
             SubcategoryId = 2,
-            Products =
+            ProductVariants =
             [
-                new Product { SizeId = 1, Variant = "Rayas", Quantity = 1, ReceivedQuantity = 1, ReservedQuantity = 1, SalePrice = 500m }
+                new ProductVariant { SizeId = 1, Variant = "Rayas", Quantity = 1, ReceivedQuantity = 1, ReservedQuantity = 1, SalePrice = 500m }
             ]
         };
 
-        var shoes = new ProductDetail
+        var shoes = new Product
         {
             Id = 3,
             SupplierProductCode = "TAC-001",
             Code = 1003,
             Name = "Tacones",
             SubcategoryId = 3,
-            Products =
+            ProductVariants =
             [
-                new Product { SizeId = 2, Variant = "Tacón", Quantity = 1, ReceivedQuantity = 1, UnavailableQuantity = 1, SalePrice = 900m }
+                new ProductVariant { SizeId = 2, Variant = "Tacón", Quantity = 1, ReceivedQuantity = 1, UnavailableQuantity = 1, SalePrice = 900m }
             ]
         };
 
-        context.ProductDetails.AddRange(pants, blouse, shoes);
+        context.Products.AddRange(pants, blouse, shoes);
         context.InventoryMovementTypes.AddRange(
             new InventoryMovementType { Id = (int)InventoryMovementTypeOption.PurchaseReceived, Name = "PurchaseReceived" },
             new InventoryMovementType { Id = (int)InventoryMovementTypeOption.AdjustmentTransfer, Name = "AdjustmentTransfer" });
@@ -376,7 +376,7 @@ public class ProductServiceTests
         context.InventoryMovements.AddRange(
             new InventoryMovement
             {
-                Product = pants.Products.ElementAt(0),
+                ProductVariant = pants.ProductVariants.ElementAt(0),
                 InventoryMovementTypeId = (int)InventoryMovementTypeOption.PurchaseReceived,
                 FromStockBucketId = (int)InventoryStockBucketOption.External,
                 ToStockBucketId = (int)InventoryStockBucketOption.Available,
@@ -388,7 +388,7 @@ public class ProductServiceTests
             },
             new InventoryMovement
             {
-                Product = pants.Products.ElementAt(1),
+                ProductVariant = pants.ProductVariants.ElementAt(1),
                 InventoryMovementTypeId = (int)InventoryMovementTypeOption.AdjustmentTransfer,
                 FromStockBucketId = (int)InventoryStockBucketOption.Available,
                 ToStockBucketId = (int)InventoryStockBucketOption.Unavailable,
@@ -400,7 +400,7 @@ public class ProductServiceTests
             },
             new InventoryMovement
             {
-                Product = blouse.Products.Single(),
+                ProductVariant = blouse.ProductVariants.Single(),
                 InventoryMovementTypeId = (int)InventoryMovementTypeOption.PurchaseReceived,
                 FromStockBucketId = (int)InventoryStockBucketOption.External,
                 ToStockBucketId = (int)InventoryStockBucketOption.Available,
@@ -422,7 +422,7 @@ public class ProductServiceTests
                 [
                     new DiscountCampaignProduct
                     {
-                        ProductDetail = pants,
+                        Product = pants,
                         DiscountTypeId = (int)DiscountTypeOption.Percentage,
                         DiscountValue = 10m
                     }
@@ -438,7 +438,7 @@ public class ProductServiceTests
                 [
                     new DiscountCampaignProduct
                     {
-                        ProductDetail = blouse,
+                        Product = blouse,
                         DiscountTypeId = (int)DiscountTypeOption.FixedPrice,
                         DiscountValue = 300m
                     }
@@ -455,7 +455,7 @@ public class ProductServiceTests
                 [
                     new DiscountCampaignProduct
                     {
-                        ProductDetail = pants,
+                        Product = pants,
                         DiscountTypeId = (int)DiscountTypeOption.FixedPrice,
                         DiscountValue = 1m
                     }
@@ -468,7 +468,7 @@ public class ProductServiceTests
     private static MediaAsset CreateMediaAsset(string webStorageKey) => new()
     {
         Id = Guid.NewGuid(),
-        StorageKey = $"products/test/{Guid.NewGuid():N}",
+        StorageKey = $"productVariants/test/{Guid.NewGuid():N}",
         OriginalBucket = MediaBucket.Private,
         Visibility = MediaVisibility.Public,
         OriginalContentType = "image/jpeg",

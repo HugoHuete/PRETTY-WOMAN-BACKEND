@@ -84,17 +84,17 @@ public class OrderServiceTests
         await SeedCatalogAsync(context);
         var service = CreateService(context);
         var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-FALTANTE", "Blusa faltante"));
-        var order = await context.Orders.Include(item => item.Products).SingleAsync(item => item.Id == orderId);
-        var product = order.Products.Single();
+        var order = await context.Orders.Include(item => item.ProductVariants).SingleAsync(item => item.Id == orderId);
+        var productVariant = order.ProductVariants.Single();
         order.Comments = "Compra parcial confirmada con el proveedor.";
-        product.ReceivedQuantity = 1;
-        product.AvailableQuantity = 1;
+        productVariant.ReceivedQuantity = 1;
+        productVariant.AvailableQuantity = 1;
         order.OrderStatusId = (int)OrderStatusCode.PartiallyReceived;
         await context.SaveChangesAsync();
 
         var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
         {
-            Items = [new CloseOrderShortageItemDTO { ProductId = product.Id }]
+            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
         });
 
         Assert.Equal((int)OrderStatusCode.PendingRefund, closedOrder.OrderStatusId);
@@ -130,21 +130,21 @@ public class OrderServiceTests
         await SeedCatalogAsync(context);
         var service = CreateService(context);
         var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-SIN-COSTO", "Muestra sin costo"));
-        var order = await context.Orders.Include(item => item.Products).SingleAsync(item => item.Id == orderId);
-        var product = order.Products.Single();
-        product.MerchandiseTotalCostNio = 0;
-        product.AllocatedShippingCostNio = 0;
-        product.TotalCostNio = 0;
-        product.UnitCostNio = 0;
-        product.UnitCostUsd = 0;
-        product.ReceivedQuantity = 1;
-        product.AvailableQuantity = 1;
+        var order = await context.Orders.Include(item => item.ProductVariants).SingleAsync(item => item.Id == orderId);
+        var productVariant = order.ProductVariants.Single();
+        productVariant.MerchandiseTotalCostNio = 0;
+        productVariant.AllocatedShippingCostNio = 0;
+        productVariant.TotalCostNio = 0;
+        productVariant.UnitCostNio = 0;
+        productVariant.UnitCostUsd = 0;
+        productVariant.ReceivedQuantity = 1;
+        productVariant.AvailableQuantity = 1;
         order.OrderStatusId = (int)OrderStatusCode.PartiallyReceived;
         await context.SaveChangesAsync();
 
         var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
         {
-            Items = [new CloseOrderShortageItemDTO { ProductId = product.Id }]
+            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
         });
 
         var shortage = Assert.Single(closedOrder.PurchaseShortages);
@@ -161,15 +161,15 @@ public class OrderServiceTests
         await SeedCatalogAsync(context);
         var service = CreateService(context);
         var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-SIN-REEMBOLSO", "Blusa sin crédito"));
-        var order = await context.Orders.Include(item => item.Products).SingleAsync(item => item.Id == orderId);
-        var product = order.Products.Single();
-        product.ReceivedQuantity = 1;
-        product.AvailableQuantity = 1;
+        var order = await context.Orders.Include(item => item.ProductVariants).SingleAsync(item => item.Id == orderId);
+        var productVariant = order.ProductVariants.Single();
+        productVariant.ReceivedQuantity = 1;
+        productVariant.AvailableQuantity = 1;
         order.OrderStatusId = (int)OrderStatusCode.PartiallyReceived;
         await context.SaveChangesAsync();
         await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
         {
-            Items = [new CloseOrderShortageItemDTO { ProductId = product.Id }]
+            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
         });
 
         var declinedOrder = await service.DeclineSupplierRefundAsync(orderId, new DeclineSupplierRefundDTO
@@ -193,17 +193,17 @@ public class OrderServiceTests
         await SeedCatalogAsync(context);
         var service = CreateService(context);
         var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-AUSENTE", "Variante no recibida"));
-        var product = await context.Products.SingleAsync(item => item.OrderId == orderId);
+        var productVariant = await context.ProductVariants.SingleAsync(item => item.OrderId == orderId);
 
         var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
         {
-            Items = [new CloseOrderShortageItemDTO { ProductId = product.Id }]
+            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
         });
 
         Assert.Equal((int)OrderStatusCode.PendingRefund, closedOrder.OrderStatusId);
         Assert.Equal(2, Assert.Single(closedOrder.PurchaseShortages).Quantity);
         Assert.Equal(584m, closedOrder.TotalShortageLossNio);
-        Assert.Equal(0, (await context.Products.SingleAsync(item => item.Id == product.Id)).Quantity);
+        Assert.Equal(0, (await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id)).Quantity);
     }
 
     [Fact]
@@ -213,18 +213,18 @@ public class OrderServiceTests
         await SeedCatalogAsync(context);
         var service = CreateService(context);
         var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-CENTAVOS", "Producto con centavos"));
-        var order = await context.Orders.Include(item => item.Products).SingleAsync(item => item.Id == orderId);
-        var product = order.Products.Single();
-        product.MerchandiseTotalCostNio = 0.03m;
-        product.TotalCostNio = product.MerchandiseTotalCostNio + product.AllocatedShippingCostNio;
-        product.ReceivedQuantity = 1;
-        product.AvailableQuantity = 1;
+        var order = await context.Orders.Include(item => item.ProductVariants).SingleAsync(item => item.Id == orderId);
+        var productVariant = order.ProductVariants.Single();
+        productVariant.MerchandiseTotalCostNio = 0.03m;
+        productVariant.TotalCostNio = productVariant.MerchandiseTotalCostNio + productVariant.AllocatedShippingCostNio;
+        productVariant.ReceivedQuantity = 1;
+        productVariant.AvailableQuantity = 1;
         order.OrderStatusId = (int)OrderStatusCode.PartiallyReceived;
         await context.SaveChangesAsync();
 
         var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
         {
-            Items = [new CloseOrderShortageItemDTO { ProductId = product.Id }]
+            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
         });
 
         Assert.Equal(0.02m, closedOrder.TotalShortageLossNio);
@@ -244,9 +244,9 @@ public class OrderServiceTests
             SupplierId = 1,
             PurchaseCurrencyId = (int)PurchaseCurrencyOption.Nio,
             SupplierShippingCostUsd = 10m,
-            ProductDetails =
+            Products =
             [
-                new CreateOrderProductDetailDTO
+                new CreateOrderProductDTO
                 {
                     SupplierProductCode = "LOCAL-001",
                     Name = "Blusa local",
@@ -267,15 +267,15 @@ public class OrderServiceTests
         });
 
         var order = await context.Orders.SingleAsync(order => order.Id == orderId);
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
 
         Assert.Equal((int)PurchaseCurrencyOption.Nio, order.PurchaseCurrencyId);
         Assert.Equal(36.5m, order.ExchangeRate);
         Assert.Equal(13.70m, order.AmountUsd);
         Assert.Equal(500m, order.MerchandiseTotalNio);
         Assert.Equal(865m, order.TotalCostNio);
-        Assert.Equal(11.85m, product.UnitCostUsd);
-        Assert.Equal(432.5m, product.UnitCostNio);
+        Assert.Equal(11.85m, productVariant.UnitCostUsd);
+        Assert.Equal(432.5m, productVariant.UnitCostNio);
     }
 
     [Fact]
@@ -334,10 +334,10 @@ public class OrderServiceTests
         });
 
         var order = await context.Orders
-            .Include(order => order.Products)
+            .Include(order => order.ProductVariants)
             .SingleAsync(order => order.Id == orderId);
 
-        Assert.Empty(order.Products);
+        Assert.Empty(order.ProductVariants);
         Assert.Equal(0m, order.AmountUsd);
         Assert.Equal(0m, order.MerchandiseTotalNio);
         Assert.Equal(0m, order.TotalCostNio);
@@ -362,9 +362,9 @@ public class OrderServiceTests
             SupplierId = 1,
             PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd,
             SupplierShippingCostUsd = 0m,
-            ProductDetails =
+            Products =
             [
-                new CreateOrderProductDetailDTO
+                new CreateOrderProductDTO
                 {
                     SupplierProductCode = "SOHO25120",
                     Name = "Pantalon cargo",
@@ -385,11 +385,11 @@ public class OrderServiceTests
         });
 
         var order = await context.Orders
-            .Include(order => order.Products)
+            .Include(order => order.ProductVariants)
             .SingleAsync(order => order.Id == orderId);
         var financialMovement = await context.FinancialMovements.SingleAsync(movement => movement.OrderId == orderId);
 
-        Assert.Single(order.Products);
+        Assert.Single(order.ProductVariants);
         Assert.Equal(584m, order.TotalCostNio);
         Assert.Equal(order.TotalCostNio, financialMovement.Amount);
     }
@@ -416,9 +416,9 @@ public class OrderServiceTests
             SupplierId = 1,
             PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd,
             SupplierShippingCostUsd = 0m,
-            ProductDetails =
+            Products =
             [
-                new CreateOrderProductDetailDTO
+                new CreateOrderProductDTO
                 {
                     SupplierProductCode = "SOHO25120",
                     Name = "Pantalon cargo",
@@ -443,25 +443,25 @@ public class OrderServiceTests
         Assert.Equal(purchaseDate, financialMovement.MovementDate);
     }
     [Fact]
-    public async Task UpdateAsync_ReusesProductDetailCodeWhenProductDetailIdIsProvided()
+    public async Task UpdateAsync_ReusesProductCodeWhenProductIdIsProvided()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
         var service = CreateService(context);
 
         var orderId = await service.CreateAsync(CreateOrderRequest("SOHO25120", "Pantalon cargo"));
-        var existingProductDetail = await context.ProductDetails.SingleAsync();
+        var existingProduct = await context.Products.SingleAsync();
 
         await service.UpdateAsync(orderId, new UpdateOrderDTO
         {
             SupplierId = 1,
             PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd,
             SupplierShippingCostUsd = 150m,
-            ProductDetails =
+            Products =
             [
-                new CreateOrderProductDetailDTO
+                new CreateOrderProductDTO
                 {
-                    Id = existingProductDetail.Id,
+                    Id = existingProduct.Id,
                     SupplierProductCode = "SOHO25120-CORREGIDO",
                     Name = "Pantalon cargo corregido",
                     SubcategoryId = 1,
@@ -480,16 +480,16 @@ public class OrderServiceTests
             ]
         });
 
-        var updatedProductDetail = await context.ProductDetails.SingleAsync();
+        var updatedProduct = await context.Products.SingleAsync();
 
-        Assert.Equal(existingProductDetail.Id, updatedProductDetail.Id);
-        Assert.Equal(existingProductDetail.Code, updatedProductDetail.Code);
-        Assert.Equal("SOHO25120-CORREGIDO", updatedProductDetail.SupplierProductCode);
-        Assert.Equal("Pantalon cargo corregido", updatedProductDetail.Name);
+        Assert.Equal(existingProduct.Id, updatedProduct.Id);
+        Assert.Equal(existingProduct.Code, updatedProduct.Code);
+        Assert.Equal("SOHO25120-CORREGIDO", updatedProduct.SupplierProductCode);
+        Assert.Equal("Pantalon cargo corregido", updatedProduct.Name);
     }
 
     [Fact]
-    public async Task UpdateAsync_ThrowsWhenProductDetailIdDoesNotBelongToOrder()
+    public async Task UpdateAsync_ThrowsWhenProductIdDoesNotBelongToOrder()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -497,8 +497,8 @@ public class OrderServiceTests
 
         var firstOrderId = await service.CreateAsync(CreateOrderRequest("SOHO25120", "Pantalon cargo"));
         await service.CreateAsync(CreateOrderRequest("SOHO25121", "Blusa satin"));
-        var otherOrderProductDetail = await context.ProductDetails
-            .Where(productDetail => productDetail.SupplierProductCode == "SOHO25121")
+        var otherOrderProduct = await context.Products
+            .Where(product => product.SupplierProductCode == "SOHO25121")
             .SingleAsync();
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.UpdateAsync(firstOrderId, new UpdateOrderDTO
@@ -506,11 +506,11 @@ public class OrderServiceTests
             SupplierId = 1,
             PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd,
             SupplierShippingCostUsd = 100m,
-            ProductDetails =
+            Products =
             [
-                new CreateOrderProductDetailDTO
+                new CreateOrderProductDTO
                 {
-                    Id = otherOrderProductDetail.Id,
+                    Id = otherOrderProduct.Id,
                     SupplierProductCode = "SOHO25120",
                     Name = "Pantalon cargo",
                     SubcategoryId = 1,
@@ -529,7 +529,7 @@ public class OrderServiceTests
             ]
         }));
 
-        Assert.Equal($"El producto detalle con id '{otherOrderProductDetail.Id}' no pertenece a la orden.", exception.Message);
+        Assert.Equal($"El producto con id '{otherOrderProduct.Id}' no pertenece a la orden.", exception.Message);
     }
 
     [Fact]
@@ -606,9 +606,9 @@ public class OrderServiceTests
             SupplierId = 1,
             PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd,
             SupplierShippingCostUsd = 100m,
-            ProductDetails =
+            Products =
             [
-                new CreateOrderProductDetailDTO
+                new CreateOrderProductDTO
                 {
                     SupplierProductCode = supplierProductCode,
                     Name = name,

@@ -26,24 +26,24 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 4));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
 
         var receipt = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 10m,
             Comments = "Recepción parcial",
-            Products =
+            ProductVariants =
             [
                 new ReceiveOrderProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 2
                 }
             ]
         });
 
         var order = await context.Orders.SingleAsync(order => order.Id == orderId);
-        product = await context.Products.SingleAsync(storedProduct => storedProduct.Id == product.Id);
+        productVariant = await context.ProductVariants.SingleAsync(storedProduct => storedProduct.Id == productVariant.Id);
         var productReceipt = await context.ProductReceipts.SingleAsync();
         var receiptDetail = await context.ProductReceiptDetails.SingleAsync();
         var inventoryMovement = await context.InventoryMovements.SingleAsync();
@@ -60,11 +60,11 @@ public class OrderReceiptServiceTests
         Assert.Equal((int)OrderStatusCode.PartiallyReceived, receipt.OrderStatusId);
         Assert.Equal(584m, order.ReceivedAmountNio);
         Assert.Equal(10m, order.WarehouseShippingCostUsd);
-        Assert.Equal(2, product.ReceivedQuantity);
-        Assert.Equal(2, product.AvailableQuantity);
-        Assert.Equal(730m, product.AllocatedShippingCostNio);
-        Assert.Equal(13m, product.UnitCostUsd);
-        Assert.Equal(product.Id, receiptDetail.ProductId);
+        Assert.Equal(2, productVariant.ReceivedQuantity);
+        Assert.Equal(2, productVariant.AvailableQuantity);
+        Assert.Equal(730m, productVariant.AllocatedShippingCostNio);
+        Assert.Equal(13m, productVariant.UnitCostUsd);
+        Assert.Equal(productVariant.Id, receiptDetail.ProductId);
         Assert.Equal(2m, receiptDetail.Quantity);
         Assert.Equal(1m, receiptDetail.Weight);
         Assert.Equal(365m, receiptDetail.AllocatedWarehouseShippingCostNio);
@@ -87,17 +87,17 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 4));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
 
         await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 10m,
-            Products = [new ReceiveOrderProductDTO { ProductId = product.Id, Quantity = 1 }]
+            ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 1 }]
         });
         await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 5m,
-            Products = [new ReceiveOrderProductDTO { ProductId = product.Id, Quantity = 2 }]
+            ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 2 }]
         });
 
         var receipts = await receiptService.GetAllAsync(orderId);
@@ -117,7 +117,7 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
         context.OrderTrackingNumbers.Add(new OrderTrackingNumber
         {
             OrderId = orderId,
@@ -130,15 +130,15 @@ public class OrderReceiptServiceTests
         var created = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             TrackingNumbers = [new ReceiveOrderTrackingNumberDTO { Id = tracking.Id, ShippingCostUsd = 12m, Weight = 8.5m }],
-            Products = [new ReceiveOrderProductDTO { ProductId = product.Id, Quantity = 2, Weight = 2.5m }]
+            ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 2, Weight = 2.5m }]
         });
 
         var receipt = await receiptService.GetByIdAsync(orderId, created.Id);
 
         Assert.Equal(created.Id, receipt.Id);
-        Assert.Single(receipt.Products);
-        Assert.Equal(2.5m, receipt.Products.Single().Weight);
-        Assert.Equal(2, receipt.Products.Single().Quantity);
+        Assert.Single(receipt.ProductVariants);
+        Assert.Equal(2.5m, receipt.ProductVariants.Single().Weight);
+        Assert.Equal(2, receipt.ProductVariants.Single().Quantity);
         Assert.Single(receipt.TrackingNumbers);
         Assert.Equal("TRACK-DETAIL", receipt.TrackingNumbers.Single().TrackingNumber);
         Assert.Equal(8.5m, receipt.TrackingNumbers.Single().Weight);
@@ -154,18 +154,18 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
         var receivedDate = new DateTime(2025, 11, 24, 0, 0, 0, DateTimeKind.Unspecified);
 
         await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             ReceivedDate = receivedDate,
             WarehouseShippingCostUsd = 10m,
-            Products =
+            ProductVariants =
             [
                 new ReceiveOrderProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 1
                 }
             ]
@@ -192,7 +192,7 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
 
         context.OrderTrackingNumbers.Add(new OrderTrackingNumber
         {
@@ -214,11 +214,11 @@ public class OrderReceiptServiceTests
                     ShippingCostUsd = 12m
                 }
             ],
-            Products =
+            ProductVariants =
             [
                 new ReceiveOrderProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 2
                 }
             ]
@@ -233,10 +233,10 @@ public class OrderReceiptServiceTests
         Assert.Equal(order.MerchandiseTotalNio, order.ReceivedAmountNio);
         Assert.Equal(12m, order.WarehouseShippingCostUsd);
         Assert.Equal(8.5m, tracking.Weight);
-        product = await context.Products.SingleAsync(storedProduct => storedProduct.Id == product.Id);
+        productVariant = await context.ProductVariants.SingleAsync(storedProduct => storedProduct.Id == productVariant.Id);
 
         Assert.Equal(12m, tracking.ShippingCost);
-        Assert.Equal(19m, product.UnitCostUsd);
+        Assert.Equal(19m, productVariant.UnitCostUsd);
         Assert.Equal(receipt.Id, tracking.ProductReceiptId);
 
         var receiptDetail = await context.ProductReceiptDetails.SingleAsync();
@@ -252,7 +252,7 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
 
         context.OrderTrackingNumbers.Add(new OrderTrackingNumber
         {
@@ -265,11 +265,11 @@ public class OrderReceiptServiceTests
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 10m,
-            Products =
+            ProductVariants =
             [
                 new ReceiveOrderProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 1
                 }
             ]
@@ -286,7 +286,7 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
 
         context.OrderTrackingNumbers.Add(new OrderTrackingNumber
         {
@@ -298,11 +298,11 @@ public class OrderReceiptServiceTests
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
-            Products =
+            ProductVariants =
             [
                 new ReceiveOrderProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 1
                 }
             ]
@@ -319,14 +319,14 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateTwoProductOrderRequest());
-        var products = await context.Products.OrderBy(product => product.Id).ToListAsync();
-        var lightProduct = products[0];
-        var heavyProduct = products[1];
+        var productVariants = await context.ProductVariants.OrderBy(productVariant => productVariant.Id).ToListAsync();
+        var lightProduct = productVariants[0];
+        var heavyProduct = productVariants[1];
 
         var receipt = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 10m,
-            Products =
+            ProductVariants =
             [
                 new ReceiveOrderProductDTO
                 {
@@ -343,10 +343,10 @@ public class OrderReceiptServiceTests
             ]
         });
 
-        lightProduct = await context.Products.SingleAsync(product => product.Id == lightProduct.Id);
-        heavyProduct = await context.Products.SingleAsync(product => product.Id == heavyProduct.Id);
-        var lightAllocation = receipt.Products.Single(product => product.ProductId == lightProduct.Id);
-        var heavyAllocation = receipt.Products.Single(product => product.ProductId == heavyProduct.Id);
+        lightProduct = await context.ProductVariants.SingleAsync(productVariant => productVariant.Id == lightProduct.Id);
+        heavyProduct = await context.ProductVariants.SingleAsync(productVariant => productVariant.Id == heavyProduct.Id);
+        var lightAllocation = receipt.ProductVariants.Single(productVariant => productVariant.ProductId == lightProduct.Id);
+        var heavyAllocation = receipt.ProductVariants.Single(productVariant => productVariant.ProductId == heavyProduct.Id);
 
         Assert.Equal(365m, receipt.WarehouseShippingCostNio);
         Assert.Equal(91.25m, lightAllocation.AllocatedWarehouseShippingCostNio);
@@ -365,16 +365,16 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
 
         var receipt = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 10m,
-            Products =
+            ProductVariants =
             [
                 new ReceiveOrderProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 2
                 }
             ]
@@ -387,7 +387,7 @@ public class OrderReceiptServiceTests
 
         var storedReceipt = await context.ProductReceipts.SingleAsync();
         var storedOrder = await context.Orders.SingleAsync();
-        var storedProduct = await context.Products.SingleAsync();
+        var storedProduct = await context.ProductVariants.SingleAsync();
         var financialMovement = await context.FinancialMovements
             .SingleAsync(item => item.FinancialMovementTypeId == (int)FinancialMovementTypeOption.WarehouseShippingPayment);
 
@@ -408,14 +408,14 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateTwoProductOrderRequest());
-        var products = await context.Products.OrderBy(product => product.Id).ToListAsync();
+        var productVariants = await context.ProductVariants.OrderBy(productVariant => productVariant.Id).ToListAsync();
         var receipt = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 10m,
-            Products =
+            ProductVariants =
             [
-                new ReceiveOrderProductDTO { ProductId = products[0].Id, Quantity = 1, Weight = 1m },
-                new ReceiveOrderProductDTO { ProductId = products[1].Id, Quantity = 1, Weight = 3m }
+                new ReceiveOrderProductDTO { ProductId = productVariants[0].Id, Quantity = 1, Weight = 1m },
+                new ReceiveOrderProductDTO { ProductId = productVariants[1].Id, Quantity = 1, Weight = 3m }
             ]
         });
         var details = await context.ProductReceiptDetails
@@ -426,7 +426,7 @@ public class OrderReceiptServiceTests
         var updated = await receiptService.UpdateShippingCostAsync(orderId, receipt.Id, new UpdateOrderReceiptDTO
         {
             WarehouseShippingCostUsd = 10m,
-            Products =
+            ProductVariants =
             [
                 new UpdateOrderReceiptProductDTO { ProductReceiptDetailId = details[0].Id, Weight = 3m },
                 new UpdateOrderReceiptProductDTO { ProductReceiptDetailId = details[1].Id, Weight = 1m }
@@ -434,15 +434,15 @@ public class OrderReceiptServiceTests
         });
 
         details = await context.ProductReceiptDetails.OrderBy(detail => detail.Id).ToListAsync();
-        products = await context.Products.OrderBy(product => product.Id).ToListAsync();
+        productVariants = await context.ProductVariants.OrderBy(productVariant => productVariant.Id).ToListAsync();
 
         Assert.Equal(3m, details[0].Weight);
         Assert.Equal(1m, details[1].Weight);
         Assert.Equal(273.75m, details[0].AllocatedWarehouseShippingCostNio);
         Assert.Equal(91.25m, details[1].AllocatedWarehouseShippingCostNio);
-        Assert.Equal(638.75m, products[0].AllocatedShippingCostNio);
-        Assert.Equal(456.25m, products[1].AllocatedShippingCostNio);
-        Assert.Equal(3m, updated.Products.Single(product => product.ProductReceiptDetailId == details[0].Id).Weight);
+        Assert.Equal(638.75m, productVariants[0].AllocatedShippingCostNio);
+        Assert.Equal(456.25m, productVariants[1].AllocatedShippingCostNio);
+        Assert.Equal(3m, updated.ProductVariants.Single(productVariant => productVariant.ProductReceiptDetailId == details[0].Id).Weight);
     }
 
     [Fact]
@@ -453,14 +453,14 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateTwoProductOrderRequest());
-        var products = await context.Products.OrderBy(product => product.Id).ToListAsync();
+        var productVariants = await context.ProductVariants.OrderBy(productVariant => productVariant.Id).ToListAsync();
         var receipt = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 10m,
-            Products =
+            ProductVariants =
             [
-                new ReceiveOrderProductDTO { ProductId = products[0].Id, Quantity = 1 },
-                new ReceiveOrderProductDTO { ProductId = products[1].Id, Quantity = 1 }
+                new ReceiveOrderProductDTO { ProductId = productVariants[0].Id, Quantity = 1 },
+                new ReceiveOrderProductDTO { ProductId = productVariants[1].Id, Quantity = 1 }
             ]
         });
         var detail = await context.ProductReceiptDetails.FirstAsync(detail => detail.ProductReceiptId == receipt.Id);
@@ -471,7 +471,7 @@ public class OrderReceiptServiceTests
             new UpdateOrderReceiptDTO
             {
                 WarehouseShippingCostUsd = 10m,
-                Products = [new UpdateOrderReceiptProductDTO { ProductReceiptDetailId = detail.Id, Weight = 2m }]
+                ProductVariants = [new UpdateOrderReceiptProductDTO { ProductReceiptDetailId = detail.Id, Weight = 2m }]
             }));
 
         Assert.Contains("exactamente los detalles", exception.Message);
@@ -485,11 +485,11 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 1));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
         var receipt = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 10m,
-            Products = [new ReceiveOrderProductDTO { ProductId = product.Id, Quantity = 1 }]
+            ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 1 }]
         });
         var detail = await context.ProductReceiptDetails.SingleAsync();
 
@@ -499,7 +499,7 @@ public class OrderReceiptServiceTests
             new UpdateOrderReceiptDTO
             {
                 WarehouseShippingCostUsd = 10m,
-                Products = [new UpdateOrderReceiptProductDTO { ProductReceiptDetailId = detail.Id, Weight = 0m }]
+                ProductVariants = [new UpdateOrderReceiptProductDTO { ProductReceiptDetailId = detail.Id, Weight = 0m }]
             }));
 
         Assert.Contains("mayor que cero", exception.Message);
@@ -513,7 +513,7 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
 
         context.OrderTrackingNumbers.AddRange(
             new OrderTrackingNumber { OrderId = orderId, ShippingCompanyId = 1, TrackingNumber = "TRACK-1" },
@@ -528,7 +528,7 @@ public class OrderReceiptServiceTests
                 new ReceiveOrderTrackingNumberDTO { Id = trackings[0].Id, ShippingCostUsd = 10m },
                 new ReceiveOrderTrackingNumberDTO { Id = trackings[1].Id, ShippingCostUsd = 5m }
             ],
-            Products = [new ReceiveOrderProductDTO { ProductId = product.Id, Quantity = 2 }]
+            ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 2 }]
         });
 
         await receiptService.UpdateShippingCostAsync(orderId, receipt.Id, new UpdateOrderReceiptDTO
@@ -562,12 +562,12 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
 
         var receipt = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 10m,
-            Products = [new ReceiveOrderProductDTO { ProductId = product.Id, Quantity = 2 }]
+            ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 2 }]
         });
 
         await receiptService.UpdateShippingCostAsync(orderId, receipt.Id, new UpdateOrderReceiptDTO
@@ -576,13 +576,13 @@ public class OrderReceiptServiceTests
         });
 
         var order = await context.Orders.SingleAsync();
-        product = await context.Products.SingleAsync();
+        productVariant = await context.ProductVariants.SingleAsync();
 
         Assert.Empty(await context.FinancialMovements
             .Where(item => item.FinancialMovementTypeId == (int)FinancialMovementTypeOption.WarehouseShippingPayment)
             .ToListAsync());
         Assert.Equal(0m, order.WarehouseShippingCostUsd);
-        Assert.Equal(365m, product.AllocatedShippingCostNio);
+        Assert.Equal(365m, productVariant.AllocatedShippingCostNio);
     }
 
     [Fact]
@@ -593,12 +593,12 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
 
         var receipt = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 0m,
-            Products = [new ReceiveOrderProductDTO { ProductId = product.Id, Quantity = 2 }]
+            ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 2 }]
         });
 
         await receiptService.UpdateShippingCostAsync(orderId, receipt.Id, new UpdateOrderReceiptDTO
@@ -620,7 +620,7 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
 
         context.OrderTrackingNumbers.AddRange(
             new OrderTrackingNumber { OrderId = orderId, ShippingCompanyId = 1, TrackingNumber = "TRACK-1" },
@@ -630,7 +630,7 @@ public class OrderReceiptServiceTests
         var receipt = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             TrackingNumbers = [new ReceiveOrderTrackingNumberDTO { Id = tracking.Id, ShippingCostUsd = 10m }],
-            Products = [new ReceiveOrderProductDTO { ProductId = product.Id, Quantity = 2 }]
+            ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 2 }]
         });
         var otherTracking = await context.OrderTrackingNumbers.OrderBy(item => item.Id).LastAsync();
 
@@ -653,11 +653,11 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
         var receipt = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 10m,
-            Products = [new ReceiveOrderProductDTO { ProductId = product.Id, Quantity = 2 }]
+            ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 2 }]
         });
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.UpdateShippingCostAsync(
@@ -676,24 +676,24 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
 
         var receipt = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 10m,
-            Products = [new ReceiveOrderProductDTO { ProductId = product.Id, Quantity = 2 }]
+            ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 2 }]
         });
         var saleProduct = new SaleProduct
         {
             SaleId = 1,
-            ProductId = product.Id,
+            ProductId = productVariant.Id,
             Quantity = 1,
-            UnitCostAtSale = product.UnitCostNio,
+            UnitCostAtSale = productVariant.UnitCostNio,
             OriginalUnitPrice = 600m,
             FinalUnitPrice = 600m,
             LineTotal = 600m,
-            TotalCostAtSale = product.UnitCostNio,
-            GrossProfit = 600m - product.UnitCostNio
+            TotalCostAtSale = productVariant.UnitCostNio,
+            GrossProfit = 600m - productVariant.UnitCostNio
         };
         context.SaleProducts.Add(saleProduct);
         await context.SaveChangesAsync();
@@ -704,7 +704,7 @@ public class OrderReceiptServiceTests
         });
 
         var storedSaleProduct = await context.SaleProducts.SingleAsync();
-        var storedProduct = await context.Products.SingleAsync();
+        var storedProduct = await context.ProductVariants.SingleAsync();
 
         Assert.Equal(storedProduct.UnitCostNio, storedSaleProduct.UnitCostAtSale);
         Assert.Equal(storedProduct.UnitCostNio, storedSaleProduct.TotalCostAtSale);
@@ -720,17 +720,17 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
 
         var receipt = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 10m,
             Comments = "Vino una unidad adicional no solicitada.",
-            Products =
+            ProductVariants =
             [
                 new ReceiveOrderProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 3,
                     IsSurplus = true
                 }
@@ -738,19 +738,19 @@ public class OrderReceiptServiceTests
         });
 
         var order = await context.Orders.SingleAsync(order => order.Id == orderId);
-        product = await context.Products.SingleAsync(storedProduct => storedProduct.Id == product.Id);
+        productVariant = await context.ProductVariants.SingleAsync(storedProduct => storedProduct.Id == productVariant.Id);
         var inventoryMovement = await context.InventoryMovements.SingleAsync();
-        var receivedProduct = Assert.Single(receipt.Products);
+        var receivedProduct = Assert.Single(receipt.ProductVariants);
 
         Assert.Equal((int)OrderStatusCode.Received, order.OrderStatusId);
         Assert.Equal(order.MerchandiseTotalNio, order.ReceivedAmountNio);
-        Assert.Equal(3, product.ReceivedQuantity);
-        Assert.Equal(3, product.AvailableQuantity);
+        Assert.Equal(3, productVariant.ReceivedQuantity);
+        Assert.Equal(3, productVariant.AvailableQuantity);
         Assert.True(receivedProduct.IsSurplus);
         Assert.Equal((int)InventoryMovementTypeOption.PurchaseReceived, inventoryMovement.InventoryMovementTypeId);
         Assert.Equal(3, inventoryMovement.Quantity);
         Assert.Null(inventoryMovement.Comments);
-        Assert.Equal(12m, product.UnitCostUsd);
+        Assert.Equal(12m, productVariant.UnitCostUsd);
     }
 
     [Fact]
@@ -761,16 +761,16 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 1));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
 
         await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 0,
-            Products =
+            ProductVariants =
             [
                 new ReceiveOrderProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 1
                 }
             ]
@@ -779,22 +779,22 @@ public class OrderReceiptServiceTests
         await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 0,
-            Products =
+            ProductVariants =
             [
                 new ReceiveOrderProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 1,
                     IsSurplus = true
                 }
             ]
         });
 
-        product = await context.Products.SingleAsync(storedProduct => storedProduct.Id == product.Id);
+        productVariant = await context.ProductVariants.SingleAsync(storedProduct => storedProduct.Id == productVariant.Id);
         var movements = await context.InventoryMovements.OrderBy(movement => movement.Id).ToListAsync();
 
-        Assert.Equal(2, product.ReceivedQuantity);
-        Assert.Equal(2, product.AvailableQuantity);
+        Assert.Equal(2, productVariant.ReceivedQuantity);
+        Assert.Equal(2, productVariant.AvailableQuantity);
         Assert.All(movements, movement => Assert.Equal((int)InventoryMovementTypeOption.PurchaseReceived, movement.InventoryMovementTypeId));
     }
 
@@ -806,16 +806,16 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 0,
-            Products =
+            ProductVariants =
             [
                 new ReceiveOrderProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 3
                 }
             ]
@@ -832,17 +832,17 @@ public class OrderReceiptServiceTests
         var orderService = new OrderService(context, Mapper);
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
-        var product = await context.Products.SingleAsync();
+        var productVariant = await context.ProductVariants.SingleAsync();
 
         await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
         {
             WarehouseShippingCostUsd = 0,
             Comments = "Sobrante registrado al recibir la compra.",
-            Products =
+            ProductVariants =
             [
                 new ReceiveOrderProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 3,
                     IsSurplus = true
                 }
@@ -860,9 +860,9 @@ public class OrderReceiptServiceTests
             SupplierId = 1,
             PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd,
             SupplierShippingCostUsd = 10m,
-            ProductDetails =
+            Products =
             [
-                new CreateOrderProductDetailDTO
+                new CreateOrderProductDTO
                 {
                     SupplierProductCode = "SOHO25120",
                     Name = "Pantalon cargo",
@@ -891,9 +891,9 @@ public class OrderReceiptServiceTests
             SupplierId = 1,
             PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd,
             SupplierShippingCostUsd = 20m,
-            ProductDetails =
+            Products =
             [
-                new CreateOrderProductDetailDTO
+                new CreateOrderProductDTO
                 {
                     SupplierProductCode = "SOHO25120",
                     Name = "Camisa",
@@ -910,7 +910,7 @@ public class OrderReceiptServiceTests
                         }
                     ]
                 },
-                new CreateOrderProductDetailDTO
+                new CreateOrderProductDTO
                 {
                     SupplierProductCode = "SOHO25121",
                     Name = "Vestido",

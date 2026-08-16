@@ -13,7 +13,7 @@ public class SaleReturnServiceTests
     public async Task ReceiveAsync_ReturnsSellableItemToAvailableInventory()
     {
         await using var context = CreateContext();
-        var (saleReturn, item, product) = await SeedRequestedInStoreReturnAsync(context);
+        var (saleReturn, item, productVariant) = await SeedRequestedInStoreReturnAsync(context);
         var service = CreateService(context);
         var receivedAt = new DateTime(2026, 7, 17, 10, 0, 0, DateTimeKind.Utc);
 
@@ -31,14 +31,14 @@ public class SaleReturnServiceTests
             ]
         });
 
-        product = await context.Products.SingleAsync(storedProduct => storedProduct.Id == product.Id);
+        productVariant = await context.ProductVariants.SingleAsync(storedProduct => storedProduct.Id == productVariant.Id);
         item = await context.SaleReturnItems.SingleAsync(storedItem => storedItem.Id == item.Id);
         saleReturn = await context.SaleReturns.SingleAsync(storedReturn => storedReturn.Id == saleReturn.Id);
         var movement = await context.InventoryMovements.SingleAsync();
 
-        Assert.Equal(1, product.ReceivedQuantity);
-        Assert.Equal(1, product.AvailableQuantity);
-        Assert.Equal(0, product.UnavailableQuantity);
+        Assert.Equal(1, productVariant.ReceivedQuantity);
+        Assert.Equal(1, productVariant.AvailableQuantity);
+        Assert.Equal(0, productVariant.UnavailableQuantity);
         Assert.Equal(receivedAt, item.ReceivedAt);
         Assert.Equal("Prenda en buen estado", item.Comments);
         Assert.Null(item.ProductInventoryIssueId);
@@ -54,7 +54,7 @@ public class SaleReturnServiceTests
     public async Task ReceiveAsync_MovesDamagedItemToUnavailableAndCreatesIssue()
     {
         await using var context = CreateContext();
-        var (saleReturn, item, product) = await SeedRequestedInStoreReturnAsync(context);
+        var (saleReturn, item, productVariant) = await SeedRequestedInStoreReturnAsync(context);
         var service = CreateService(context);
         var receivedAt = new DateTime(2026, 7, 17, 11, 0, 0, DateTimeKind.Utc);
 
@@ -72,14 +72,14 @@ public class SaleReturnServiceTests
             ]
         });
 
-        product = await context.Products.SingleAsync(storedProduct => storedProduct.Id == product.Id);
+        productVariant = await context.ProductVariants.SingleAsync(storedProduct => storedProduct.Id == productVariant.Id);
         item = await context.SaleReturnItems.SingleAsync(storedItem => storedItem.Id == item.Id);
         var issue = await context.ProductInventoryIssues.SingleAsync();
         var movement = await context.InventoryMovements.SingleAsync();
 
-        Assert.Equal(1, product.ReceivedQuantity);
-        Assert.Equal(0, product.AvailableQuantity);
-        Assert.Equal(1, product.UnavailableQuantity);
+        Assert.Equal(1, productVariant.ReceivedQuantity);
+        Assert.Equal(0, productVariant.AvailableQuantity);
+        Assert.Equal(1, productVariant.UnavailableQuantity);
         Assert.Equal(issue.Id, item.ProductInventoryIssueId);
         Assert.Equal((int)ProductInventoryIssueTypeOption.Damaged, issue.ProductInventoryIssueTypeId);
         Assert.Equal((int)ProductInventoryIssueStatusOption.Open, issue.ProductInventoryIssueStatusId);
@@ -97,14 +97,14 @@ public class SaleReturnServiceTests
         return new SaleReturnService(context, new InventoryService(context));
     }
 
-    private static async Task<(SaleReturn SaleReturn, SaleReturnItem Item, Product Product)> SeedRequestedInStoreReturnAsync(
+    private static async Task<(SaleReturn SaleReturn, SaleReturnItem Item, ProductVariant ProductVariant)> SeedRequestedInStoreReturnAsync(
         ApplicationDbContext context)
     {
-        var product = new Product
+        var productVariant = new ProductVariant
         {
             Id = 1,
             OrderId = 1,
-            ProductDetailId = 1,
+            ProductId = 1,
             SizeId = 1,
             Quantity = 1,
             ReceivedQuantity = 1,
@@ -126,16 +126,16 @@ public class SaleReturnServiceTests
             Id = 1,
             SaleReturn = saleReturn,
             OriginalSaleProductId = 1,
-            Product = product,
+            ProductVariant = productVariant,
             Quantity = 1
         };
         saleReturn.Items.Add(item);
 
-        context.Products.Add(product);
+        context.ProductVariants.Add(productVariant);
         context.SaleReturns.Add(saleReturn);
         await context.SaveChangesAsync();
 
-        return (saleReturn, item, product);
+        return (saleReturn, item, productVariant);
     }
 
     private static ApplicationDbContext CreateContext()

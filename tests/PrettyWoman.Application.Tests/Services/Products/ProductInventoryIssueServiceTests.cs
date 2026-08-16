@@ -29,12 +29,12 @@ public class ProductInventoryIssueServiceTests
         var issue = await context.ProductInventoryIssues
             .Include(issue => issue.InventoryMovements)
             .SingleAsync(issue => issue.Id == id);
-        var product = await context.Products.SingleAsync(product => product.Id == 1);
+        var productVariant = await context.ProductVariants.SingleAsync(productVariant => productVariant.Id == 1);
         var movement = Assert.Single(issue.InventoryMovements);
 
         Assert.Equal((int)ProductInventoryIssueStatusOption.Open, issue.ProductInventoryIssueStatusId);
-        Assert.Equal(3, product.AvailableQuantity);
-        Assert.Equal(2, product.UnavailableQuantity);
+        Assert.Equal(3, productVariant.AvailableQuantity);
+        Assert.Equal(2, productVariant.UnavailableQuantity);
         Assert.Equal((int)InventoryMovementTypeOption.IssueOpened, movement.InventoryMovementTypeId);
         Assert.Equal((int)InventoryStockBucketOption.Available, movement.FromStockBucketId);
         Assert.Equal((int)InventoryStockBucketOption.Unavailable, movement.ToStockBucketId);
@@ -80,7 +80,7 @@ public class ProductInventoryIssueServiceTests
             Comments = "Reparado"
         });
 
-        var product = await context.Products.SingleAsync(product => product.Id == 1);
+        var productVariant = await context.ProductVariants.SingleAsync(productVariant => productVariant.Id == 1);
         var movements = await context.InventoryMovements
             .Where(movement => movement.ProductInventoryIssueId == id)
             .OrderBy(movement => movement.Id)
@@ -88,8 +88,8 @@ public class ProductInventoryIssueServiceTests
 
         Assert.Equal((int)ProductInventoryIssueStatusOption.ResolvedToAvailable, result.ProductInventoryIssueStatusId);
         Assert.NotNull(result.ResolvedAt);
-        Assert.Equal(5, product.AvailableQuantity);
-        Assert.Equal(0, product.UnavailableQuantity);
+        Assert.Equal(5, productVariant.AvailableQuantity);
+        Assert.Equal(0, productVariant.UnavailableQuantity);
         Assert.Equal(2, movements.Count);
         Assert.Equal((int)InventoryMovementTypeOption.IssueReturnedToAvailable, movements[1].InventoryMovementTypeId);
         Assert.Equal((int)InventoryStockBucketOption.Unavailable, movements[1].FromStockBucketId);
@@ -115,14 +115,14 @@ public class ProductInventoryIssueServiceTests
             Comments = "No recuperable"
         });
 
-        var product = await context.Products.SingleAsync(product => product.Id == 1);
+        var productVariant = await context.ProductVariants.SingleAsync(productVariant => productVariant.Id == 1);
         var closingMovement = await context.InventoryMovements
             .Where(movement => movement.ProductInventoryIssueId == id)
             .OrderByDescending(movement => movement.Id)
             .FirstAsync();
 
-        Assert.Equal(4, product.AvailableQuantity);
-        Assert.Equal(0, product.UnavailableQuantity);
+        Assert.Equal(4, productVariant.AvailableQuantity);
+        Assert.Equal(0, productVariant.UnavailableQuantity);
         Assert.Equal((int)InventoryMovementTypeOption.IssueRemovedFromInventory, closingMovement.InventoryMovementTypeId);
         Assert.Equal((int)InventoryStockBucketOption.OutOfInventory, closingMovement.ToStockBucketId);
     }
@@ -142,21 +142,21 @@ public class ProductInventoryIssueServiceTests
 
         var result = await service.DeleteAsync(id);
 
-        var product = await context.Products.SingleAsync(product => product.Id == 1);
+        var productVariant = await context.ProductVariants.SingleAsync(productVariant => productVariant.Id == 1);
         var closingMovement = await context.InventoryMovements
             .Where(movement => movement.ProductInventoryIssueId == id)
             .OrderByDescending(movement => movement.Id)
             .FirstAsync();
 
         Assert.Equal((int)ProductInventoryIssueStatusOption.Cancelled, result.ProductInventoryIssueStatusId);
-        Assert.Equal(5, product.AvailableQuantity);
-        Assert.Equal(0, product.UnavailableQuantity);
+        Assert.Equal(5, productVariant.AvailableQuantity);
+        Assert.Equal(0, productVariant.UnavailableQuantity);
         Assert.Equal((int)InventoryMovementTypeOption.IssueReturnedToAvailable, closingMovement.InventoryMovementTypeId);
         Assert.Equal((int)InventoryStockBucketOption.Available, closingMovement.ToStockBucketId);
     }
 
     [Fact]
-    public async Task GetAllAsync_FiltersByProductDetailAndStatus()
+    public async Task GetAllAsync_FiltersByProductAndStatus()
     {
         await using var context = CreateContext();
         await SeedAsync(context);
@@ -180,12 +180,13 @@ public class ProductInventoryIssueServiceTests
 
         var result = await service.GetAllAsync(new ProductInventoryIssueQueryDTO
         {
-            ProductDetailId = 1,
+            ProductId = 1,
             ProductInventoryIssueStatusId = (int)ProductInventoryIssueStatusOption.Open
         });
 
         var issue = Assert.Single(result.Items);
-        Assert.Equal(2, issue.ProductId);
+        Assert.Equal(1, issue.ProductId);
+        Assert.Equal(2, issue.ProductVariantId);
         Assert.Equal("M", issue.SizeName);
         Assert.Equal((int)ProductInventoryIssueStatusOption.Open, issue.ProductInventoryIssueStatusId);
     }
@@ -225,21 +226,21 @@ public class ProductInventoryIssueServiceTests
         context.SizeGroups.Add(sizeGroup);
         context.Sizes.AddRange(smallSize, mediumSize);
 
-        var productDetail = new ProductDetail
+        var product = new Product
         {
             Id = 1,
             SupplierProductCode = "BLA-001",
             Code = 1001,
             Name = "Blazer",
             SubcategoryId = 1,
-            Products =
+            ProductVariants =
             [
-                new Product { Id = 1, SizeId = 1, Size = smallSize, Quantity = 5, ReceivedQuantity = 5, AvailableQuantity = 5, SalePrice = 800m },
-                new Product { Id = 2, SizeId = 2, Size = mediumSize, Quantity = 2, ReceivedQuantity = 2, AvailableQuantity = 2, SalePrice = 800m }
+                new ProductVariant { Id = 1, SizeId = 1, Size = smallSize, Quantity = 5, ReceivedQuantity = 5, AvailableQuantity = 5, SalePrice = 800m },
+                new ProductVariant { Id = 2, SizeId = 2, Size = mediumSize, Quantity = 2, ReceivedQuantity = 2, AvailableQuantity = 2, SalePrice = 800m }
             ]
         };
 
-        context.ProductDetails.Add(productDetail);
+        context.Products.Add(product);
         context.ProductInventoryIssueTypes.AddRange(
             new ProductInventoryIssueType { Id = (int)ProductInventoryIssueTypeOption.Damaged, Name = "Damaged" },
             new ProductInventoryIssueType { Id = (int)ProductInventoryIssueTypeOption.Dirty, Name = "Dirty" },

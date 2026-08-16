@@ -18,7 +18,7 @@ public class ProductInventoryIssue : IAuditableEntity
     public string? CreatedById { get; set; }
     public string? UpdatedById { get; set; }
 
-    public Product? Product { get; set; }
+    public ProductVariant? ProductVariant { get; set; }
     public ProductInventoryIssueType? ProductInventoryIssueType { get; set; }
     public ProductInventoryIssueStatus? ProductInventoryIssueStatus { get; set; }
     public ICollection<InventoryMovement> InventoryMovements { get; set; } = [];

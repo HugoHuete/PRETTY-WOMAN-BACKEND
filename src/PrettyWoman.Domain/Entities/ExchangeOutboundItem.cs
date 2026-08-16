@@ -20,5 +20,5 @@ public class ExchangeOutboundItem : IAuditableEntity
     public string? UpdatedById { get; set; }
 
     public SaleExchange? SaleExchange { get; set; }
-    public Product? Product { get; set; }
+    public ProductVariant? ProductVariant { get; set; }
 }

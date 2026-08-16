@@ -26,7 +26,7 @@ public class SaleDeliveryService(
 
         var sale = await _context.Sales
             .Include(item => item.PaymentMovements)
-            .Include(item => item.Products).ThenInclude(item => item.Product)
+            .Include(item => item.ProductVariants).ThenInclude(item => item.ProductVariant)
             .FirstOrDefaultAsync(item => item.Id == saleId)
             ?? throw new AppNotFoundException($"La venta con id {saleId} no existe.");
 
@@ -96,8 +96,8 @@ public class SaleDeliveryService(
             .Include(item => item.Sale)
                 .ThenInclude(sale => sale!.PaymentMovements)
             .Include(item => item.Sale)
-                .ThenInclude(sale => sale!.Products)
-                    .ThenInclude(item => item.Product)
+                .ThenInclude(sale => sale!.ProductVariants)
+                    .ThenInclude(item => item.ProductVariant)
             .Include(item => item.DeliveryAgency)
             .FirstOrDefaultAsync(item => item.Id == deliveryId && item.SaleId == saleId)
             ?? throw new AppNotFoundException($"El envio con id {deliveryId} no existe para la venta indicada.");
@@ -290,8 +290,8 @@ public class SaleDeliveryService(
             .Include(item => item.Sale)
                 .ThenInclude(sale => sale!.PaymentMovements)
             .Include(item => item.Sale)
-                .ThenInclude(sale => sale!.Products)
-                    .ThenInclude(item => item.Product)
+                .ThenInclude(sale => sale!.ProductVariants)
+                    .ThenInclude(item => item.ProductVariant)
             .FirstOrDefaultAsync(item => item.Id == deliveryId && item.SaleId == saleId)
             ?? throw new AppNotFoundException($"El envio con id {deliveryId} no existe para la venta indicada.");
     }
@@ -352,10 +352,10 @@ public class SaleDeliveryService(
 
     private void ReserveSaleProducts(Sale sale)
     {
-        foreach (var saleProduct in sale.Products)
+        foreach (var saleProduct in sale.ProductVariants)
         {
             var movement = _inventoryService.Move(
-                saleProduct.Product!,
+                saleProduct.ProductVariant!,
                 InventoryStockBucketOption.Available,
                 InventoryStockBucketOption.Reserved,
                 saleProduct.Quantity,
@@ -373,19 +373,19 @@ public class SaleDeliveryService(
         InventoryMovementTypeOption movementType,
         string comments)
     {
-        var saleProductIds = sale.Products.Select(item => item.Id).ToList();
+        var saleProductIds = sale.ProductVariants.Select(item => item.Id).ToList();
         var movements = await _context.InventoryMovements
             .Where(item => item.SaleProductId.HasValue && saleProductIds.Contains(item.SaleProductId.Value))
             .ToListAsync();
 
-        foreach (var saleProduct in sale.Products)
+        foreach (var saleProduct in sale.ProductVariants)
         {
             // El neto del bucket evita repetir unidades que una devolución o transición previa ya movió.
             var quantity = CalculateQuantityInBucket(saleProduct.Id, movements, source);
             if (quantity == 0) continue;
 
             var movement = _inventoryService.Move(
-                saleProduct.Product!,
+                saleProduct.ProductVariant!,
                 source,
                 destination,
                 quantity,

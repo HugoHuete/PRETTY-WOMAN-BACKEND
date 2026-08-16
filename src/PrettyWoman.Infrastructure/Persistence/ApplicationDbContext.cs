@@ -74,14 +74,14 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public DbSet<PurchaseShortage> PurchaseShortages { get; set; }
     public DbSet<SupplierRefund> SupplierRefunds { get; set; }
 
-    // Products
+    // ProductVariants
     public DbSet<Category> Categories { get; set; }
     public DbSet<Subcategory> Subcategories { get; set; }
     public DbSet<Size> Sizes { get; set; }
     public DbSet<SizeGroup> SizeGroups { get; set; }
-    public DbSet<ProductDetail> ProductDetails { get; set; }
-    public DbSet<ProductImage> ProductImages { get; set; }
     public DbSet<Product> Products { get; set; }
+    public DbSet<ProductImage> ProductImages { get; set; }
+    public DbSet<ProductVariant> ProductVariants { get; set; }
     public DbSet<ProductHold> ProductHolds { get; set; }
     public DbSet<ProductHoldStatus> ProductHoldStatuses { get; set; }
     public DbSet<ProductInventoryIssue> ProductInventoryIssues { get; set; }

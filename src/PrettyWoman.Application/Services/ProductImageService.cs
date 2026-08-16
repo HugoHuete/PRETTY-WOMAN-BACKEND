@@ -22,20 +22,20 @@ public class ProductImageService(
         "image/jpeg", "image/png", "image/webp"
     };
 
-    public async Task<ProductImageDTO> GetByIdAsync(int productDetailId, int imageId, CancellationToken cancellationToken = default)
+    public async Task<ProductImageDTO> GetByIdAsync(int productId, int imageId, CancellationToken cancellationToken = default)
     {
         var image = await context.ProductImages
-            .Where(item => item.Id == imageId && item.ProductDetailId == productDetailId)
+            .Where(item => item.Id == imageId && item.ProductId == productId)
             .Include(item => item.MediaAsset)
                 .ThenInclude(asset => asset!.Variants)
             .SingleOrDefaultAsync(cancellationToken)
-            ?? throw new AppNotFoundException($"La imagen con id '{imageId}' no existe para el producto con id '{productDetailId}'.");
+            ?? throw new AppNotFoundException($"La imagen con id '{imageId}' no existe para el producto con id '{productId}'.");
 
         return MapProductImage(image);
     }
 
     public async Task<ProductImageDTO> UploadAsync(
-        int productDetailId,
+        int productId,
         Stream content,
         string? declaredContentType,
         CancellationToken cancellationToken = default)
@@ -50,9 +50,9 @@ public class ProductImageService(
             throw new AppUnsupportedMediaTypeException("Solo se permiten imágenes JPEG, PNG o WebP.");
         }
 
-        if (!await context.ProductDetails.AnyAsync(product => product.Id == productDetailId, cancellationToken))
+        if (!await context.Products.AnyAsync(productVariant => productVariant.Id == productId, cancellationToken))
         {
-            throw new AppNotFoundException($"El producto con id '{productDetailId}' no existe.");
+            throw new AppNotFoundException($"El producto con id '{productId}' no existe.");
         }
 
         await using var original = new MemoryStream();
@@ -85,7 +85,7 @@ public class ProductImageService(
             }
 
             var assetId = Guid.NewGuid();
-            var baseKey = $"products/{productDetailId}/{assetId:N}";
+            var baseKey = $"productVariants/{productId}/{assetId:N}";
             var originalKey = $"{baseKey}/original.{GetExtension(format)}";
             var thumbnailKey = $"{baseKey}/thumb-400.webp";
             var webKey = $"{baseKey}/web-1200.webp";
@@ -109,11 +109,11 @@ public class ProductImageService(
                 uploaded.Add((MediaBucket.Public, webKey));
 
                 var nextSortOrder = await context.ProductImages
-                    .Where(productImage => productImage.ProductDetailId == productDetailId)
+                    .Where(productImage => productImage.ProductId == productId)
                     .Select(productImage => (int?)productImage.SortOrder)
                     .MaxAsync(cancellationToken) ?? -1;
                 var hasPrimaryImage = await context.ProductImages
-                    .AnyAsync(productImage => productImage.ProductDetailId == productDetailId && productImage.IsPrimary, cancellationToken);
+                    .AnyAsync(productImage => productImage.ProductId == productId && productImage.IsPrimary, cancellationToken);
 
                 var asset = new MediaAsset
                 {
@@ -136,7 +136,7 @@ public class ProductImageService(
                 };
                 var productImage = new ProductImage
                 {
-                    ProductDetailId = productDetailId,
+                    ProductId = productId,
                     MediaAsset = asset,
                     IsPrimary = !hasPrimaryImage,
                     SortOrder = nextSortOrder + 1
@@ -167,7 +167,7 @@ public class ProductImageService(
     }
 
     public async Task<IReadOnlyCollection<ProductImageDTO>> UpdateAsync(
-        int productDetailId,
+        int productId,
         UpdateProductImagesDTO request,
         CancellationToken cancellationToken = default)
     {
@@ -177,13 +177,13 @@ public class ProductImageService(
             throw new AppBadRequestException("Debe enviar la lista ordenada de imágenes.");
         }
 
-        if (!await context.ProductDetails.AnyAsync(product => product.Id == productDetailId, cancellationToken))
+        if (!await context.Products.AnyAsync(productVariant => productVariant.Id == productId, cancellationToken))
         {
-            throw new AppNotFoundException($"El producto con id '{productDetailId}' no existe.");
+            throw new AppNotFoundException($"El producto con id '{productId}' no existe.");
         }
 
         var images = await context.ProductImages
-            .Where(image => image.ProductDetailId == productDetailId)
+            .Where(image => image.ProductId == productId)
             .Include(image => image.MediaAsset)
                 .ThenInclude(asset => asset!.Variants)
             .ToListAsync(cancellationToken);
@@ -229,14 +229,14 @@ public class ProductImageService(
         return response;
     }
 
-    public async Task DeleteAsync(int productDetailId, int imageId, CancellationToken cancellationToken = default)
+    public async Task DeleteAsync(int productId, int imageId, CancellationToken cancellationToken = default)
     {
         var image = await context.ProductImages
-            .Where(item => item.Id == imageId && item.ProductDetailId == productDetailId)
+            .Where(item => item.Id == imageId && item.ProductId == productId)
             .Include(item => item.MediaAsset)
                 .ThenInclude(asset => asset!.Variants)
             .SingleOrDefaultAsync(cancellationToken)
-            ?? throw new AppNotFoundException($"La imagen con id '{imageId}' no existe para el producto con id '{productDetailId}'.");
+            ?? throw new AppNotFoundException($"La imagen con id '{imageId}' no existe para el producto con id '{productId}'.");
         var objectsToDelete = image.MediaAsset?.Variants
             .Select(variant => (variant.Bucket, variant.StorageKey))
             .ToList() ?? [];
@@ -248,7 +248,7 @@ public class ProductImageService(
             await context.SaveChangesAsync(cancellationToken);
 
             var nextImage = await context.ProductImages
-                .Where(item => item.ProductDetailId == productDetailId && item.Id != imageId)
+                .Where(item => item.ProductId == productId && item.Id != imageId)
                 .OrderBy(item => item.SortOrder)
                 .FirstOrDefaultAsync(cancellationToken);
             if (nextImage is not null)
@@ -281,7 +281,7 @@ public class ProductImageService(
         catch (DbUpdateException)
         {
             if (!productImage.IsPrimary || !await context.ProductImages.AnyAsync(image =>
-                    image.ProductDetailId == productImage.ProductDetailId && image.IsPrimary,
+                    image.ProductId == productImage.ProductId && image.IsPrimary,
                     cancellationToken))
             {
                 throw;
@@ -289,7 +289,7 @@ public class ProductImageService(
 
             productImage.IsPrimary = false;
             productImage.SortOrder = (await context.ProductImages
-                .Where(image => image.ProductDetailId == productImage.ProductDetailId)
+                .Where(image => image.ProductId == productImage.ProductId)
                 .Select(image => (int?)image.SortOrder)
                 .MaxAsync(cancellationToken) ?? -1) + 1;
             await context.SaveChangesAsync(cancellationToken);

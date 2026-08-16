@@ -21,6 +21,6 @@ public class SaleReturnItem : IAuditableEntity
 
     public SaleReturn? SaleReturn { get; set; }
     public SaleProduct? OriginalSaleProduct { get; set; }
-    public Product? Product { get; set; }
+    public ProductVariant? ProductVariant { get; set; }
     public ProductInventoryIssue? ProductInventoryIssue { get; set; }
 }

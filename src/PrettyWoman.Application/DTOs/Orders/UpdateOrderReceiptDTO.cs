@@ -9,5 +9,5 @@ public class UpdateOrderReceiptDTO
 
     public ICollection<UpdateOrderReceiptTrackingNumberDTO> TrackingNumbers { get; set; } = [];
 
-    public ICollection<UpdateOrderReceiptProductDTO> Products { get; set; } = [];
+    public ICollection<UpdateOrderReceiptProductDTO> ProductVariants { get; set; } = [];
 }

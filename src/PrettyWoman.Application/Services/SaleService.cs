@@ -91,8 +91,8 @@ public class SaleService(
         await ValidateSaleRequestAsync(createSaleDTO);
 
         // Se congelan precios, costos y descuentos antes de persistir la venta.
-        var products = await LoadSaleProductsAsync(createSaleDTO.Products, createSaleDTO.SelectionProducts);
-        var saleProducts = CreateSaleProducts(createSaleDTO.Products, products);
+        var productVariants = await LoadSaleProductsAsync(createSaleDTO.ProductVariants, createSaleDTO.SelectionProducts);
+        var saleProducts = CreateSaleProducts(createSaleDTO.ProductVariants, productVariants);
         var payments = await _paymentMovementService.CreateInitialAsync(createSaleDTO.PaymentMovements);
         // Los nuevos totales se validan contra pagos ya aplicados; un exceso queda como reembolso pendiente.
         var totals = CalculateSaleTotals(saleProducts);
@@ -111,8 +111,8 @@ public class SaleService(
             Total = totals.Total,
             Comments = createSaleDTO.Comments,
             ClientId = createSaleDTO.ClientId,
-            Products = saleProducts,
-            ProductHolds = CreateSelectionHolds(createSaleDTO.SelectionProducts, products),
+            ProductVariants = saleProducts,
+            ProductHolds = CreateSelectionHolds(createSaleDTO.SelectionProducts, productVariants),
             PaymentMovements = payments
         };
 
@@ -177,25 +177,25 @@ public class SaleService(
 
         var sale = await GetSaleWithDetailsAsync(id, asNoTracking: false);
         EnsureSaleProductsCanBeReplaced(sale);
-        ValidateReplacementLineReferences(sale, replaceSaleProductsDTO.Products);
-        await ValidateReplacementPostSaleReferencesAsync(sale, replaceSaleProductsDTO.Products);
+        ValidateReplacementLineReferences(sale, replaceSaleProductsDTO.ProductVariants);
+        await ValidateReplacementPostSaleReferencesAsync(sale, replaceSaleProductsDTO.ProductVariants);
 
         // El request representa el estado final completo de la venta. Las líneas existentes que
         // no aparezcan mediante SaleProductId se consideran eliminadas.
-        var saleProductIds = sale.Products.Select(product => product.Id).ToList();
+        var saleProductIds = sale.ProductVariants.Select(productVariant => productVariant.Id).ToList();
         var inventoryMovements = await _context.InventoryMovements
             .Where(movement => movement.SaleProductId.HasValue && saleProductIds.Contains(movement.SaleProductId.Value))
             .ToListAsync();
         var inventoryBucket = GetInventoryBucketForSaleStatus(sale.SaleStatusId);
-        var requestedProducts = replaceSaleProductsDTO.Products.Cast<CreateSaleProductDTO>().ToList();
-        var products = await LoadProductsByIdsAsync(requestedProducts.Select(product => product.ProductId));
+        var requestedProducts = replaceSaleProductsDTO.ProductVariants.Cast<CreateSaleProductDTO>().ToList();
+        var productVariants = await LoadProductsByIdsAsync(requestedProducts.Select(productVariant => productVariant.ProductId));
 
-        var existingLines = sale.Products.ToDictionary(product => product.Id);
-        var retainedLineIds = replaceSaleProductsDTO.Products
-            .Where(product => product.SaleProductId.HasValue)
-            .Select(product => product.SaleProductId!.Value)
+        var existingLines = sale.ProductVariants.ToDictionary(productVariant => productVariant.Id);
+        var retainedLineIds = replaceSaleProductsDTO.ProductVariants
+            .Where(productVariant => productVariant.SaleProductId.HasValue)
+            .Select(productVariant => productVariant.SaleProductId!.Value)
             .ToHashSet();
-        var removedLines = sale.Products.Where(product => !retainedLineIds.Contains(product.Id)).ToList();
+        var removedLines = sale.ProductVariants.Where(productVariant => !retainedLineIds.Contains(productVariant.Id)).ToList();
         var finalLines = new List<SaleProduct>();
         var requestedLineStates = new List<(
             SaleProduct Line,
@@ -205,7 +205,7 @@ public class SaleService(
 
         // Una línea con SaleProductId conserva su identidad y sus valores históricos de precio y costo.
         // Una línea sin SaleProductId es un producto nuevo y toma snapshots desde el catálogo actual.
-        foreach (var request in replaceSaleProductsDTO.Products)
+        foreach (var request in replaceSaleProductsDTO.ProductVariants)
         {
             SaleProduct line;
             var currentCommittedQuantity = 0;
@@ -226,7 +226,7 @@ public class SaleService(
             }
             else
             {
-                line = CreateSaleProducts([request], products).Single();
+                line = CreateSaleProducts([request], productVariants).Single();
             }
 
             finalLines.Add(line);
@@ -241,7 +241,7 @@ public class SaleService(
         // operación también pueden cubrir aumentos o productos nuevos de la misma variante.
         ValidateReplacementInventoryAvailability(
             inventoryBucket,
-            products,
+            productVariants,
             requestedLineStates,
             removedLines,
             inventoryMovements);
@@ -252,7 +252,7 @@ public class SaleService(
                      inventoryBucket.HasValue && state.CurrentCommittedQuantity > state.TargetCommittedQuantity))
         {
             var movement = _inventoryService.Move(
-                state.Line.Product!,
+                state.Line.ProductVariant!,
                 inventoryBucket!.Value,
                 InventoryStockBucketOption.Available,
                 state.CurrentCommittedQuantity - state.TargetCommittedQuantity,
@@ -272,7 +272,7 @@ public class SaleService(
             {
                 // Se hace un movimiento para reponer unidades disponibles, pero luego se elimina el movimiento porque la línea ya no existe.
                 var movement = _inventoryService.Move(
-                    removedLine.Product!,
+                    removedLine.ProductVariant!,
                     inventoryBucket!.Value,
                     InventoryStockBucketOption.Available,
                     committedQuantity,
@@ -290,7 +290,7 @@ public class SaleService(
         _context.InventoryMovements.RemoveRange(inventoryMovements.Where(movement =>
             movement.SaleProductId.HasValue && removedLineIds.Contains(movement.SaleProductId.Value)));
         _context.SaleProducts.RemoveRange(removedLines);
-        sale.Products = finalLines;
+        sale.ProductVariants = finalLines;
 
         // Después de liberar inventario, ahora falta restar disponibilidad de los productos nuevos o con mayor cantidad. Las líneas que no
         // cambiaron tienen diferencia cero y, por tanto, no generan movimientos nuevos.
@@ -300,7 +300,7 @@ public class SaleService(
             if (quantityToMove <= 0) continue;
 
             var movement = _inventoryService.Move(
-                state.Line.Product!,
+                state.Line.ProductVariant!,
                 InventoryStockBucketOption.Available,
                 inventoryBucket!.Value,
                 quantityToMove,
@@ -332,8 +332,8 @@ public class SaleService(
             sale.Deliveries.Any(delivery => delivery.DeliveryStatusId != (int)DeliveryStatusCode.Pending))
             throw new AppBadRequestException("Solo se pueden agregar prendas para seleccion antes de enviar la venta.");
 
-        var products = await LoadSaleProductsAsync([], selectionProducts);
-        var holds = CreateSelectionHolds(selectionProducts, products);
+        var productVariants = await LoadSaleProductsAsync([], selectionProducts);
+        var holds = CreateSelectionHolds(selectionProducts, productVariants);
         sale.ProductHolds.AddRange(holds);
         ApplySelectionHoldsInventory(holds);
         await _context.SaveChangesAsync();
@@ -350,12 +350,12 @@ public class SaleService(
 
         hold.Comments = resolution.Comments ?? hold.Comments;
         hold.ResolvedAt = DateTime.UtcNow;
-        var product = hold.Product!;
+        var productVariant = hold.ProductVariant!;
         if (resolution.Selected)
         {
             await ValidateSaleProductRequestAsync(new CreateSaleProductDTO
             {
-                ProductId = product.Id,
+                ProductId = productVariant.Id,
                 Quantity = hold.Quantity,
                 DiscountAmount = resolution.DiscountAmount,
                 DiscountSourceId = resolution.DiscountSourceId,
@@ -365,17 +365,17 @@ public class SaleService(
             var saleProduct = CreateSaleProducts(
                 [new CreateSaleProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = hold.Quantity,
                     DiscountAmount = resolution.DiscountAmount,
                     DiscountSourceId = resolution.DiscountSourceId,
                     DiscountCampaignId = resolution.DiscountCampaignId
                 }],
-                [product]).Single();
-            sale.Products.Add(saleProduct);
+                [productVariant]).Single();
+            sale.ProductVariants.Add(saleProduct);
             hold.ProductHoldStatusId = (int)ProductHoldStatusOption.ConvertedToSale;
             var movement = _inventoryService.Move(
-                product,
+                productVariant,
                 InventoryStockBucketOption.Unavailable,
                 InventoryStockBucketOption.OutOfInventory,
                 hold.Quantity,
@@ -389,7 +389,7 @@ public class SaleService(
         {
             hold.ProductHoldStatusId = (int)ProductHoldStatusOption.AwaitingReturn;
             var movement = _inventoryService.Move(
-                product,
+                productVariant,
                 InventoryStockBucketOption.Unavailable,
                 InventoryStockBucketOption.Available,
                 hold.Quantity,
@@ -454,7 +454,7 @@ public class SaleService(
 
         if (GetInventoryBucketForSaleStatus(sale.SaleStatusId).HasValue)
         {
-            var saleProductIds = sale.Products.Select(product => product.Id).ToList();
+            var saleProductIds = sale.ProductVariants.Select(productVariant => productVariant.Id).ToList();
             var inventoryMovements = await _context.InventoryMovements
                 .Where(movement => movement.SaleProductId.HasValue && saleProductIds.Contains(movement.SaleProductId.Value))
                 .ToListAsync();
@@ -494,9 +494,9 @@ public class SaleService(
             .Include(sale => sale.SaleStatus)
             .Include(sale => sale.SalePaymentStatus)
             .Include(sale => sale.Client)
-            .Include(sale => sale.Products).ThenInclude(saleProduct => saleProduct.Product)
-            .Include(sale => sale.Products).ThenInclude(saleProduct => saleProduct.DiscountSource)
-            .Include(sale => sale.ProductHolds).ThenInclude(hold => hold.Product)
+            .Include(sale => sale.ProductVariants).ThenInclude(saleProduct => saleProduct.ProductVariant)
+            .Include(sale => sale.ProductVariants).ThenInclude(saleProduct => saleProduct.DiscountSource)
+            .Include(sale => sale.ProductHolds).ThenInclude(hold => hold.ProductVariant)
             .Include(sale => sale.ProductHolds).ThenInclude(hold => hold.ProductHoldStatus)
             .Include(sale => sale.PaymentMovements).ThenInclude(payment => payment.PaymentMethod)
             .Include(sale => sale.PaymentMovements).ThenInclude(payment => payment.PaymentTerminal)
@@ -519,7 +519,7 @@ public class SaleService(
         EnsureSelectionIsAllowed(saleDTO.SaleChannelId, saleDTO.SelectionProducts.Count);
         await ValidateOptionalReferencesAsync(saleDTO.ClientId);
         await ValidateRequestedSaleStatusAsync(saleDTO.SaleStatusId);
-        await ValidateProductRequestAsync(saleDTO.Products, saleDTO.SelectionProducts, requireAtLeastOne: true);
+        await ValidateProductRequestAsync(saleDTO.ProductVariants, saleDTO.SelectionProducts, requireAtLeastOne: true);
     }
 
     private async Task ValidateSaleHeaderPatchAsync(PatchSaleHeaderDTO saleDTO)
@@ -536,7 +536,7 @@ public class SaleService(
 
     private async Task ValidateSaleProductsReplacementAsync(ReplaceSaleProductsDTO saleDTO)
         => await ValidateProductRequestAsync(
-            saleDTO.Products.Cast<CreateSaleProductDTO>().ToList(),
+            saleDTO.ProductVariants.Cast<CreateSaleProductDTO>().ToList(),
             [],
             requireAtLeastOne: true);
 
@@ -552,7 +552,7 @@ public class SaleService(
         foreach (var request in requests.Where(request => request.SaleProductId.HasValue))
         {
             var saleProductId = request.SaleProductId!.Value;
-            var line = sale.Products.SingleOrDefault(product => product.Id == saleProductId)
+            var line = sale.ProductVariants.SingleOrDefault(productVariant => productVariant.Id == saleProductId)
                 ?? throw new AppNotFoundException($"La linea de venta con id {saleProductId} no existe para la venta indicada.");
             if (line.ProductId != request.ProductId)
                 throw new AppBadRequestException("No se puede cambiar la variante de una linea existente; elimine la linea y agregue otra.");
@@ -563,7 +563,7 @@ public class SaleService(
         Sale sale,
         List<ReplaceSaleProductDTO> requests)
     {
-        var saleProductIds = sale.Products.Select(product => product.Id).ToList();
+        var saleProductIds = sale.ProductVariants.Select(productVariant => productVariant.Id).ToList();
         var returnItems = await _context.SaleReturnItems
             .AsNoTracking()
             .Include(item => item.SaleReturn)
@@ -606,7 +606,7 @@ public class SaleService(
                 .Concat(activeExchangeItems.Select(item => item.RecognizedUnitAmount))
                 .DefaultIfEmpty()
                 .Max();
-            var line = sale.Products.Single(product => product.Id == lineId);
+            var line = sale.ProductVariants.Single(productVariant => productVariant.Id == lineId);
             var requestedFinalUnitPrice = Math.Round(line.OriginalUnitPrice - request.DiscountAmount, 2);
             if (requestedFinalUnitPrice < highestRecognizedUnitAmount)
                 throw new AppBadRequestException(
@@ -633,45 +633,45 @@ public class SaleService(
     }
 
     private async Task ValidateProductRequestAsync(
-        List<CreateSaleProductDTO> products,
+        List<CreateSaleProductDTO> productVariants,
         List<CreateSaleSelectionProductDTO> selectionProducts,
         bool requireAtLeastOne)
     {
-        if (requireAtLeastOne && products.Count == 0 && selectionProducts.Count == 0)
+        if (requireAtLeastOne && productVariants.Count == 0 && selectionProducts.Count == 0)
             throw new AppBadRequestException("Debe enviar al menos un producto vendido o una prenda para seleccion.");
 
-        foreach (var product in products)
+        foreach (var productVariant in productVariants)
         {
-            if (product.Quantity <= 0) throw new AppBadRequestException("La cantidad de cada producto debe ser mayor que cero.");
-            if (product.DiscountAmount < 0) throw new AppBadRequestException("El descuento no puede ser negativo.");
+            if (productVariant.Quantity <= 0) throw new AppBadRequestException("La cantidad de cada producto debe ser mayor que cero.");
+            if (productVariant.DiscountAmount < 0) throw new AppBadRequestException("El descuento no puede ser negativo.");
 
-            var hasDiscount = product.DiscountAmount > 0;
-            var discountSource = (DiscountSourceOption)product.DiscountSourceId;
+            var hasDiscount = productVariant.DiscountAmount > 0;
+            var discountSource = (DiscountSourceOption)productVariant.DiscountSourceId;
 
             if (hasDiscount && discountSource == DiscountSourceOption.None)
                 throw new AppBadRequestException("Debe indicar la fuente cuando aplica un descuento.");
-            if (discountSource == DiscountSourceOption.Manual && product.DiscountCampaignId.HasValue)
+            if (discountSource == DiscountSourceOption.Manual && productVariant.DiscountCampaignId.HasValue)
                 throw new AppBadRequestException("Un descuento manual no puede tener una campaña de descuento asociada.");
-            if (!hasDiscount && (discountSource != DiscountSourceOption.None || product.DiscountCampaignId.HasValue))
+            if (!hasDiscount && (discountSource != DiscountSourceOption.None || productVariant.DiscountCampaignId.HasValue))
                 throw new AppBadRequestException("Cuando no hay descuento, la fuente debe ser None y no se debe indicar una campaña de descuento.");
-            if (!await _context.DiscountSources.AnyAsync(source => source.Id == product.DiscountSourceId))
-                throw new AppNotFoundException($"La fuente de descuento con id {product.DiscountSourceId} no existe.");
-            if (product.DiscountCampaignId.HasValue && !await _context.DiscountCampaigns.AnyAsync(campaign => campaign.Id == product.DiscountCampaignId.Value))
-                throw new AppNotFoundException($"La campana de descuento con id {product.DiscountCampaignId.Value} no existe.");
+            if (!await _context.DiscountSources.AnyAsync(source => source.Id == productVariant.DiscountSourceId))
+                throw new AppNotFoundException($"La fuente de descuento con id {productVariant.DiscountSourceId} no existe.");
+            if (productVariant.DiscountCampaignId.HasValue && !await _context.DiscountCampaigns.AnyAsync(campaign => campaign.Id == productVariant.DiscountCampaignId.Value))
+                throw new AppNotFoundException($"La campana de descuento con id {productVariant.DiscountCampaignId.Value} no existe.");
         }
 
         await ValidateSelectionProductRequestAsync(selectionProducts);
     }
 
-    private async Task ValidateSaleProductRequestAsync(CreateSaleProductDTO product)
-        => await ValidateProductRequestAsync([product], [], requireAtLeastOne: true);
+    private async Task ValidateSaleProductRequestAsync(CreateSaleProductDTO productVariant)
+        => await ValidateProductRequestAsync([productVariant], [], requireAtLeastOne: true);
 
     private static Task ValidateSelectionProductRequestAsync(List<CreateSaleSelectionProductDTO> selectionProducts)
     {
-        foreach (var product in selectionProducts)
+        foreach (var productVariant in selectionProducts)
         {
-            if (product.ProductId <= 0) throw new AppBadRequestException("Producto es obligatorio para seleccion.");
-            if (product.Quantity <= 0) throw new AppBadRequestException("La cantidad de cada prenda para seleccion debe ser mayor que cero.");
+            if (productVariant.ProductId <= 0) throw new AppBadRequestException("Producto es obligatorio para seleccion.");
+            if (productVariant.Quantity <= 0) throw new AppBadRequestException("La cantidad de cada prenda para seleccion debe ser mayor que cero.");
         }
 
         return Task.CompletedTask;
@@ -686,54 +686,54 @@ public class SaleService(
         }
     }
 
-    private async Task<List<Product>> LoadSaleProductsAsync(
+    private async Task<List<ProductVariant>> LoadSaleProductsAsync(
         List<CreateSaleProductDTO> productRequests,
         List<CreateSaleSelectionProductDTO> selectionProducts)
     {
-        var productIds = productRequests.Select(product => product.ProductId)
-            .Concat(selectionProducts.Select(product => product.ProductId))
+        var productIds = productRequests.Select(productVariant => productVariant.ProductId)
+            .Concat(selectionProducts.Select(productVariant => productVariant.ProductId))
             .Distinct().ToList();
-        var products = await LoadProductsByIdsAsync(productIds);
+        var productVariants = await LoadProductsByIdsAsync(productIds);
 
-        var requestedQuantities = productRequests.Select(product => new { product.ProductId, product.Quantity })
-            .Concat(selectionProducts.GroupBy(product => product.ProductId).Select(group => new { ProductId = group.Key, Quantity = group.Sum(product => product.Quantity) }))
-            .GroupBy(product => product.ProductId)
-            .ToDictionary(group => group.Key, group => group.Sum(product => product.Quantity));
-        foreach (var product in products)
+        var requestedQuantities = productRequests.Select(productVariant => new { productVariant.ProductId, productVariant.Quantity })
+            .Concat(selectionProducts.GroupBy(productVariant => productVariant.ProductId).Select(group => new { ProductId = group.Key, Quantity = group.Sum(productVariant => productVariant.Quantity) }))
+            .GroupBy(productVariant => productVariant.ProductId)
+            .ToDictionary(group => group.Key, group => group.Sum(productVariant => productVariant.Quantity));
+        foreach (var productVariant in productVariants)
         {
-            if (product.AvailableQuantity < requestedQuantities[product.Id])
-                throw new AppBadRequestException($"El producto con id {product.Id} no tiene stock disponible suficiente.");
+            if (productVariant.AvailableQuantity < requestedQuantities[productVariant.Id])
+                throw new AppBadRequestException($"El producto con id {productVariant.Id} no tiene stock disponible suficiente.");
         }
 
-        return products;
+        return productVariants;
     }
 
-    private async Task<List<Product>> LoadProductsByIdsAsync(IEnumerable<int> productIds)
+    private async Task<List<ProductVariant>> LoadProductsByIdsAsync(IEnumerable<int> productIds)
     {
         var ids = productIds.Distinct().ToList();
-        var products = await _context.Products.Where(product => ids.Contains(product.Id)).ToListAsync();
-        var missingProductId = ids.FirstOrDefault(id => products.All(product => product.Id != id));
+        var productVariants = await _context.ProductVariants.Where(productVariant => ids.Contains(productVariant.Id)).ToListAsync();
+        var missingProductId = ids.FirstOrDefault(id => productVariants.All(productVariant => productVariant.Id != id));
         if (missingProductId != 0) throw new AppNotFoundException($"El producto con id {missingProductId} no existe.");
-        return products;
+        return productVariants;
     }
 
-    private static List<SaleProduct> CreateSaleProducts(List<CreateSaleProductDTO> requests, List<Product> products)
+    private static List<SaleProduct> CreateSaleProducts(List<CreateSaleProductDTO> requests, List<ProductVariant> productVariants)
     {
         return requests.Select(request =>
         {
-            var product = products.First(item => item.Id == request.ProductId);
-            if (request.DiscountAmount > product.SalePrice) throw new AppBadRequestException("El descuento no puede ser mayor que el precio de venta.");
+            var productVariant = productVariants.First(item => item.Id == request.ProductId);
+            if (request.DiscountAmount > productVariant.SalePrice) throw new AppBadRequestException("El descuento no puede ser mayor que el precio de venta.");
 
-            var finalUnitPrice = Math.Round(product.SalePrice - request.DiscountAmount, 2);
+            var finalUnitPrice = Math.Round(productVariant.SalePrice - request.DiscountAmount, 2);
             var lineTotal = Math.Round(finalUnitPrice * request.Quantity, 2);
-            var totalCostAtSale = Math.Round(product.UnitCostNio * request.Quantity, 6);
+            var totalCostAtSale = Math.Round(productVariant.UnitCostNio * request.Quantity, 6);
             return new SaleProduct
             {
-                ProductId = product.Id,
-                Product = product,
+                ProductId = productVariant.Id,
+                ProductVariant = productVariant,
                 Quantity = request.Quantity,
-                UnitCostAtSale = product.UnitCostNio,
-                OriginalUnitPrice = product.SalePrice,
+                UnitCostAtSale = productVariant.UnitCostNio,
+                OriginalUnitPrice = productVariant.SalePrice,
                 DiscountSourceId = request.DiscountSourceId,
                 DiscountCampaignId = request.DiscountCampaignId,
                 DiscountAmount = request.DiscountAmount,
@@ -767,7 +767,7 @@ public class SaleService(
     /// </summary>
     private static void ValidateReplacementInventoryAvailability(
         InventoryStockBucketOption? inventoryBucket,
-        List<Product> requestedProducts,
+        List<ProductVariant> requestedProducts,
         List<(
             SaleProduct Line,
             ReplaceSaleProductDTO Request,
@@ -783,10 +783,10 @@ public class SaleService(
             var requestedQuantities = requestedLineStates
                 .GroupBy(state => state.Request.ProductId)
                 .ToDictionary(group => group.Key, group => group.Sum(state => state.Request.Quantity));
-            foreach (var product in requestedProducts)
+            foreach (var productVariant in requestedProducts)
             {
-                if (product.AvailableQuantity < requestedQuantities[product.Id])
-                    throw new AppBadRequestException($"El producto con id {product.Id} no tiene stock disponible suficiente.");
+                if (productVariant.AvailableQuantity < requestedQuantities[productVariant.Id])
+                    throw new AppBadRequestException($"El producto con id {productVariant.Id} no tiene stock disponible suficiente.");
             }
 
             return;
@@ -794,35 +794,35 @@ public class SaleService(
 
         // Cuando la venta ya comprometió inventario, solo interesa la diferencia respecto a la cantidad
         // neta registrada. También se incluyen los productos eliminados porque liberarán unidades.
-        var products = requestedProducts
-            .Concat(removedLines.Select(line => line.Product!))
-            .DistinctBy(product => product.Id);
-        foreach (var product in products)
+        var productVariants = requestedProducts
+            .Concat(removedLines.Select(line => line.ProductVariant!))
+            .DistinctBy(productVariant => productVariant.Id);
+        foreach (var productVariant in productVariants)
         {
             // Unidades que volverán a Available por reducir una línea o eliminarla completamente.
             var releasedQuantity = requestedLineStates
-                    .Where(state => state.Line.ProductId == product.Id && state.CurrentCommittedQuantity > state.TargetCommittedQuantity)
+                    .Where(state => state.Line.ProductId == productVariant.Id && state.CurrentCommittedQuantity > state.TargetCommittedQuantity)
                     .Sum(state => state.CurrentCommittedQuantity - state.TargetCommittedQuantity) +
                 removedLines
-                    .Where(line => line.ProductId == product.Id)
+                    .Where(line => line.ProductId == productVariant.Id)
                     .Sum(line => CalculateQuantityInBucket(line.Id, inventoryMovements, inventoryBucket.Value));
 
             // Unidades adicionales que deben salir por aumentar una línea o agregar un producto.
             var requiredQuantity = requestedLineStates
-                .Where(state => state.Line.ProductId == product.Id && state.TargetCommittedQuantity > state.CurrentCommittedQuantity)
+                .Where(state => state.Line.ProductId == productVariant.Id && state.TargetCommittedQuantity > state.CurrentCommittedQuantity)
                 .Sum(state => state.TargetCommittedQuantity - state.CurrentCommittedQuantity);
 
             // Las unidades liberadas en esta misma operación pueden reutilizarse inmediatamente.
-            if (product.AvailableQuantity + releasedQuantity < requiredQuantity)
-                throw new AppBadRequestException($"El producto con id {product.Id} no tiene stock disponible suficiente.");
+            if (productVariant.AvailableQuantity + releasedQuantity < requiredQuantity)
+                throw new AppBadRequestException($"El producto con id {productVariant.Id} no tiene stock disponible suficiente.");
         }
     }
 
-    private static List<ProductHold> CreateSelectionHolds(List<CreateSaleSelectionProductDTO> requests, List<Product> products)
+    private static List<ProductHold> CreateSelectionHolds(List<CreateSaleSelectionProductDTO> requests, List<ProductVariant> productVariants)
         => requests.Select(request => new ProductHold
         {
             ProductId = request.ProductId,
-            Product = products.Single(product => product.Id == request.ProductId),
+            ProductVariant = productVariants.Single(productVariant => productVariant.Id == request.ProductId),
             Quantity = request.Quantity,
             HoldReason = "SentForSelection",
             Comments = request.Comments.NormalizeOptional(),
@@ -833,9 +833,9 @@ public class SaleService(
     {
         foreach (var hold in holds)
         {
-            var product = hold.Product!;
+            var productVariant = hold.ProductVariant!;
             var movement = _inventoryService.Move(
-                product,
+                productVariant,
                 InventoryStockBucketOption.Available,
                 InventoryStockBucketOption.Unavailable,
                 hold.Quantity,
@@ -846,21 +846,21 @@ public class SaleService(
         }
     }
     /// <summary>
-    /// Calculates the subtotal, total discount, and total for a sale based on its products.
+    /// Calculates the subtotal, total discount, and total for a sale based on its productVariants.
     /// </summary>
-    /// <param name="products">The list of sale products.</param>
+    /// <param name="productVariants">The list of sale productVariants.</param>
     /// <returns>The calculated sale totals.</returns>
-    private static SaleTotals CalculateSaleTotals(List<SaleProduct> products)
+    private static SaleTotals CalculateSaleTotals(List<SaleProduct> productVariants)
     {
         return new SaleTotals(
-            Math.Round(products.Sum(product => product.OriginalUnitPrice * product.Quantity), 2),
-            Math.Round(products.Sum(product => product.DiscountAmount * product.Quantity), 2),
-            Math.Round(products.Sum(product => product.LineTotal), 2));
+            Math.Round(productVariants.Sum(productVariant => productVariant.OriginalUnitPrice * productVariant.Quantity), 2),
+            Math.Round(productVariants.Sum(productVariant => productVariant.DiscountAmount * productVariant.Quantity), 2),
+            Math.Round(productVariants.Sum(productVariant => productVariant.LineTotal), 2));
     }
 
     private static void RecalculateSaleTotals(Sale sale)
     {
-        var totals = CalculateSaleTotals(sale.Products);
+        var totals = CalculateSaleTotals(sale.ProductVariants);
         sale.Subtotal = totals.Subtotal;
         sale.TotalDiscount = totals.TotalDiscount;
         sale.Total = totals.Total;
@@ -939,10 +939,10 @@ public class SaleService(
         targetBucket ??= GetInventoryBucketForSaleStatus(sale.SaleStatusId);
         if (!targetBucket.HasValue) return;
 
-        foreach (var saleProduct in sale.Products)
+        foreach (var saleProduct in sale.ProductVariants)
         {
             var movement = _inventoryService.Move(
-                saleProduct.Product!,
+                saleProduct.ProductVariant!,
                 InventoryStockBucketOption.Available,
                 targetBucket.Value,
                 saleProduct.Quantity,
@@ -962,19 +962,19 @@ public class SaleService(
         InventoryMovementTypeOption movementType,
         string comments)
     {
-        var saleProductIds = sale.Products.Select(product => product.Id).ToList();
+        var saleProductIds = sale.ProductVariants.Select(productVariant => productVariant.Id).ToList();
         var inventoryMovements = await _context.InventoryMovements
             .Where(movement => movement.SaleProductId.HasValue && saleProductIds.Contains(movement.SaleProductId.Value))
             .ToListAsync();
 
-        foreach (var saleProduct in sale.Products)
+        foreach (var saleProduct in sale.ProductVariants)
         {
             // Se mueve el saldo real del origen, no la cantidad histórica de la línea.
             var quantity = CalculateQuantityInBucket(saleProduct.Id, inventoryMovements, source);
             if (quantity == 0) continue;
 
             var movement = _inventoryService.Move(
-                saleProduct.Product!,
+                saleProduct.ProductVariant!,
                 source,
                 destination,
                 quantity,
@@ -989,9 +989,9 @@ public class SaleService(
         Sale sale,
         IReadOnlyCollection<InventoryMovement> inventoryMovements)
     {
-        foreach (var saleProduct in sale.Products)
+        foreach (var saleProduct in sale.ProductVariants)
         {
-            var product = saleProduct.Product!;
+            var productVariant = saleProduct.ProductVariant!;
             foreach (var bucket in new[]
                      {
                          InventoryStockBucketOption.Reserved,
@@ -1002,7 +1002,7 @@ public class SaleService(
                 if (quantityToRestore == 0) continue;
 
                 var movement = _inventoryService.Move(
-                    product,
+                    productVariant,
                     bucket,
                     InventoryStockBucketOption.Available,
                     quantityToRestore,
@@ -1062,11 +1062,11 @@ public class SaleService(
     {
         foreach (var hold in sale.ProductHolds.Where(hold => hold.ProductHoldStatusId == (int)ProductHoldStatusOption.Active))
         {
-            var product = hold.Product!;
+            var productVariant = hold.ProductVariant!;
             hold.ProductHoldStatusId = (int)ProductHoldStatusOption.NotSelected;
             hold.ResolvedAt = DateTime.UtcNow;
             var movement = _inventoryService.Move(
-                product,
+                productVariant,
                 InventoryStockBucketOption.Unavailable,
                 InventoryStockBucketOption.Available,
                 hold.Quantity,
@@ -1081,7 +1081,7 @@ public class SaleService(
     {
         if (!GetInventoryBucketForSaleStatus(sale.SaleStatusId).HasValue) return;
 
-        var saleProductIds = sale.Products.Select(product => product.Id).ToList();
+        var saleProductIds = sale.ProductVariants.Select(productVariant => productVariant.Id).ToList();
         // Una corrección de fecha pertenece al movimiento original de la venta o reserva. Las fechas
         // operativas posteriores (envíos, devoluciones y cambios) deben conservar el momento real.
         var originalMovementTypes = new[]
@@ -1130,7 +1130,7 @@ public class SaleService(
     private static void NormalizeSaleFields(CreateSaleDTO saleDTO)
     {
         saleDTO.Comments = saleDTO.Comments.NormalizeOptional();
-        saleDTO.Products ??= [];
+        saleDTO.ProductVariants ??= [];
         saleDTO.SelectionProducts ??= [];
         saleDTO.PaymentMovements ??= [];
     }
@@ -1172,7 +1172,7 @@ public class SaleService(
         if (saleDTO.HasComments) saleDTO.Comments = saleDTO.Comments.NormalizeOptional();
     }
 
-    private static void NormalizeSaleFields(ReplaceSaleProductsDTO saleDTO) => saleDTO.Products ??= [];
+    private static void NormalizeSaleFields(ReplaceSaleProductsDTO saleDTO) => saleDTO.ProductVariants ??= [];
 
     private string ResolveUserId() => _currentUserService.UserId ?? "system";
 
@@ -1195,21 +1195,21 @@ public class SaleService(
             Comments = sale.Comments,
             ClientId = sale.ClientId,
             ClientName = sale.Client?.Name,
-            Products = sale.Products.Select(product => new SaleProductDTO
+            ProductVariants = sale.ProductVariants.Select(productVariant => new SaleProductDTO
             {
-                Id = product.Id,
-                ProductId = product.ProductId,
-                Quantity = product.Quantity,
-                UnitCostAtSale = product.UnitCostAtSale,
-                OriginalUnitPrice = product.OriginalUnitPrice,
-                DiscountSourceId = product.DiscountSourceId,
-                DiscountSourceName = product.DiscountSource?.Name,
-                DiscountCampaignId = product.DiscountCampaignId,
-                DiscountAmount = product.DiscountAmount,
-                FinalUnitPrice = product.FinalUnitPrice,
-                LineTotal = product.LineTotal,
-                TotalCostAtSale = product.TotalCostAtSale,
-                GrossProfit = product.GrossProfit
+                Id = productVariant.Id,
+                ProductId = productVariant.ProductId,
+                Quantity = productVariant.Quantity,
+                UnitCostAtSale = productVariant.UnitCostAtSale,
+                OriginalUnitPrice = productVariant.OriginalUnitPrice,
+                DiscountSourceId = productVariant.DiscountSourceId,
+                DiscountSourceName = productVariant.DiscountSource?.Name,
+                DiscountCampaignId = productVariant.DiscountCampaignId,
+                DiscountAmount = productVariant.DiscountAmount,
+                FinalUnitPrice = productVariant.FinalUnitPrice,
+                LineTotal = productVariant.LineTotal,
+                TotalCostAtSale = productVariant.TotalCostAtSale,
+                GrossProfit = productVariant.GrossProfit
             }).ToList(),
             SelectionHolds = sale.ProductHolds.Select(hold => new SaleSelectionHoldDTO
             {

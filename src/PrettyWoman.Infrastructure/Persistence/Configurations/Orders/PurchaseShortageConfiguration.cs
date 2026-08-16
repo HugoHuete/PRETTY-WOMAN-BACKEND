@@ -14,7 +14,7 @@ public class PurchaseShortageConfiguration : IEntityTypeConfiguration<PurchaseSh
             .WithMany(x => x.PurchaseShortages)
             .HasForeignKey(x => x.OrderId)
             .OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne(x => x.Product)
+        builder.HasOne(x => x.ProductVariant)
             .WithMany(x => x.PurchaseShortages)
             .HasForeignKey(x => x.ProductId)
             .OnDelete(DeleteBehavior.Restrict);

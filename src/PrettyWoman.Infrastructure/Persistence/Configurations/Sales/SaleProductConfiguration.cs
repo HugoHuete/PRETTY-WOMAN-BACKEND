@@ -16,8 +16,8 @@ public class SaleProductConfiguration : IEntityTypeConfiguration<SaleProduct>
         builder.Property(x => x.LineTotal).HasPrecision(14, 2);
         builder.Property(x => x.GrossProfit).HasPrecision(18, 6);
 
-        builder.HasOne(x => x.Sale).WithMany(x => x.Products).HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.Sale).WithMany(x => x.ProductVariants).HasForeignKey(x => x.SaleId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.ProductVariant).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.DiscountSource).WithMany().HasForeignKey(x => x.DiscountSourceId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.DiscountCampaign).WithMany().HasForeignKey(x => x.DiscountCampaignId).OnDelete(DeleteBehavior.Restrict);
 

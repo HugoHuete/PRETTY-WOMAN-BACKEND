@@ -58,15 +58,15 @@ public class ProductInventoryIssueService(
         NormalizeAndValidateCreate(createIssueDTO);
         await EnsureIssueTypeExistsAsync(createIssueDTO.ProductInventoryIssueTypeId);
 
-        var product = await _context.Products
-            .Include(product => product.ProductDetail)
-            .FirstOrDefaultAsync(product => product.Id == createIssueDTO.ProductId)
+        var productVariant = await _context.ProductVariants
+            .Include(productVariant => productVariant.Product)
+            .FirstOrDefaultAsync(productVariant => productVariant.Id == createIssueDTO.ProductId)
             ?? throw new AppNotFoundException($"La variante con id '{createIssueDTO.ProductId}' no existe.");
 
         var issueDate = createIssueDTO.IssueDate.NormalizeToUtc() ?? DateTime.UtcNow;
         var issue = new ProductInventoryIssue
         {
-            Product = product,
+            ProductVariant = productVariant,
             ProductInventoryIssueTypeId = createIssueDTO.ProductInventoryIssueTypeId,
             ProductInventoryIssueStatusId = (int)ProductInventoryIssueStatusOption.Open,
             Quantity = createIssueDTO.Quantity,
@@ -75,7 +75,7 @@ public class ProductInventoryIssueService(
         };
 
         issue.InventoryMovements.Add(_inventoryService.Move(
-            product,
+            productVariant,
             InventoryStockBucketOption.Available,
             InventoryStockBucketOption.Unavailable,
             createIssueDTO.Quantity,
@@ -93,7 +93,7 @@ public class ProductInventoryIssueService(
     {
         NormalizeAndValidateResolution(resolveIssueDTO);
         var issue = await GetOpenIssueForUpdateAsync(id);
-        var product = issue.Product!;
+        var productVariant = issue.ProductVariant!;
 
         var status = (ProductInventoryIssueStatusOption)resolveIssueDTO.ProductInventoryIssueStatusId;
         var resolvedAt = resolveIssueDTO.ResolvedAt.NormalizeToUtc() ?? DateTime.UtcNow;
@@ -105,7 +105,7 @@ public class ProductInventoryIssueService(
         issue.Comments = resolveIssueDTO.Comments ?? issue.Comments;
 
         issue.InventoryMovements.Add(_inventoryService.Move(
-            product,
+            productVariant,
             InventoryStockBucketOption.Unavailable,
             (InventoryStockBucketOption)toStockBucketId,
             issue.Quantity,
@@ -130,17 +130,17 @@ public class ProductInventoryIssueService(
     private static IQueryable<ProductInventoryIssue> IncludeIssueDetails(IQueryable<ProductInventoryIssue> query)
     {
         return query
-            .Include(issue => issue.Product)
-                .ThenInclude(product => product!.ProductDetail)
-            .Include(issue => issue.Product)
-                .ThenInclude(product => product!.Size)
+            .Include(issue => issue.ProductVariant)
+                .ThenInclude(productVariant => productVariant!.Product)
+            .Include(issue => issue.ProductVariant)
+                .ThenInclude(productVariant => productVariant!.Size)
             .Include(issue => issue.ProductInventoryIssueType)
             .Include(issue => issue.ProductInventoryIssueStatus);
     }
     private async Task<ProductInventoryIssue> GetOpenIssueForUpdateAsync(int id)
     {
         var issue = await _context.ProductInventoryIssues
-            .Include(issue => issue.Product)
+            .Include(issue => issue.ProductVariant)
             .Include(issue => issue.InventoryMovements)
             .FirstOrDefaultAsync(issue => issue.Id == id)
             ?? throw new AppNotFoundException($"El issue de inventario con id '{id}' no existe.");
@@ -150,7 +150,7 @@ public class ProductInventoryIssueService(
             throw new AppBadRequestException("Solo se pueden resolver issues abiertos.");
         }
 
-        if (issue.Product == null)
+        if (issue.ProductVariant == null)
         {
             throw new AppNotFoundException($"La variante con id '{issue.ProductId}' no existe.");
         }
@@ -172,14 +172,14 @@ public class ProductInventoryIssueService(
 
     private static IQueryable<ProductInventoryIssue> ApplyFilters(IQueryable<ProductInventoryIssue> query, ProductInventoryIssueQueryDTO filters)
     {
-        if (filters.ProductDetailId.HasValue)
-        {
-            query = query.Where(issue => issue.Product != null && issue.Product.ProductDetailId == filters.ProductDetailId.Value);
-        }
-
         if (filters.ProductId.HasValue)
         {
-            query = query.Where(issue => issue.ProductId == filters.ProductId.Value);
+            query = query.Where(issue => issue.ProductVariant != null && issue.ProductVariant.ProductId == filters.ProductId.Value);
+        }
+
+        if (filters.ProductVariantId.HasValue)
+        {
+            query = query.Where(issue => issue.ProductId == filters.ProductVariantId.Value);
         }
 
         if (filters.ProductInventoryIssueTypeId.HasValue)
@@ -200,13 +200,13 @@ public class ProductInventoryIssueService(
         return new ProductInventoryIssueDTO
         {
             Id = issue.Id,
-            ProductId = issue.ProductId,
-            ProductDetailId = issue.Product != null ? issue.Product.ProductDetailId : 0,
-            ProductName = issue.Product != null && issue.Product.ProductDetail != null ? issue.Product.ProductDetail.Name : null,
-            ProductCode = issue.Product != null && issue.Product.ProductDetail != null ? issue.Product.ProductDetail.Code : null,
-            SizeId = issue.Product != null ? issue.Product.SizeId : 0,
-            SizeName = issue.Product != null && issue.Product.Size != null ? issue.Product.Size.Name : null,
-            Variant = issue.Product != null ? issue.Product.Variant : null,
+            ProductId = issue.ProductVariant != null ? issue.ProductVariant.ProductId : 0,
+            ProductVariantId = issue.ProductId,
+            ProductName = issue.ProductVariant != null && issue.ProductVariant.Product != null ? issue.ProductVariant.Product.Name : null,
+            ProductCode = issue.ProductVariant != null && issue.ProductVariant.Product != null ? issue.ProductVariant.Product.Code : null,
+            SizeId = issue.ProductVariant != null ? issue.ProductVariant.SizeId : 0,
+            SizeName = issue.ProductVariant != null && issue.ProductVariant.Size != null ? issue.ProductVariant.Size.Name : null,
+            Variant = issue.ProductVariant != null ? issue.ProductVariant.Variant : null,
             ProductInventoryIssueTypeId = issue.ProductInventoryIssueTypeId,
             ProductInventoryIssueTypeName = issue.ProductInventoryIssueType != null ? issue.ProductInventoryIssueType.Name : null,
             ProductInventoryIssueStatusId = issue.ProductInventoryIssueStatusId,

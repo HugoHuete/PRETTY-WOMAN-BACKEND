@@ -21,14 +21,14 @@ public interface IApplicationDbContext
     DbSet<PurchaseShortage> PurchaseShortages { get; }
     DbSet<SupplierRefund> SupplierRefunds { get; }
 
-    // Products
+    // ProductVariants
     DbSet<Category> Categories { get; }
     DbSet<Subcategory> Subcategories { get; }
     DbSet<Size> Sizes { get; }
     DbSet<SizeGroup> SizeGroups { get; }
-    DbSet<ProductDetail> ProductDetails { get; }
-    DbSet<ProductImage> ProductImages { get; }
     DbSet<Product> Products { get; }
+    DbSet<ProductImage> ProductImages { get; }
+    DbSet<ProductVariant> ProductVariants { get; }
     DbSet<ProductHold> ProductHolds { get; }
     DbSet<ProductHoldStatus> ProductHoldStatuses { get; }
     DbSet<ProductInventoryIssue> ProductInventoryIssues { get; }

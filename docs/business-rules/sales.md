@@ -80,7 +80,7 @@ El precio original, descuentos, precio final, total cobrado, pagos y movimientos
 
 ## Regla: actualización del precio actual
 
-El precio de venta actual de una variante puede actualizarse mediante `PATCH /api/v1/product-details/{productDetailId}/variants/{productId}/price`, siempre que el nuevo precio sea mayor que cero y la variante pertenezca al producto agrupador indicado.
+El precio de venta actual de una variante puede actualizarse mediante `PATCH /api/v1/products/{productId}/variants/{productId}/price`, siempre que el nuevo precio sea mayor que cero y la variante pertenezca al producto agrupador indicado.
 
 Esta actualización solo cambia `products.sale_price`, por lo que aplica a ventas futuras. Las líneas de ventas existentes conservan su precio original, descuento, precio final, total cobrado y movimientos financieros. Si existe una campaña activa, su precio descontado se calcula sobre el nuevo precio actual al consultar el producto.
 

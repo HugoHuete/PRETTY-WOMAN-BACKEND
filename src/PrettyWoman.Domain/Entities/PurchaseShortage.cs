@@ -15,5 +15,5 @@ public class PurchaseShortage : IAuditableEntity
     public string? UpdatedById { get; set; }
 
     public Order? Order { get; set; }
-    public Product? Product { get; set; }
+    public ProductVariant? ProductVariant { get; set; }
 }

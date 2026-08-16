@@ -17,7 +17,7 @@ public class SaleProduct
     public decimal GrossProfit { get; set; } // LineTotal - TotalCostAtSale
 
     public Sale? Sale { get; set; }
-    public Product? Product { get; set; }
+    public ProductVariant? ProductVariant { get; set; }
     public DiscountSource? DiscountSource { get; set; }
     public DiscountCampaign? DiscountCampaign { get; set; }
 }

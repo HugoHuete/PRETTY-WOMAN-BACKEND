@@ -60,14 +60,14 @@ public class OrderReceiptService(
         NormalizeFields(receiveOrderDTO);
 
         var order = await _context.Orders
-            .Include(order => order.Products)
+            .Include(order => order.ProductVariants)
             .Include(order => order.OrderTrackingNumbers)
             .FirstOrDefaultAsync(order => order.Id == orderId)
             ?? throw new AppNotFoundException($"La orden con id '{orderId}' no existe.");
 
-        EnsureOrderCanReceive(order, receiveOrderDTO.Products);
+        EnsureOrderCanReceive(order, receiveOrderDTO.ProductVariants);
         // Check quantities and productIds are valid
-        var receivedProducts = ValidateAndGetProducts(order, receiveOrderDTO.Products);
+        var receivedProducts = ValidateAndGetProducts(order, receiveOrderDTO.ProductVariants);
         var receiptDate = receiveOrderDTO.ReceivedDate.NormalizeToUtc() ?? DateTime.UtcNow;
 
         // Update TrackingNumberStatus (if any) and obtain shipping costs
@@ -86,7 +86,7 @@ public class OrderReceiptService(
         foreach (var item in receivedProducts)
         {
             var inventoryMovement = _inventoryService.Move(
-                item.Product,
+                item.ProductVariant,
                 InventoryStockBucketOption.External,
                 InventoryStockBucketOption.Available,
                 item.Quantity,
@@ -95,19 +95,19 @@ public class OrderReceiptService(
             );
             inventoryMovement.OrderId = order.Id;
 
-            item.Product.AllocatedShippingCostNio += warehouseShippingAllocations[item.Product.Id];
-            item.Product.TotalCostNio = item.Product.MerchandiseTotalCostNio + item.Product.AllocatedShippingCostNio;
-            item.Product.UnitCostNio = CalculateUnitCostNio(item.Product);
-            item.Product.UnitCostUsd = order.ExchangeRate == 0
+            item.ProductVariant.AllocatedShippingCostNio += warehouseShippingAllocations[item.ProductVariant.Id];
+            item.ProductVariant.TotalCostNio = item.ProductVariant.MerchandiseTotalCostNio + item.ProductVariant.AllocatedShippingCostNio;
+            item.ProductVariant.UnitCostNio = CalculateUnitCostNio(item.ProductVariant);
+            item.ProductVariant.UnitCostUsd = order.ExchangeRate == 0
                 ? 0
-                : Math.Round(item.Product.UnitCostNio / order.ExchangeRate, 2);
+                : Math.Round(item.ProductVariant.UnitCostNio / order.ExchangeRate, 2);
 
             receipt.ProductReceiptDetails.Add(new ProductReceiptDetail
             {
-                Product = item.Product,
+                ProductVariant = item.ProductVariant,
                 Quantity = item.Quantity,
                 Weight = item.Weight,
-                AllocatedWarehouseShippingCostNio = warehouseShippingAllocations[item.Product.Id]
+                AllocatedWarehouseShippingCostNio = warehouseShippingAllocations[item.ProductVariant.Id]
             });
         }
 
@@ -139,13 +139,13 @@ public class OrderReceiptService(
             WarehouseShippingCostUsd = warehouseShippingCostUsd,
             WarehouseShippingCostNio = warehouseShippingCostNio,
             OrderStatusId = order.OrderStatusId,
-            Products = receivedProducts
+            ProductVariants = receivedProducts
                 .Select(item => new OrderReceiptProductDTO
                 {
-                    ProductId = item.Product.Id,
+                    ProductId = item.ProductVariant.Id,
                     Quantity = item.Quantity,
                     IsSurplus = item.IsSurplus,
-                    AllocatedWarehouseShippingCostNio = warehouseShippingAllocations[item.Product.Id]
+                    AllocatedWarehouseShippingCostNio = warehouseShippingAllocations[item.ProductVariant.Id]
                 })
                 .ToList(),
             TrackingNumberIds = GetReceivedTrackingNumbers(order, receiveOrderDTO)
@@ -157,10 +157,10 @@ public class OrderReceiptService(
     public async Task<OrderReceiptDTO> UpdateShippingCostAsync(int orderId, int receiptId, UpdateOrderReceiptDTO updateOrderReceiptDTO)
     {
         updateOrderReceiptDTO.TrackingNumbers ??= [];
-        updateOrderReceiptDTO.Products ??= [];
+        updateOrderReceiptDTO.ProductVariants ??= [];
 
         var order = await _context.Orders
-            .Include(item => item.Products)
+            .Include(item => item.ProductVariants)
             .FirstOrDefaultAsync(item => item.Id == orderId)
             ?? throw new AppNotFoundException($"La orden con id '{orderId}' no existe.");
 
@@ -194,29 +194,29 @@ public class OrderReceiptService(
             .GroupBy(detail => detail.ProductId)
             .ToDictionary(group => group.Key, group => group.Sum(detail => detail.AllocatedWarehouseShippingCostNio));
 
-        foreach (var product in order.Products.Where(product => affectedProductIds.Contains(product.Id)))
+        foreach (var productVariant in order.ProductVariants.Where(productVariant => affectedProductIds.Contains(productVariant.Id)))
         {
-            var oldAllocation = oldAllocationByProduct[product.Id];
-            var newAllocation = newAllocationByProduct[product.Id];
-            product.AllocatedShippingCostNio += newAllocation - oldAllocation;
-            product.TotalCostNio = product.MerchandiseTotalCostNio + product.AllocatedShippingCostNio;
-            product.UnitCostNio = CalculateUnitCostNio(product);
-            product.UnitCostUsd = order.ExchangeRate == 0
+            var oldAllocation = oldAllocationByProduct[productVariant.Id];
+            var newAllocation = newAllocationByProduct[productVariant.Id];
+            productVariant.AllocatedShippingCostNio += newAllocation - oldAllocation;
+            productVariant.TotalCostNio = productVariant.MerchandiseTotalCostNio + productVariant.AllocatedShippingCostNio;
+            productVariant.UnitCostNio = CalculateUnitCostNio(productVariant);
+            productVariant.UnitCostUsd = order.ExchangeRate == 0
                 ? 0
-                : Math.Round(product.UnitCostNio / order.ExchangeRate, 2);
+                : Math.Round(productVariant.UnitCostNio / order.ExchangeRate, 2);
         }
 
-        foreach (var product in order.Products)
+        foreach (var productVariant in order.ProductVariants)
         {
-            product.TotalCostNio = product.MerchandiseTotalCostNio + product.AllocatedShippingCostNio;
+            productVariant.TotalCostNio = productVariant.MerchandiseTotalCostNio + productVariant.AllocatedShippingCostNio;
         }
 
         order.WarehouseShippingCostUsd = await _context.ProductReceipts
             .Where(item => item.OrderId == orderId)
             .SumAsync(item => item.Id == receiptId ? warehouseShippingCostUsd : item.WarehouseShippingCostUsd);
-        order.TotalCostNio = order.Products.Sum(product => product.TotalCostNio);
+        order.TotalCostNio = order.ProductVariants.Sum(productVariant => productVariant.TotalCostNio);
 
-        await RecalculateSaleProductsAsync(affectedProductIds, order.Products);
+        await RecalculateSaleProductsAsync(affectedProductIds, order.ProductVariants);
         await SyncWarehouseShippingFinancialMovementAsync(order, receipt, warehouseShippingCostNio);
 
         IDbContextTransaction? transaction = null;
@@ -263,7 +263,7 @@ public class OrderReceiptService(
             WarehouseShippingCostUsd = receipt.WarehouseShippingCostUsd,
             WarehouseShippingCostNio = receipt.WarehouseShippingCostNio,
             OrderStatusId = order.OrderStatusId,
-            Products = receipt.ProductReceiptDetails
+            ProductVariants = receipt.ProductReceiptDetails
                 .Select(detail => new OrderReceiptProductDTO
                 {
                     ProductReceiptDetailId = detail.Id,
@@ -277,7 +277,7 @@ public class OrderReceiptService(
         };
     }
 
-    private static void EnsureOrderCanReceive(Order order, ICollection<ReceiveOrderProductDTO> products)
+    private static void EnsureOrderCanReceive(Order order, ICollection<ReceiveOrderProductDTO> productVariants)
     {
         if (order.OrderStatusId == (int)OrderStatusCode.Cancelled)
         {
@@ -285,7 +285,7 @@ public class OrderReceiptService(
         }
 
         if (order.OrderStatusId is (int)OrderStatusCode.Received or (int)OrderStatusCode.PendingRefund &&
-            products.Any(product => !product.IsSurplus))
+            productVariants.Any(productVariant => !productVariant.IsSurplus))
         {
             throw new AppBadRequestException("La orden no admite más recepciones normales.");
         }
@@ -302,7 +302,7 @@ public class OrderReceiptService(
             WarehouseShippingCostUsd = receipt.WarehouseShippingCostUsd,
             WarehouseShippingCostNio = receipt.WarehouseShippingCostNio,
             OrderStatusId = receipt.Order?.OrderStatusId ?? 0,
-            Products = receipt.ProductReceiptDetails
+            ProductVariants = receipt.ProductReceiptDetails
                 .Select(detail => new OrderReceiptProductDTO
                 {
                     ProductReceiptDetailId = detail.Id,
@@ -339,7 +339,7 @@ public class OrderReceiptService(
         }
 
         var duplicatedProduct = receivedProductDTOs
-            .GroupBy(product => product.ProductId)
+            .GroupBy(productVariant => productVariant.ProductId)
             .FirstOrDefault(group => group.Count() > 1);
 
         if (duplicatedProduct != null)
@@ -351,17 +351,17 @@ public class OrderReceiptService(
 
         foreach (var productDTO in receivedProductDTOs)
         {
-            var product = order.Products.FirstOrDefault(product => product.Id == productDTO.ProductId)
+            var productVariant = order.ProductVariants.FirstOrDefault(productVariant => productVariant.Id == productDTO.ProductId)
                 ?? throw new AppBadRequestException($"El producto con id '{productDTO.ProductId}' no pertenece a la orden.");
 
-            var pendingQuantity = product.Quantity - product.ReceivedQuantity;
+            var pendingQuantity = productVariant.Quantity - productVariant.ReceivedQuantity;
             if (!productDTO.IsSurplus && productDTO.Quantity > pendingQuantity)
             {
-                throw new AppBadRequestException($"La cantidad recibida del producto '{product.Id}' supera la cantidad pendiente.");
+                throw new AppBadRequestException($"La cantidad recibida del producto '{productVariant.Id}' supera la cantidad pendiente.");
             }
 
             receivedProducts.Add(new ReceivedProduct(
-                product,
+                productVariant,
                 productDTO.Quantity,
                 productDTO.Weight,
                 productDTO.IsSurplus));
@@ -443,7 +443,7 @@ public class OrderReceiptService(
         var allocations = AllocateAmount(warehouseShippingCostNio, estimatedWeightByLine);
 
         return receivedProducts
-            .Select((item, index) => new { item.Product.Id, Allocation = allocations[index] })
+            .Select((item, index) => new { item.ProductVariant.Id, Allocation = allocations[index] })
             .ToDictionary(item => item.Id, item => item.Allocation);
     }
 
@@ -480,28 +480,28 @@ public class OrderReceiptService(
             return (int)OrderStatusCode.PendingRefund;
         }
 
-        return order.Products.All(product => product.ReceivedQuantity >= product.Quantity)
+        return order.ProductVariants.All(productVariant => productVariant.ReceivedQuantity >= productVariant.Quantity)
             ? (int)OrderStatusCode.Received
             : (int)OrderStatusCode.PartiallyReceived;
     }
 
     private static decimal CalculateReceivedAmountNio(Order order)
     {
-        if (order.Products.All(product => product.ReceivedQuantity >= product.Quantity))
+        if (order.ProductVariants.All(productVariant => productVariant.ReceivedQuantity >= productVariant.Quantity))
         {
             return order.MerchandiseTotalNio;
         }
 
-        return Math.Round(order.Products.Sum(product =>
-            product.Quantity == 0
+        return Math.Round(order.ProductVariants.Sum(productVariant =>
+            productVariant.Quantity == 0
                 ? 0
-                : product.MerchandiseTotalCostNio * Math.Min(product.ReceivedQuantity, product.Quantity) / product.Quantity), 2);
+                : productVariant.MerchandiseTotalCostNio * Math.Min(productVariant.ReceivedQuantity, productVariant.Quantity) / productVariant.Quantity), 2);
     }
 
-    private static decimal CalculateUnitCostNio(Product product)
+    private static decimal CalculateUnitCostNio(ProductVariant productVariant)
     {
-        var receivedCostQuantity = Math.Max(product.Quantity, product.ReceivedQuantity);
-        return receivedCostQuantity == 0 ? 0 : Math.Round(product.TotalCostNio / receivedCostQuantity, 6);
+        var receivedCostQuantity = Math.Max(productVariant.Quantity, productVariant.ReceivedQuantity);
+        return receivedCostQuantity == 0 ? 0 : Math.Round(productVariant.TotalCostNio / receivedCostQuantity, 6);
     }
 
     private static decimal ResolveUpdatedWarehouseShippingCost(ProductReceipt receipt, UpdateOrderReceiptDTO updateOrderReceiptDTO)
@@ -575,36 +575,36 @@ public class OrderReceiptService(
 
     private static void ApplyUpdatedProductWeights(ProductReceipt receipt, UpdateOrderReceiptDTO updateOrderReceiptDTO)
     {
-        if (updateOrderReceiptDTO.Products.Count == 0)
+        if (updateOrderReceiptDTO.ProductVariants.Count == 0)
         {
             return;
         }
 
-        var duplicateDetail = updateOrderReceiptDTO.Products
-            .GroupBy(product => product.ProductReceiptDetailId)
+        var duplicateDetail = updateOrderReceiptDTO.ProductVariants
+            .GroupBy(productVariant => productVariant.ProductReceiptDetailId)
             .FirstOrDefault(group => group.Count() > 1);
         if (duplicateDetail is not null)
         {
             throw new AppBadRequestException("No puede enviar detalles de producto duplicados en la corrección.");
         }
 
-        if (updateOrderReceiptDTO.Products.Any(product => product.Weight <= 0))
+        if (updateOrderReceiptDTO.ProductVariants.Any(productVariant => productVariant.Weight <= 0))
         {
             throw new AppBadRequestException("El peso del producto debe ser mayor que cero.");
         }
 
         var receiptDetailById = receipt.ProductReceiptDetails.ToDictionary(detail => detail.Id);
-        var requestedDetailIds = updateOrderReceiptDTO.Products
-            .Select(product => product.ProductReceiptDetailId)
+        var requestedDetailIds = updateOrderReceiptDTO.ProductVariants
+            .Select(productVariant => productVariant.ProductReceiptDetailId)
             .ToHashSet();
         if (!requestedDetailIds.SetEquals(receiptDetailById.Keys))
         {
             throw new AppBadRequestException("Debe enviar exactamente los detalles de producto de la recepción.");
         }
 
-        foreach (var product in updateOrderReceiptDTO.Products)
+        foreach (var productVariant in updateOrderReceiptDTO.ProductVariants)
         {
-            receiptDetailById[product.ProductReceiptDetailId].Weight = product.Weight;
+            receiptDetailById[productVariant.ProductReceiptDetailId].Weight = productVariant.Weight;
         }
     }
 
@@ -630,11 +630,11 @@ public class OrderReceiptService(
         receipt.WarehouseShippingCostNio = warehouseShippingCostNio;
     }
 
-    private async Task RecalculateSaleProductsAsync(ICollection<int> productIds, ICollection<Product> products)
+    private async Task RecalculateSaleProductsAsync(ICollection<int> productIds, ICollection<ProductVariant> productVariants)
     {
-        var unitCostByProductId = products
-            .Where(product => productIds.Contains(product.Id))
-            .ToDictionary(product => product.Id, product => product.UnitCostNio);
+        var unitCostByProductId = productVariants
+            .Where(productVariant => productIds.Contains(productVariant.Id))
+            .ToDictionary(productVariant => productVariant.Id, productVariant => productVariant.UnitCostNio);
         var saleProducts = await _context.SaleProducts
             .Where(saleProduct => productIds.Contains(saleProduct.ProductId))
             .ToListAsync();
@@ -693,8 +693,8 @@ public class OrderReceiptService(
     {
         receiveOrderDTO.Comments = receiveOrderDTO.Comments.NormalizeOptional();
         receiveOrderDTO.TrackingNumbers ??= [];
-        receiveOrderDTO.Products ??= [];
+        receiveOrderDTO.ProductVariants ??= [];
     }
 
-    private sealed record ReceivedProduct(Product Product, int Quantity, decimal Weight, bool IsSurplus);
+    private sealed record ReceivedProduct(ProductVariant ProductVariant, int Quantity, decimal Weight, bool IsSurplus);
 }

@@ -8,5 +8,5 @@ public class Subcategory
 
 
     public Category? Category { get; set; }
-    public ICollection<ProductDetail> ProductDetails { get; set; } = [];
+    public ICollection<Product> Products { get; set; } = [];
 }

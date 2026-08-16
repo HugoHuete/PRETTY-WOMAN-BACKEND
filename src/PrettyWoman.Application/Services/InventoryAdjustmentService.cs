@@ -58,12 +58,12 @@ public class InventoryAdjustmentService(
         await EnsureReasonExistsAsync(request.InventoryAdjustmentReasonId);
 
         var productIds = request.Items.Select(item => item.ProductId).Distinct().ToList();
-        var products = await _context.Products
-            .Include(product => product.ProductDetail)
-            .Include(product => product.Size)
-            .Where(product => productIds.Contains(product.Id))
+        var productVariants = await _context.ProductVariants
+            .Include(productVariant => productVariant.Product)
+            .Include(productVariant => productVariant.Size)
+            .Where(productVariant => productIds.Contains(productVariant.Id))
             .ToListAsync();
-        var missingProductId = productIds.FirstOrDefault(productId => products.All(product => product.Id != productId));
+        var missingProductId = productIds.FirstOrDefault(productId => productVariants.All(productVariant => productVariant.Id != productId));
         if (missingProductId != 0)
         {
             throw new AppNotFoundException($"La variante con id '{missingProductId}' no existe.");
@@ -80,12 +80,12 @@ public class InventoryAdjustmentService(
 
         foreach (var requestItem in request.Items)
         {
-            var product = products.Single(product => product.Id == requestItem.ProductId);
+            var productVariant = productVariants.Single(productVariant => productVariant.Id == requestItem.ProductId);
             var fromStockBucket = (InventoryStockBucketOption)requestItem.FromStockBucketId;
             var toStockBucket = (InventoryStockBucketOption)requestItem.ToStockBucketId;
-            EnsureManualExternalIncreaseDoesNotRepresentPurchaseSurplus(product, fromStockBucket, requestItem.Quantity);
+            EnsureManualExternalIncreaseDoesNotRepresentPurchaseSurplus(productVariant, fromStockBucket, requestItem.Quantity);
             var movement = _inventoryService.Move(
-                product,
+                productVariant,
                 fromStockBucket,
                 toStockBucket,
                 requestItem.Quantity,
@@ -95,7 +95,7 @@ public class InventoryAdjustmentService(
 
             var item = new InventoryAdjustmentItem
             {
-                Product = product,
+                ProductVariant = productVariant,
                 FromStockBucketId = requestItem.FromStockBucketId,
                 ToStockBucketId = requestItem.ToStockBucketId,
                 Quantity = requestItem.Quantity,
@@ -112,12 +112,12 @@ public class InventoryAdjustmentService(
     }
 
     private static void EnsureManualExternalIncreaseDoesNotRepresentPurchaseSurplus(
-        Product product,
+        ProductVariant productVariant,
         InventoryStockBucketOption fromStockBucket,
         int quantity)
     {
         if (fromStockBucket == InventoryStockBucketOption.External &&
-            product.ReceivedQuantity + quantity > product.Quantity)
+            productVariant.ReceivedQuantity + quantity > productVariant.Quantity)
         {
             throw new AppBadRequestException(
                 "Los sobrantes de compra deben registrarse desde la recepción de compras marcando la línea como sobrante.");
@@ -189,11 +189,11 @@ public class InventoryAdjustmentService(
         => query
             .Include(adjustment => adjustment.InventoryAdjustmentReason)
             .Include(adjustment => adjustment.Items)
-                .ThenInclude(item => item.Product)
-                    .ThenInclude(product => product!.ProductDetail)
+                .ThenInclude(item => item.ProductVariant)
+                    .ThenInclude(productVariant => productVariant!.Product)
             .Include(adjustment => adjustment.Items)
-                .ThenInclude(item => item.Product)
-                    .ThenInclude(product => product!.Size)
+                .ThenInclude(item => item.ProductVariant)
+                    .ThenInclude(productVariant => productVariant!.Size)
             .Include(adjustment => adjustment.Items)
                 .ThenInclude(item => item.FromStockBucket)
             .Include(adjustment => adjustment.Items)
@@ -210,15 +210,15 @@ public class InventoryAdjustmentService(
             query = query.Where(adjustment => adjustment.InventoryAdjustmentReasonId == filters.InventoryAdjustmentReasonId.Value);
         }
 
-        if (filters.ProductDetailId.HasValue)
-        {
-            query = query.Where(adjustment => adjustment.Items.Any(item =>
-                item.Product != null && item.Product.ProductDetailId == filters.ProductDetailId.Value));
-        }
-
         if (filters.ProductId.HasValue)
         {
-            query = query.Where(adjustment => adjustment.Items.Any(item => item.ProductId == filters.ProductId.Value));
+            query = query.Where(adjustment => adjustment.Items.Any(item =>
+                item.ProductVariant != null && item.ProductVariant.ProductId == filters.ProductId.Value));
+        }
+
+        if (filters.ProductVariantId.HasValue)
+        {
+            query = query.Where(adjustment => adjustment.Items.Any(item => item.ProductId == filters.ProductVariantId.Value));
         }
 
         if (filters.FromStockBucketId.HasValue)
@@ -260,13 +260,13 @@ public class InventoryAdjustmentService(
             Items = adjustment.Items.Select(item => new InventoryAdjustmentItemDTO
             {
                 Id = item.Id,
-                ProductId = item.ProductId,
-                ProductDetailId = item.Product?.ProductDetailId ?? 0,
-                ProductName = item.Product?.ProductDetail?.Name,
-                ProductCode = item.Product?.ProductDetail?.Code,
-                SizeId = item.Product?.SizeId ?? 0,
-                SizeName = item.Product?.Size?.Name,
-                Variant = item.Product?.Variant,
+                ProductId = item.ProductVariant?.ProductId ?? 0,
+                ProductVariantId = item.ProductId,
+                ProductName = item.ProductVariant?.Product?.Name,
+                ProductCode = item.ProductVariant?.Product?.Code,
+                SizeId = item.ProductVariant?.SizeId ?? 0,
+                SizeName = item.ProductVariant?.Size?.Name,
+                Variant = item.ProductVariant?.Variant,
                 FromStockBucketId = item.FromStockBucketId,
                 FromStockBucketName = item.FromStockBucket?.Name,
                 ToStockBucketId = item.ToStockBucketId,

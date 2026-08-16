@@ -74,7 +74,7 @@ public class DiscountCampaignServiceTests
     public async Task CreateAsync_CreatesCampaignWithProductsAndTrimmedName()
     {
         await using var context = CreateContext();
-        var product = await AddProductAsync(context, "Vestido lino", 101);
+        var productVariant = await AddProductAsync(context, "Vestido lino", 101);
         await AddDiscountTypesAsync(context);
         var service = CreateService(context);
 
@@ -83,11 +83,11 @@ public class DiscountCampaignServiceTests
             Name = "  Promo verano  ",
             StartDate = DateTime.UtcNow.AddDays(-3),
             EndDate = DateTime.UtcNow.AddDays(-2),
-            Products =
+            ProductVariants =
             [
                 new CreateDiscountCampaignProductDTO
                 {
-                    ProductDetailId = product.ProductDetailId,
+                    ProductId = productVariant.ProductId,
                     DiscountTypeId = (int)DiscountTypeOption.Percentage,
                     DiscountValue = 15
                 }
@@ -102,7 +102,7 @@ public class DiscountCampaignServiceTests
         Assert.Equal("Promo verano", campaign.Name);
         Assert.Null(campaign.CancelledAt);
         Assert.Single(campaign.DiscountCampaignProducts);
-        Assert.Equal(product.ProductDetailId, campaign.DiscountCampaignProducts.Single().ProductDetailId);
+        Assert.Equal(productVariant.ProductId, campaign.DiscountCampaignProducts.Single().ProductId);
 
         var result = await service.GetByIdAsync(campaignId);
 
@@ -114,7 +114,7 @@ public class DiscountCampaignServiceTests
     public async Task CreateAsync_ThrowsWhenProductIsRepeated()
     {
         await using var context = CreateContext();
-        var product = await AddProductAsync(context, "Blusa", 102);
+        var productVariant = await AddProductAsync(context, "Blusa", 102);
         await AddDiscountTypesAsync(context);
         var service = CreateService(context);
 
@@ -123,24 +123,24 @@ public class DiscountCampaignServiceTests
             Name = "Promo repetida",
             StartDate = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
             EndDate = new DateTime(2026, 6, 30, 0, 0, 0, DateTimeKind.Utc),
-            Products =
+            ProductVariants =
             [
                 new CreateDiscountCampaignProductDTO
                 {
-                    ProductDetailId = product.ProductDetailId,
+                    ProductId = productVariant.ProductId,
                     DiscountTypeId = (int)DiscountTypeOption.FixedAmount,
                     DiscountValue = 100
                 },
                 new CreateDiscountCampaignProductDTO
                 {
-                    ProductDetailId = product.ProductDetailId,
+                    ProductId = productVariant.ProductId,
                     DiscountTypeId = (int)DiscountTypeOption.Percentage,
                     DiscountValue = 10
                 }
             ]
         }));
 
-        Assert.Contains($"El producto detalle con id '{product.ProductDetailId}'", exception.Message);
+        Assert.Contains($"El producto con id '{productVariant.ProductId}'", exception.Message);
         Assert.Contains("repetido", exception.Message);
     }
 
@@ -148,7 +148,7 @@ public class DiscountCampaignServiceTests
     public async Task CreateAsync_ThrowsWhenPercentageIsGreaterThanOneHundred()
     {
         await using var context = CreateContext();
-        var product = await AddProductAsync(context, "Falda", 103);
+        var productVariant = await AddProductAsync(context, "Falda", 103);
         await AddDiscountTypesAsync(context);
         var service = CreateService(context);
 
@@ -157,11 +157,11 @@ public class DiscountCampaignServiceTests
             Name = "Promo inválida",
             StartDate = new DateTime(2026, 6, 1, 0, 0, 0, DateTimeKind.Utc),
             EndDate = new DateTime(2026, 6, 30, 0, 0, 0, DateTimeKind.Utc),
-            Products =
+            ProductVariants =
             [
                 new CreateDiscountCampaignProductDTO
                 {
-                    ProductDetailId = product.ProductDetailId,
+                    ProductId = productVariant.ProductId,
                     DiscountTypeId = (int)DiscountTypeOption.Percentage,
                     DiscountValue = 101
                 }
@@ -188,7 +188,7 @@ public class DiscountCampaignServiceTests
             [
                 new DiscountCampaignProduct
                 {
-                    ProductDetailId = firstProduct.ProductDetailId,
+                    ProductId = firstProduct.ProductId,
                     DiscountTypeId = (int)DiscountTypeOption.FixedAmount,
                     DiscountValue = 100
                 }
@@ -203,11 +203,11 @@ public class DiscountCampaignServiceTests
             Name = "  Promo actualizada  ",
             StartDate = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc),
             EndDate = new DateTime(2026, 7, 31, 0, 0, 0, DateTimeKind.Utc),
-            Products =
+            ProductVariants =
             [
                 new UpdateDiscountCampaignProductDTO
                 {
-                    ProductDetailId = secondProduct.ProductDetailId,
+                    ProductId = secondProduct.ProductId,
                     DiscountTypeId = (int)DiscountTypeOption.FixedPrice,
                     DiscountValue = 450
                 }
@@ -221,7 +221,7 @@ public class DiscountCampaignServiceTests
         Assert.Equal("Promo actualizada", updatedCampaign.Name);
         Assert.Equal(new DateTime(2026, 5, 1, 0, 0, 0, DateTimeKind.Utc), updatedCampaign.CancelledAt);
         Assert.Single(updatedCampaign.DiscountCampaignProducts);
-        Assert.Equal(secondProduct.ProductDetailId, updatedCampaign.DiscountCampaignProducts.Single().ProductDetailId);
+        Assert.Equal(secondProduct.ProductId, updatedCampaign.DiscountCampaignProducts.Single().ProductId);
         Assert.Equal((int)DiscountTypeOption.FixedPrice, updatedCampaign.DiscountCampaignProducts.Single().DiscountTypeId);
     }
 
@@ -241,13 +241,13 @@ public class DiscountCampaignServiceTests
             [
                 new DiscountCampaignProduct
                 {
-                    ProductDetailId = firstProduct.ProductDetailId,
+                    ProductId = firstProduct.ProductId,
                     DiscountTypeId = (int)DiscountTypeOption.FixedAmount,
                     DiscountValue = 100
                 },
                 new DiscountCampaignProduct
                 {
-                    ProductDetailId = secondProduct.ProductDetailId,
+                    ProductId = secondProduct.ProductId,
                     DiscountTypeId = (int)DiscountTypeOption.Percentage,
                     DiscountValue = 10
                 }
@@ -256,7 +256,7 @@ public class DiscountCampaignServiceTests
         context.DiscountCampaigns.Add(campaign);
         await context.SaveChangesAsync();
         var originalDiscountCampaignProductId = campaign.DiscountCampaignProducts
-            .Single(product => product.ProductDetailId == firstProduct.ProductDetailId)
+            .Single(productVariant => productVariant.ProductId == firstProduct.ProductId)
             .Id;
         var service = CreateService(context);
 
@@ -265,11 +265,11 @@ public class DiscountCampaignServiceTests
             Name = "Promo actualizada",
             StartDate = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc),
             EndDate = new DateTime(2026, 7, 31, 0, 0, 0, DateTimeKind.Utc),
-            Products =
+            ProductVariants =
             [
                 new UpdateDiscountCampaignProductDTO
                 {
-                    ProductDetailId = firstProduct.ProductDetailId,
+                    ProductId = firstProduct.ProductId,
                     DiscountTypeId = (int)DiscountTypeOption.FixedPrice,
                     DiscountValue = 450
                 }
@@ -282,7 +282,7 @@ public class DiscountCampaignServiceTests
         var keptProduct = updatedCampaign.DiscountCampaignProducts.Single();
 
         Assert.Equal(originalDiscountCampaignProductId, keptProduct.Id);
-        Assert.Equal(firstProduct.ProductDetailId, keptProduct.ProductDetailId);
+        Assert.Equal(firstProduct.ProductId, keptProduct.ProductId);
         Assert.Equal((int)DiscountTypeOption.FixedPrice, keptProduct.DiscountTypeId);
         Assert.Equal(450, keptProduct.DiscountValue);
     }
@@ -410,7 +410,7 @@ public class DiscountCampaignServiceTests
 
         var campaign = Assert.Single(result.Items);
         Assert.IsType<DiscountCampaignSummaryDTO>(campaign);
-        Assert.Null(typeof(DiscountCampaignSummaryDTO).GetProperty("Products"));
+        Assert.Null(typeof(DiscountCampaignSummaryDTO).GetProperty("ProductVariants"));
         Assert.Equal("Promo febrero", campaign.Name);
         Assert.Equal((int)DiscountCampaignStatusOption.Finished, campaign.StatusId);
         Assert.Equal(nameof(DiscountCampaignStatusOption.Finished), campaign.StatusName);
@@ -485,7 +485,7 @@ public class DiscountCampaignServiceTests
     public async Task GetByIdAsync_ReturnsProjectedProducts()
     {
         await using var context = CreateContext();
-        var product = await AddProductAsync(context, "Vestido detalle", 108);
+        var productVariant = await AddProductAsync(context, "Vestido detalle", 108);
         await AddDiscountTypesAsync(context);
         var campaign = new DiscountCampaign
         {
@@ -496,7 +496,7 @@ public class DiscountCampaignServiceTests
             [
                 new DiscountCampaignProduct
                 {
-                    ProductDetailId = product.ProductDetailId,
+                    ProductId = productVariant.ProductId,
                     DiscountTypeId = (int)DiscountTypeOption.Percentage,
                     DiscountValue = 20
                 }
@@ -507,10 +507,10 @@ public class DiscountCampaignServiceTests
 
         var result = await CreateService(context).GetByIdAsync(campaign.Id);
 
-        var detail = Assert.Single(result.Products);
-        Assert.Equal(product.ProductDetailId, detail.ProductDetailId);
+        var detail = Assert.Single(result.ProductVariants);
+        Assert.Equal(productVariant.ProductId, detail.ProductId);
         Assert.Equal("Vestido detalle", detail.ProductName);
-        Assert.Equal(product.ProductDetail!.Code, detail.ProductCode);
+        Assert.Equal(productVariant.Product!.Code, detail.ProductCode);
         Assert.Equal((int)DiscountTypeOption.Percentage, detail.DiscountTypeId);
         Assert.Equal(nameof(DiscountTypeOption.Percentage), detail.DiscountTypeName);
         Assert.Equal(20, detail.DiscountValue);
@@ -602,11 +602,11 @@ public class DiscountCampaignServiceTests
         await context.SaveChangesAsync();
     }
 
-    private static async Task<Product> AddProductAsync(ApplicationDbContext context, string name, int code)
+    private static async Task<ProductVariant> AddProductAsync(ApplicationDbContext context, string name, int code)
     {
-        var product = new Product
+        var productVariant = new ProductVariant
         {
-            ProductDetail = new ProductDetail
+            Product = new Product
             {
                 SupplierProductCode = code.ToString(),
                 Code = code,
@@ -627,10 +627,10 @@ public class DiscountCampaignServiceTests
             SalePrice = 500
         };
 
-        context.Products.Add(product);
+        context.ProductVariants.Add(productVariant);
         await context.SaveChangesAsync();
 
-        return product;
+        return productVariant;
     }
 
     private static ApplicationDbContext CreateContext()

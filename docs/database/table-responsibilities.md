@@ -61,7 +61,7 @@ Catálogo de tallas.
 
 Sirve para evitar valores inconsistentes como `M`, `m`, `Medium`.
 
-## product_details
+## products
 
 Representa el producto general o código de tienda.
 
@@ -98,7 +98,7 @@ Campos importantes:
 
 Imágenes asociadas al producto general.
 
-Normalmente se relacionan con `product_details`, no con cada talla.
+Normalmente se relacionan con `products`, no con cada talla.
 
 ## clients
 
@@ -371,7 +371,7 @@ Define nombre, fechas y si está habilitada.
 
 ## discount_campaign_products
 
-Productos generales product_details incluidos en una promocion y tipo de descuento aplicado.
+Productos generales products incluidos en una promocion y tipo de descuento aplicado.
 
 ## discount_types
 

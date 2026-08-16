@@ -29,5 +29,5 @@ public class OrderDTO
     public DateTime? SupplierRefundDeclinedAt { get; set; }
     public string? SupplierRefundDeclineComments { get; set; }
     public ICollection<PurchaseShortageDTO> PurchaseShortages { get; set; } = [];
-    public ICollection<OrderProductDetailDTO> ProductDetails { get; set; } = [];
+    public ICollection<OrderProductDTO> Products { get; set; } = [];
 }

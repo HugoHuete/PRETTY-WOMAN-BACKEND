@@ -14,7 +14,7 @@ Registrar una compra al proveedor junto con los artículos comprados y sus varia
 ## Tablas involucradas
 
 - `orders`
-- `product_details`
+- `products`
 - `products`
 - `suppliers`
 - `subcategories`
@@ -25,8 +25,8 @@ Registrar una compra al proveedor junto con los artículos comprados y sus varia
 
 1. Recibir proveedor, moneda de compra, costo de envío del proveedor a la bodega y productos comprados.
 2. Crear la orden en estado `Pending`.
-3. Crear un `product_detail` por cada modelo/artículo comprado.
-4. Generar `product_details.code` en backend usando el siguiente consecutivo interno.
+3. Crear un `product` por cada modelo/artículo comprado.
+4. Generar `products.code` en backend usando el siguiente consecutivo interno.
 5. Crear un `product` por cada combinación de talla y variante.
 6. Inicializar `received_quantity`, `available_quantity`, `reserved_quantity` y `unavailable_quantity` en `0`.
 7. Obtener la tasa de cambio bancaria habilitada para conservar equivalencias históricas entre USD y NIO.
@@ -42,7 +42,7 @@ Registrar una compra al proveedor junto con los artículos comprados y sus varia
   "purchaseCurrencyId": 1,
   "supplierShippingCostUsd": 15,
   "comments": "Compra SOHO junio",
-  "productDetails": [
+  "products": [
     {
       "supplierProductCode": "SOHO25120",
       "name": "Pantalon cargo",
@@ -88,9 +88,9 @@ Estos valores se calculan en backend.
 
 ## Reglas de negocio
 
-- Una orden puede crearse sin `productDetails` cuando la lista de productos todavía no está disponible.
-- Si se envía un `product_detail`, debe traer al menos una variante `product`.
-- No se permiten variantes duplicadas dentro del mismo `product_detail` para la misma talla y variante.
+- Una orden puede crearse sin `products` cuando la lista de productos todavía no está disponible.
+- Si se envía un `product`, debe traer al menos una variante `product`.
+- No se permiten variantes duplicadas dentro del mismo `product` para la misma talla y variante.
 - `purchaseCurrencyId = 1` representa compra en USD.
 - `purchaseCurrencyId = 2` representa compra local en NIO.
 - El frontend no envía `exchangeRate`; el backend la calcula.
@@ -100,11 +100,11 @@ Estos valores se calculan en backend.
 - `supplierShippingCostUsd` representa el envío proveedor -> bodega y siempre se envía en dólares.
 - El backend convierte `supplierShippingCostUsd` a córdobas usando `orders.exchange_rate` y distribuye ese monto en `products.allocated_shipping_cost_nio`.
 - `orders.warehouse_shipping_cost_usd` representa el envío bodega -> Nicaragua; se mantiene en `0` al crear/actualizar la orden y se debe completar desde el flujo de recepción cuando se conozca ese costo.
-- `product_details.code` es un entero, representa el código interno del negocio y lo genera el backend.
-- `product_details.supplier_product_code` es el código del proveedor.
-- Al crear una orden no se envía `productDetails[].id`. `productDetails` puede omitirse o enviarse como arreglo vacío si los productos se agregarán después con `PUT /orders/{id}`.
-- Al actualizar una orden, enviar `productDetails[].id` cuando se esté corrigiendo un `product_detail` existente para conservar su `code` interno.
-- Si se agrega un `product_detail` nuevo durante la actualización, se envía sin `id` y el backend asigna el siguiente `code` disponible.
+- `products.code` es un entero, representa el código interno del negocio y lo genera el backend.
+- `products.supplier_product_code` es el código del proveedor.
+- Al crear una orden no se envía `products[].id`. `products` puede omitirse o enviarse como arreglo vacío si los productos se agregarán después con `PUT /orders/{id}`.
+- Al actualizar una orden, enviar `products[].id` cuando se esté corrigiendo un `product` existente para conservar su `code` interno.
+- Si se agrega un `product` nuevo durante la actualización, se envía sin `id` y el backend asigna el siguiente `code` disponible.
 - El inventario disponible no aumenta al crear la orden.
 - El inventario aumenta solamente al recibir productos.
 
@@ -136,7 +136,7 @@ Si la orden se actualiza antes de recibir inventario, el movimiento financiero s
 
 Cuando se actualiza una orden que todavía no tiene inventario recibido ni recepciones registradas, el request puede reemplazar sus variantes y corregir datos del modelo comprado.
 
-Para conservar el código interno del negocio, cada `product_detail` existente debe enviarse con su `id`:
+Para conservar el código interno del negocio, cada `product` existente debe enviarse con su `id`:
 
 ```json
 {
@@ -148,4 +148,4 @@ Para conservar el código interno del negocio, cada `product_detail` existente d
 }
 ```
 
-El backend conserva `product_details.code` para ese `id`. Solo los `product_details` nuevos, enviados sin `id`, reciben un código consecutivo nuevo.
+El backend conserva `products.code` para ese `id`. Solo los `products` nuevos, enviados sin `id`, reciben un código consecutivo nuevo.

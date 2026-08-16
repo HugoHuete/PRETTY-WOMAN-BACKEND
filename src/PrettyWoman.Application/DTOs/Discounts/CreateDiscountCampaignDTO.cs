@@ -9,5 +9,5 @@ public class CreateDiscountCampaignDTO
 
     public DateTime StartDate { get; set; } = DateTime.UtcNow;
     public DateTime EndDate { get; set; }
-    public List<CreateDiscountCampaignProductDTO> Products { get; set; } = [];
+    public List<CreateDiscountCampaignProductDTO> ProductVariants { get; set; } = [];
 }

@@ -17,7 +17,7 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
     public async Task<int> CreateAsync(CreateDiscountCampaignDTO createDiscountCampaignDTO)
     {
         NormalizeAndValidateCampaign(createDiscountCampaignDTO);
-        await ValidateProductDetailsAsync(createDiscountCampaignDTO.Products);
+        await ValidateProductsAsync(createDiscountCampaignDTO.ProductVariants);
         await EnsureNameIsUniqueAsync(createDiscountCampaignDTO.Name);
 
         var discountCampaign = new DiscountCampaign
@@ -26,12 +26,12 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             StartDate = createDiscountCampaignDTO.StartDate,
             EndDate = createDiscountCampaignDTO.EndDate,
             CancelledAt = null,
-            DiscountCampaignProducts = createDiscountCampaignDTO.Products
-                .Select(product => new DiscountCampaignProduct
+            DiscountCampaignProducts = createDiscountCampaignDTO.ProductVariants
+                .Select(productVariant => new DiscountCampaignProduct
                 {
-                    ProductDetailId = product.ProductDetailId,
-                    DiscountTypeId = product.DiscountTypeId,
-                    DiscountValue = product.DiscountValue
+                    ProductId = productVariant.ProductId,
+                    DiscountTypeId = productVariant.DiscountTypeId,
+                    DiscountValue = productVariant.DiscountValue
                 })
                 .ToList()
         };
@@ -50,39 +50,39 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             ?? throw new AppNotFoundException($"La campania de descuento con id '{id}' no existe.");
 
         NormalizeAndValidateCampaign(updateDiscountCampaignDTO);
-        await ValidateProductDetailsAsync(updateDiscountCampaignDTO.Products);
+        await ValidateProductsAsync(updateDiscountCampaignDTO.ProductVariants);
         await EnsureNameIsUniqueAsync(updateDiscountCampaignDTO.Name, id);
 
         discountCampaign.Name = updateDiscountCampaignDTO.Name;
         discountCampaign.StartDate = updateDiscountCampaignDTO.StartDate;
         discountCampaign.EndDate = updateDiscountCampaignDTO.EndDate;
 
-        var existingProductsByProductDetailId = discountCampaign.DiscountCampaignProducts
-            .ToDictionary(product => product.ProductDetailId);
-        var requestedProductDetailIds = updateDiscountCampaignDTO.Products
-            .Select(product => product.ProductDetailId)
+        var existingProductsByProductId = discountCampaign.DiscountCampaignProducts
+            .ToDictionary(productVariant => productVariant.ProductId);
+        var requestedProductIds = updateDiscountCampaignDTO.ProductVariants
+            .Select(productVariant => productVariant.ProductId)
             .ToHashSet();
 
         var productsToRemove = discountCampaign.DiscountCampaignProducts
-            .Where(product => !requestedProductDetailIds.Contains(product.ProductDetailId))
+            .Where(productVariant => !requestedProductIds.Contains(productVariant.ProductId))
             .ToList();
 
         _context.DiscountCampaignProducts.RemoveRange(productsToRemove);
 
-        foreach (var product in updateDiscountCampaignDTO.Products)
+        foreach (var productVariant in updateDiscountCampaignDTO.ProductVariants)
         {
-            if (existingProductsByProductDetailId.TryGetValue(product.ProductDetailId, out var existingProduct))
+            if (existingProductsByProductId.TryGetValue(productVariant.ProductId, out var existingProduct))
             {
-                existingProduct.DiscountTypeId = product.DiscountTypeId;
-                existingProduct.DiscountValue = product.DiscountValue;
+                existingProduct.DiscountTypeId = productVariant.DiscountTypeId;
+                existingProduct.DiscountValue = productVariant.DiscountValue;
                 continue;
             }
 
             discountCampaign.DiscountCampaignProducts.Add(new DiscountCampaignProduct
             {
-                ProductDetailId = product.ProductDetailId,
-                DiscountTypeId = product.DiscountTypeId,
-                DiscountValue = product.DiscountValue
+                ProductId = productVariant.ProductId,
+                DiscountTypeId = productVariant.DiscountTypeId,
+                DiscountValue = productVariant.DiscountValue
             });
         }
 
@@ -173,9 +173,9 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         var discountCampaign = await _context.DiscountCampaigns
             .AsNoTracking()
             .Include(campaign => campaign.DiscountCampaignProducts)
-                .ThenInclude(product => product.ProductDetail)
+                .ThenInclude(productVariant => productVariant.Product)
             .Include(campaign => campaign.DiscountCampaignProducts)
-                .ThenInclude(product => product.DiscountType)
+                .ThenInclude(productVariant => productVariant.DiscountType)
             .FirstOrDefaultAsync(campaign => campaign.Id == id)
             ?? throw new AppNotFoundException($"La campania de descuento con id '{id}' no existe.");
 
@@ -217,17 +217,17 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             UpdatedAt = campaign.UpdatedAt,
             CreatedById = campaign.CreatedById,
             UpdatedById = campaign.UpdatedById,
-            Products = campaign.DiscountCampaignProducts
-                .OrderBy(product => product.ProductDetail?.Name ?? string.Empty)
-                .Select(product => new DiscountCampaignProductDTO
+            ProductVariants = campaign.DiscountCampaignProducts
+                .OrderBy(productVariant => productVariant.Product?.Name ?? string.Empty)
+                .Select(productVariant => new DiscountCampaignProductDTO
                 {
-                    Id = product.Id,
-                    ProductDetailId = product.ProductDetailId,
-                    ProductName = product.ProductDetail?.Name,
-                    ProductCode = product.ProductDetail?.Code,
-                    DiscountTypeId = product.DiscountTypeId,
-                    DiscountTypeName = product.DiscountType?.Name,
-                    DiscountValue = product.DiscountValue
+                    Id = productVariant.Id,
+                    ProductId = productVariant.ProductId,
+                    ProductName = productVariant.Product?.Name,
+                    ProductCode = productVariant.Product?.Code,
+                    DiscountTypeId = productVariant.DiscountTypeId,
+                    DiscountTypeName = productVariant.DiscountType?.Name,
+                    DiscountValue = productVariant.DiscountValue
                 })
                 .ToList()
         };
@@ -267,43 +267,43 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         query.PageSize = query.PageSize < 1 ? 20 : Math.Min(query.PageSize, 100);
     }
 
-    private async Task ValidateProductDetailsAsync(IReadOnlyCollection<CreateDiscountCampaignProductDTO> products)
+    private async Task ValidateProductsAsync(IReadOnlyCollection<CreateDiscountCampaignProductDTO> productVariants)
     {
-        foreach (var product in products)
+        foreach (var productVariant in productVariants)
         {
-            ValidateDiscountValue(product);
+            ValidateDiscountValue(productVariant);
         }
 
-        var repeatedProductDetailId = products
-            .GroupBy(product => product.ProductDetailId)
+        var repeatedProductId = productVariants
+            .GroupBy(productVariant => productVariant.ProductId)
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
             .FirstOrDefault();
 
-        if (repeatedProductDetailId > 0)
+        if (repeatedProductId > 0)
         {
-            throw new AppBadRequestException($"El producto detalle con id '{repeatedProductDetailId}' esta repetido en la campania.");
+            throw new AppBadRequestException($"El producto con id '{repeatedProductId}' esta repetido en la campania.");
         }
 
-        var productDetailIds = products
-            .Select(product => product.ProductDetailId)
+        var productIds = productVariants
+            .Select(productVariant => productVariant.ProductId)
             .Distinct()
             .ToList();
 
-        var existingProductDetailIds = await _context.ProductDetails
-            .Where(product => productDetailIds.Contains(product.Id))
-            .Select(product => product.Id)
+        var existingProductIds = await _context.Products
+            .Where(productVariant => productIds.Contains(productVariant.Id))
+            .Select(productVariant => productVariant.Id)
             .ToListAsync();
 
-        var missingProductDetailId = productDetailIds.Except(existingProductDetailIds).FirstOrDefault();
+        var missingProductId = productIds.Except(existingProductIds).FirstOrDefault();
 
-        if (missingProductDetailId > 0)
+        if (missingProductId > 0)
         {
-            throw new AppNotFoundException($"El producto detalle con id '{missingProductDetailId}' no existe.");
+            throw new AppNotFoundException($"El producto con id '{missingProductId}' no existe.");
         }
 
-        var discountTypeIds = products
-            .Select(product => product.DiscountTypeId)
+        var discountTypeIds = productVariants
+            .Select(productVariant => productVariant.DiscountTypeId)
             .Distinct()
             .ToList();
 
@@ -333,14 +333,14 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         }
     }
 
-    private static void ValidateDiscountValue(CreateDiscountCampaignProductDTO product)
+    private static void ValidateDiscountValue(CreateDiscountCampaignProductDTO productVariant)
     {
-        if (product.DiscountValue <= 0)
+        if (productVariant.DiscountValue <= 0)
         {
             throw new AppBadRequestException("El valor del descuento debe ser mayor que cero.");
         }
 
-        if (product.DiscountTypeId == (int)DiscountTypeOption.Percentage && product.DiscountValue > 100)
+        if (productVariant.DiscountTypeId == (int)DiscountTypeOption.Percentage && productVariant.DiscountValue > 100)
         {
             throw new AppBadRequestException("El porcentaje de descuento no puede ser mayor que 100.");
         }

@@ -14,7 +14,7 @@ public class InventoryAdjustmentItemConfiguration : IEntityTypeConfiguration<Inv
             .WithMany(x => x.Items)
             .HasForeignKey(x => x.InventoryAdjustmentId)
             .OnDelete(DeleteBehavior.Cascade);
-        builder.HasOne(x => x.Product)
+        builder.HasOne(x => x.ProductVariant)
             .WithMany(x => x.InventoryAdjustmentItems)
             .HasForeignKey(x => x.ProductId)
             .OnDelete(DeleteBehavior.Restrict);

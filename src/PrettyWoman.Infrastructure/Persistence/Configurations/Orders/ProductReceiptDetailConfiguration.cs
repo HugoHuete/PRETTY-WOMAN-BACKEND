@@ -14,7 +14,7 @@ public class ProductReceiptDetailConfiguration : IEntityTypeConfiguration<Produc
         builder.Property(x => x.AllocatedWarehouseShippingCostNio).HasPrecision(12, 2);
 
         builder.HasOne(x => x.ProductReceipt).WithMany(x => x.ProductReceiptDetails).HasForeignKey(x => x.ProductReceiptId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne(x => x.Product).WithMany(x => x.ProductReceiptDetails).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.ProductVariant).WithMany(x => x.ProductReceiptDetails).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
 
         builder.ToTable(t =>
         {

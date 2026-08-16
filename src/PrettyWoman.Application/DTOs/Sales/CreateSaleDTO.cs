@@ -9,7 +9,7 @@ public class CreateSaleDTO
     public int SaleStatusId { get; set; } = (int)SaleStatusOption.Pending;
     public int? ClientId { get; set; }
     public string? Comments { get; set; }
-    public List<CreateSaleProductDTO> Products { get; set; } = [];
+    public List<CreateSaleProductDTO> ProductVariants { get; set; } = [];
     public List<CreateSaleSelectionProductDTO> SelectionProducts { get; set; } = [];
     public List<CreateSalePaymentMovementDTO> PaymentMovements { get; set; } = [];
 }

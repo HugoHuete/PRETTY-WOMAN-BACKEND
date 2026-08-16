@@ -14,5 +14,5 @@ public class ReceiveOrderDTO
     public ICollection<ReceiveOrderTrackingNumberDTO> TrackingNumbers { get; set; } = [];
 
     [MinLength(1, ErrorMessage = "Debe enviar al menos un producto recibido.")]
-    public ICollection<ReceiveOrderProductDTO> Products { get; set; } = [];
+    public ICollection<ReceiveOrderProductDTO> ProductVariants { get; set; } = [];
 }

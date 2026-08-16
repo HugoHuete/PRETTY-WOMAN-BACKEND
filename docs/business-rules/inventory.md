@@ -9,7 +9,7 @@ Controlar las cantidades compradas, recibidas, disponibles, reservadas y no disp
 * `products`
 * `inventory_movements`
 * `inventory_movement_types`
-* `product_details`
+* `products`
 * `sizes`
 * `product_holds`
 * `product_hold_statuses`

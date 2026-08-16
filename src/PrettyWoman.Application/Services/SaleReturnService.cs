@@ -50,7 +50,7 @@ public class SaleReturnService(
             throw new AppNotFoundException("La agencia de envío indicada no existe.");
 
         var sale = await _context.Sales
-            .Include(item => item.Products)
+            .Include(item => item.ProductVariants)
             .Include(item => item.Deliveries)
             .FirstOrDefaultAsync(item => item.Id == saleId)
             ?? throw new AppNotFoundException($"La venta con id {saleId} no existe.");
@@ -62,7 +62,7 @@ public class SaleReturnService(
         var previouslyReturned = await GetPreviouslyReturnedQuantitiesAsync(saleId);
         foreach (var group in request.Items.GroupBy(item => item.OriginalSaleProductId))
         {
-            var original = sale.Products.SingleOrDefault(item => item.Id == group.Key)
+            var original = sale.ProductVariants.SingleOrDefault(item => item.Id == group.Key)
                 ?? throw new AppBadRequestException("Cada prenda devuelta debe pertenecer a la venta original.");
 
             var quantity = group.Sum(item => item.Quantity);
@@ -87,7 +87,7 @@ public class SaleReturnService(
         };
         foreach (var item in request.Items)
         {
-            var original = sale.Products.Single(product => product.Id == item.OriginalSaleProductId);
+            var original = sale.ProductVariants.Single(productVariant => productVariant.Id == item.OriginalSaleProductId);
             result.Items.Add(new SaleReturnItem
             {
                 OriginalSaleProductId = original.Id,
@@ -100,7 +100,7 @@ public class SaleReturnService(
         }
 
         result.ProductRefundTotal = Math.Round(result.Items.Sum(item => item.Quantity * item.RecognizedUnitAmount), 2);
-        var onlyOneProductWasSold = sale.Products.Sum(item => item.Quantity) == 1;
+        var onlyOneProductWasSold = sale.ProductVariants.Sum(item => item.Quantity) == 1;
         result.OriginalShippingRefund = request.ReasonId != (int)SaleReturnReasonOption.CustomerPreference && onlyOneProductWasSold
             ? Math.Round(sale.Deliveries.Sum(item => item.ShippingChargedToClient), 2)
             : 0;
@@ -196,7 +196,7 @@ public class SaleReturnService(
 
     private void ReceiveItem(SaleReturnItem item, bool isDamaged, DateTime receivedAt, string? comments)
     {
-        var product = item.Product!;
+        var productVariant = item.ProductVariant!;
         item.ReceivedAt = receivedAt;
         item.Comments = comments ?? item.Comments;
 
@@ -204,7 +204,7 @@ public class SaleReturnService(
         {
             var issue = new ProductInventoryIssue
             {
-                Product = product,
+                ProductVariant = productVariant,
                 ProductInventoryIssueTypeId = (int)ProductInventoryIssueTypeOption.Damaged,
                 ProductInventoryIssueStatusId = (int)ProductInventoryIssueStatusOption.Open,
                 Quantity = item.Quantity,
@@ -214,7 +214,7 @@ public class SaleReturnService(
             item.ProductInventoryIssue = issue;
 
             var movement = _inventoryService.Move(
-                product,
+                productVariant,
                 InventoryStockBucketOption.OutOfInventory,
                 InventoryStockBucketOption.Unavailable,
                 item.Quantity,
@@ -230,7 +230,7 @@ public class SaleReturnService(
         }
 
         var availableMovement = _inventoryService.Move(
-            product,
+            productVariant,
             InventoryStockBucketOption.OutOfInventory,
             InventoryStockBucketOption.Available,
             item.Quantity,
@@ -244,7 +244,7 @@ public class SaleReturnService(
 
     private async Task<SaleReturn> GetForUpdateAsync(int saleId, int returnId)
         => await _context.SaleReturns
-            .Include(item => item.Items).ThenInclude(item => item.Product)
+            .Include(item => item.Items).ThenInclude(item => item.ProductVariant)
             .FirstOrDefaultAsync(item => item.Id == returnId && item.OriginalSaleId == saleId)
             ?? throw new AppNotFoundException("La devolución no existe para la venta indicada.");
 

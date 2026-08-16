@@ -303,13 +303,13 @@ La orden debe pasar a `PendingRefund` cuando se cierran faltantes con pérdida: 
 
 Una orden cancelada no debe permitir nuevas recepciones.
 
-## Regla: creación de producto detalle junto con la orden
+## Regla: creación de producto junto con la orden
 
 En este negocio, la ropa cambia constantemente y rara vez se compra exactamente el mismo modelo muchas veces.
 
-Por tanto, al crear una orden se deben registrar también los `product_details` comprados y sus variantes `products`.
+Por tanto, al crear una orden se deben registrar también los `products` comprados y sus variantes `products`.
 
-`product_details` representa el modelo o artículo comprado:
+`products` representa el modelo o artículo comprado:
 
 * código del proveedor
 * código interno del negocio
@@ -324,12 +324,12 @@ Por tanto, al crear una orden se deben registrar también los `product_details` 
 * costo unitario en la moneda de compra
 * precio de venta
 
-El campo `product_details.code` es un entero y representa el código interno del negocio. Debe generarse en backend como un consecutivo que aumenta de 1 en 1.
+El campo `products.code` es un entero y representa el código interno del negocio. Debe generarse en backend como un consecutivo que aumenta de 1 en 1.
 
 Ejemplo:
 
 ```txt
-product_details:
+products:
 - code: 125
 - supplier_product_code: SOHO25120
 - name: Pantalón cargo
@@ -348,15 +348,15 @@ Una orden puede actualizar sus datos generales y sus productos mientras no tenga
 
 Si la orden ya tiene recepción física de productos, no se deben reemplazar sus líneas de compra desde la actualización de orden, porque eso puede alterar inventario y costos históricos.
 
-Cuando una orden todavía no tiene inventario recibido, actualizar sus productos se trata como reemplazo completo de las líneas de compra (`products`), pero no debe quemar códigos internos de `product_details` si la operación es una corrección.
+Cuando una orden todavía no tiene inventario recibido, actualizar sus productos se trata como reemplazo completo de las líneas de compra (`products`), pero no debe quemar códigos internos de `products` si la operación es una corrección.
 
-Para conservar `product_details.code`, el request de actualización debe enviar `productDetails[].id` para cada producto detalle existente. El backend debe reutilizar ese `product_detail`, actualizar sus datos editables y recrear sus variantes `products` con los nuevos costos, cantidades y precios.
+Para conservar `products.code`, el request de actualización debe enviar `products[].id` para cada producto existente. El backend debe reutilizar ese `product`, actualizar sus datos editables y recrear sus variantes `products` con los nuevos costos, cantidades y precios.
 
-Si el request incluye un `productDetails[].id` que no pertenece a la orden, la actualización debe rechazarse.
+Si el request incluye un `products[].id` que no pertenece a la orden, la actualización debe rechazarse.
 
-Si se agrega un producto detalle nuevo, se envía sin `id` y el backend asigna el siguiente `product_details.code` disponible.
+Si se agrega un producto nuevo, se envía sin `id` y el backend asigna el siguiente `products.code` disponible.
 
-Si un producto detalle existente no se incluye en la actualización, se considera eliminado de esa orden siempre que no tenga inventario recibido, disponible, reservado ni recepciones asociadas.
+Si un producto existente no se incluye en la actualización, se considera eliminado de esa orden siempre que no tenga inventario recibido, disponible, reservado ni recepciones asociadas.
 
 ## Regla: movimiento financiero de compra
 

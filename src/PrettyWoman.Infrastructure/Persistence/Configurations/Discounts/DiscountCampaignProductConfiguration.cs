@@ -10,11 +10,11 @@ public class DiscountCampaignProductConfiguration : IEntityTypeConfiguration<Dis
     {
         builder.Property(x => x.DiscountValue).HasPrecision(12, 2);
 
-        builder.HasOne(x => x.ProductDetail).WithMany(x => x.DiscountCampaignProducts).HasForeignKey(x => x.ProductDetailId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.Product).WithMany(x => x.DiscountCampaignProducts).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.DiscountCampaign).WithMany(x => x.DiscountCampaignProducts).HasForeignKey(x => x.DiscountCampaignId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.DiscountType).WithMany().HasForeignKey(x => x.DiscountTypeId).OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(x => new { x.DiscountCampaignId, x.ProductDetailId }).IsUnique();
+        builder.HasIndex(x => new { x.DiscountCampaignId, x.ProductId }).IsUnique();
 
         builder.ToTable(t =>
         {

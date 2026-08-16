@@ -35,7 +35,7 @@ public class SaleExchangeService(
             throw new AppBadRequestException("Un cambio debe tener al menos una prenda retornada y una prenda de salida.");
 
         var sale = await _context.Sales
-            .Include(sale => sale.Products).ThenInclude(item => item.Product)
+            .Include(sale => sale.ProductVariants).ThenInclude(item => item.ProductVariant)
             .FirstOrDefaultAsync(sale => sale.Id == saleId)
             ?? throw new AppNotFoundException($"La venta con id {saleId} no existe.");
 
@@ -48,7 +48,7 @@ public class SaleExchangeService(
 
         foreach (var group in request.ReturnItems.GroupBy(item => item.OriginalSaleProductId))
         {
-            var saleProduct = sale.Products.SingleOrDefault(item => item.Id == group.Key)
+            var saleProduct = sale.ProductVariants.SingleOrDefault(item => item.Id == group.Key)
                 ?? throw new AppBadRequestException("Cada prenda retornada debe pertenecer a la venta original.");
             var requestedQuantity = group.Sum(item => item.Quantity);
 
@@ -60,7 +60,7 @@ public class SaleExchangeService(
         }
 
         var outputProductIds = request.OutboundItems.Select(item => item.ProductId).Distinct().ToList();
-        var outputProducts = await _context.Products.Where(item => outputProductIds.Contains(item.Id)).ToListAsync();
+        var outputProducts = await _context.ProductVariants.Where(item => outputProductIds.Contains(item.Id)).ToListAsync();
         if (outputProducts.Count != outputProductIds.Count)
             throw new AppNotFoundException("Una o mas prendas de salida no existen.");
 
@@ -68,15 +68,15 @@ public class SaleExchangeService(
         {
             if (group.Any(item => item.Quantity <= 0 || !Enum.IsDefined(typeof(ExchangeOutboundItemTypeOption), item.ItemTypeId)))
                 throw new AppBadRequestException("Las prendas de salida tienen datos invalidos.");
-            var product = outputProducts.Single(item => item.Id == group.Key);
-            if (product.AvailableQuantity < group.Sum(item => item.Quantity))
-                throw new AppBadRequestException($"El producto con id {product.Id} no tiene stock disponible suficiente.");
+            var productVariant = outputProducts.Single(item => item.Id == group.Key);
+            if (productVariant.AvailableQuantity < group.Sum(item => item.Quantity))
+                throw new AppBadRequestException($"El producto con id {productVariant.Id} no tiene stock disponible suficiente.");
         }
 
         var exchange = new SaleExchange { OriginalSaleId = saleId, Comments = request.Comments };
         foreach (var item in request.ReturnItems)
         {
-            var original = sale.Products.Single(product => product.Id == item.OriginalSaleProductId);
+            var original = sale.ProductVariants.Single(productVariant => productVariant.Id == item.OriginalSaleProductId);
             exchange.ReturnItems.Add(new ExchangeReturnItem
             {
                 OriginalSaleProductId = original.Id,
@@ -89,18 +89,18 @@ public class SaleExchangeService(
         }
         foreach (var item in request.OutboundItems)
         {
-            var product = outputProducts.Single(product => product.Id == item.ProductId);
-            var lineTotal = Math.Round(product.SalePrice * item.Quantity, 2);
+            var productVariant = outputProducts.Single(productVariant => productVariant.Id == item.ProductId);
+            var lineTotal = Math.Round(productVariant.SalePrice * item.Quantity, 2);
             exchange.OutboundItems.Add(new ExchangeOutboundItem
             {
-                ProductId = product.Id,
-                Product = product,
+                ProductId = productVariant.Id,
+                ProductVariant = productVariant,
                 Quantity = item.Quantity,
                 ItemTypeId = item.ItemTypeId,
-                UnitPrice = product.SalePrice,
-                UnitCost = product.UnitCostNio,
+                UnitPrice = productVariant.SalePrice,
+                UnitCost = productVariant.UnitCostNio,
                 LineTotal = lineTotal,
-                TotalCost = Math.Round(product.UnitCostNio * item.Quantity, 6),
+                TotalCost = Math.Round(productVariant.UnitCostNio * item.Quantity, 6),
                 Comments = item.Comments.NormalizeOptional()
             });
         }
@@ -151,8 +151,8 @@ public class SaleExchangeService(
 
     private async Task<SaleExchange> GetExchangeAsync(int saleId, int exchangeId)
         => await _context.SaleExchanges
-            .Include(exchange => exchange.ReturnItems).ThenInclude(item => item.Product)
-            .Include(exchange => exchange.OutboundItems).ThenInclude(item => item.Product)
+            .Include(exchange => exchange.ReturnItems).ThenInclude(item => item.ProductVariant)
+            .Include(exchange => exchange.OutboundItems).ThenInclude(item => item.ProductVariant)
             .FirstOrDefaultAsync(exchange => exchange.Id == exchangeId && exchange.OriginalSaleId == saleId)
             ?? throw new AppNotFoundException("El cambio no existe para la venta indicada.");
 
@@ -210,12 +210,12 @@ public class SaleExchangeService(
 
     private void HandReturnToAgency(ExchangeReturnItem item)
     {
-        var product = item.Product!;
+        var productVariant = item.ProductVariant!;
         item.StatusId = (int)ExchangeReturnItemStatusOption.AwaitingReturn;
         item.HandedToAgencyAt = DateTime.UtcNow;
 
         var movement = _inventoryService.Move(
-            product,
+            productVariant,
             InventoryStockBucketOption.OutOfInventory,
             InventoryStockBucketOption.Available,
             item.Quantity,
@@ -231,12 +231,12 @@ public class SaleExchangeService(
     {
         foreach (var item in items.Where(item => !item.Delivered))
         {
-            var product = item.Product!;
+            var productVariant = item.ProductVariant!;
             item.Delivered = true;
             item.DeliveredAt = DateTime.UtcNow;
 
             var movement = _inventoryService.Move(
-                product,
+                productVariant,
                 InventoryStockBucketOption.Reserved,
                 InventoryStockBucketOption.OutOfInventory,
                 item.Quantity,
@@ -251,10 +251,10 @@ public class SaleExchangeService(
     {
         foreach (var item in items)
         {
-            var product = item.Product!;
+            var productVariant = item.ProductVariant!;
 
             var movement = _inventoryService.Move(
-                product,
+                productVariant,
                 InventoryStockBucketOption.Available,
                 InventoryStockBucketOption.Reserved,
                 item.Quantity,
@@ -269,10 +269,10 @@ public class SaleExchangeService(
     {
         foreach (var item in items.Where(item => !item.Delivered))
         {
-            var product = item.Product!;
+            var productVariant = item.ProductVariant!;
 
             var movement = _inventoryService.Move(
-                product,
+                productVariant,
                 InventoryStockBucketOption.Reserved,
                 InventoryStockBucketOption.Available,
                 item.Quantity,

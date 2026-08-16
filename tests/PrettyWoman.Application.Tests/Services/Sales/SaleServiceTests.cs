@@ -186,18 +186,18 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 1000m, unitCostNio: 400m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 3, salePrice: 1000m, unitCostNio: 400m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleDate = new DateTime(2026, 7, 10, 10, 0, 0, DateTimeKind.Utc),
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            Products =
+            ProductVariants =
             [
                 new CreateSaleProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 1,
                     DiscountSourceId = (int)DiscountSourceOption.None
                 }
@@ -221,10 +221,10 @@ public class SaleServiceTests
         });
 
         var sale = await context.Sales
-            .Include(item => item.Products)
+            .Include(item => item.ProductVariants)
             .Include(item => item.PaymentMovements)
             .SingleAsync(item => item.Id == saleId);
-        var updatedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        var updatedProduct = await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id);
         var movements = await context.FinancialMovements.OrderBy(item => item.Id).ToListAsync();
 
         Assert.Equal((int)SalePaymentStatusOption.Paid, sale.SalePaymentStatusId);
@@ -243,17 +243,17 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 1000m, unitCostNio: 400m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 3, salePrice: 1000m, unitCostNio: 400m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            Products =
+            ProductVariants =
             [
                 new CreateSaleProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 1,
                     DiscountSourceId = (int)DiscountSourceOption.None
                 }
@@ -269,7 +269,7 @@ public class SaleServiceTests
         });
 
         var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
-        var updatedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        var updatedProduct = await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id);
 
         Assert.Equal((int)SalePaymentStatusOption.PartiallyPaid, sale.SalePaymentStatusId);
         Assert.Equal((int)SaleStatusOption.Pending, sale.SaleStatusId);
@@ -282,19 +282,19 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            SelectionProducts = [new CreateSaleSelectionProductDTO { ProductId = product.Id, Quantity = 1 }]
+            SelectionProducts = [new CreateSaleSelectionProductDTO { ProductId = productVariant.Id, Quantity = 1 }]
         }));
 
         Assert.Contains("ventas en local", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(await context.Sales.ToListAsync());
         Assert.Empty(await context.ProductHolds.ToListAsync());
-        Assert.Equal(2, (await context.Products.SingleAsync(item => item.Id == product.Id)).AvailableQuantity);
+        Assert.Equal(2, (await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id)).AvailableQuantity);
     }
 
     [Fact]
@@ -302,17 +302,17 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            SelectionProducts = [new CreateSaleSelectionProductDTO { ProductId = product.Id, Quantity = 1 }]
+            SelectionProducts = [new CreateSaleSelectionProductDTO { ProductId = productVariant.Id, Quantity = 1 }]
         });
 
         var hold = await context.ProductHolds.SingleAsync(item => item.SaleId == saleId);
-        var updatedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        var updatedProduct = await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id);
         Assert.Equal((int)ProductHoldStatusOption.Active, hold.ProductHoldStatusId);
         Assert.Equal(1, updatedProduct.AvailableQuantity);
         Assert.Equal(1, updatedProduct.UnavailableQuantity);
@@ -323,17 +323,17 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.AddSelectionHoldsAsync(
             saleId,
-            [new CreateSaleSelectionProductDTO { ProductId = product.Id, Quantity = 1 }]));
+            [new CreateSaleSelectionProductDTO { ProductId = productVariant.Id, Quantity = 1 }]));
 
         Assert.Contains("ventas en local", exception.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Empty(await context.ProductHolds.Where(item => item.SaleId == saleId).ToListAsync());
@@ -344,12 +344,12 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            SelectionProducts = [new CreateSaleSelectionProductDTO { ProductId = product.Id, Quantity = 1 }]
+            SelectionProducts = [new CreateSaleSelectionProductDTO { ProductId = productVariant.Id, Quantity = 1 }]
         });
         var holdId = await context.ProductHolds
             .Where(item => item.SaleId == saleId)
@@ -376,13 +376,13 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
             PaymentMovements =
             [
                 new CreateSalePaymentMovementDTO
@@ -417,13 +417,13 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
             PaymentMovements =
             [
                 new CreateSalePaymentMovementDTO
@@ -452,13 +452,13 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
         var service = CreateService(context);
 
         await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
             PaymentMovements =
             [
                 new CreateSalePaymentMovementDTO
@@ -478,13 +478,13 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
             PaymentMovements =
             [
                 new CreateSalePaymentMovementDTO
@@ -509,13 +509,13 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
             PaymentMovements =
             [
                 new CreateSalePaymentMovementDTO
@@ -540,13 +540,13 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 730.37m, unitCostNio: 400m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 730.37m, unitCostNio: 400m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
             PaymentMovements =
             [
                 new CreateSalePaymentMovementDTO
@@ -575,13 +575,13 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
         var service = CreateService(context);
 
         await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
             PaymentMovements =
             [
                 new CreateSalePaymentMovementDTO
@@ -600,13 +600,13 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 0.10m, unitCostNio: 0.05m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 0.10m, unitCostNio: 0.05m);
         var service = CreateService(context);
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
             PaymentMovements =
             [
                 new CreateSalePaymentMovementDTO
@@ -627,13 +627,13 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
             PaymentMovements =
             [
                 new CreateSalePaymentMovementDTO
@@ -675,13 +675,13 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
             PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Cash, ProductAmount = 500m }]
         });
         var paymentMovementId = await context.SalePaymentMovements
@@ -694,13 +694,13 @@ public class SaleServiceTests
         var reopenedSale = await context.Sales.SingleAsync(item => item.Id == saleId);
         Assert.Equal((int)SalePaymentStatusOption.Unpaid, reopenedSale.SalePaymentStatusId);
         Assert.Equal((int)SaleStatusOption.Reserved, reopenedSale.SaleStatusId);
-        Assert.Equal(0, (await context.Products.SingleAsync(item => item.Id == product.Id)).AvailableQuantity);
+        Assert.Equal(0, (await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id)).AvailableQuantity);
 
         await service.CancelAsync(saleId);
 
         var cancelledSale = await context.Sales.SingleAsync(item => item.Id == saleId);
         Assert.Equal((int)SaleStatusOption.Cancelled, cancelledSale.SaleStatusId);
-        Assert.Equal(1, (await context.Products.SingleAsync(item => item.Id == product.Id)).AvailableQuantity);
+        Assert.Equal(1, (await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id)).AvailableQuantity);
     }
 
     [Fact]
@@ -708,18 +708,18 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products =
+            ProductVariants =
             [
                 new CreateSaleProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 1,
                     DiscountSourceId = (int)DiscountSourceOption.None
                 }
@@ -741,13 +741,13 @@ public class SaleServiceTests
             Comments = "Cliente pidio envolver para regalo"
         });
 
-        var sale = await context.Sales.Include(item => item.Products).SingleAsync(item => item.Id == saleId);
-        var updatedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        var sale = await context.Sales.Include(item => item.ProductVariants).SingleAsync(item => item.Id == saleId);
+        var updatedProduct = await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id);
         var inventoryMovement = await context.InventoryMovements.SingleAsync(item => item.Id == originalInventoryMovementId);
 
         Assert.Equal(new DateTime(2026, 7, 11, 12, 0, 0, DateTimeKind.Utc), sale.SaleDate);
         Assert.Equal("Cliente pidio envolver para regalo", sale.Comments);
-        Assert.Equal(originalSaleProductId, sale.Products.Single().Id);
+        Assert.Equal(originalSaleProductId, sale.ProductVariants.Single().Id);
         Assert.Equal(originalSaleProductId, inventoryMovement.SaleProductId);
         Assert.Equal(new DateTime(2026, 7, 11, 12, 0, 0, DateTimeKind.Utc), inventoryMovement.MovementDate);
         Assert.Equal(2, updatedProduct.AvailableQuantity);
@@ -758,7 +758,7 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
         var originalSaleDate = new DateTime(2026, 7, 10, 10, 0, 0, DateTimeKind.Utc);
         var returnReceivedAt = new DateTime(2026, 7, 12, 11, 0, 0, DateTimeKind.Utc);
@@ -769,11 +769,11 @@ public class SaleServiceTests
             SaleDate = originalSaleDate,
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products =
+            ProductVariants =
             [
                 new CreateSaleProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 1,
                     DiscountSourceId = (int)DiscountSourceOption.None
                 }
@@ -786,7 +786,7 @@ public class SaleServiceTests
 
         var customerReturn = new InventoryMovement
         {
-            ProductId = product.Id,
+            ProductId = productVariant.Id,
             SaleProductId = saleProductId,
             InventoryMovementTypeId = (int)InventoryMovementTypeOption.CustomerReturn,
             FromStockBucketId = (int)InventoryStockBucketOption.OutOfInventory,
@@ -796,7 +796,7 @@ public class SaleServiceTests
         };
         var exchangeReturn = new InventoryMovement
         {
-            ProductId = product.Id,
+            ProductId = productVariant.Id,
             SaleProductId = saleProductId,
             InventoryMovementTypeId = (int)InventoryMovementTypeOption.ExchangeReturnReceivedByAgency,
             FromStockBucketId = (int)InventoryStockBucketOption.OutOfInventory,
@@ -823,7 +823,7 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
         context.Departments.Add(new Department { Id = 1, Name = "Managua" });
         context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
         context.Clients.Add(new Client { Id = 1, Name = "Cliente prueba" });
@@ -836,11 +836,11 @@ public class SaleServiceTests
             SaleStatusId = (int)SaleStatusOption.Pending,
             ClientId = 1,
             Comments = "Entregar por la tarde",
-            Products =
+            ProductVariants =
             [
                 new CreateSaleProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 1,
                     DiscountSourceId = (int)DiscountSourceOption.None
                 }
@@ -877,7 +877,7 @@ public class SaleServiceTests
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products =
+            ProductVariants =
             [
                 new CreateSaleProductDTO
                 {
@@ -890,7 +890,7 @@ public class SaleServiceTests
 
         await service.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
         {
-            Products =
+            ProductVariants =
             [
                 new ReplaceSaleProductDTO
                 {
@@ -902,9 +902,9 @@ public class SaleServiceTests
             ]
         });
 
-        var sale = await context.Sales.Include(item => item.Products).SingleAsync(item => item.Id == saleId);
-        var reloadedFirstProduct = await context.Products.SingleAsync(item => item.Id == firstProduct.Id);
-        var reloadedSecondProduct = await context.Products.SingleAsync(item => item.Id == secondProduct.Id);
+        var sale = await context.Sales.Include(item => item.ProductVariants).SingleAsync(item => item.Id == saleId);
+        var reloadedFirstProduct = await context.ProductVariants.SingleAsync(item => item.Id == firstProduct.Id);
+        var reloadedSecondProduct = await context.ProductVariants.SingleAsync(item => item.Id == secondProduct.Id);
         var movements = await context.InventoryMovements.ToListAsync();
 
         Assert.Equal(600m, sale.Subtotal);
@@ -912,10 +912,10 @@ public class SaleServiceTests
         Assert.Equal(550m, sale.Total);
         Assert.Equal(firstProduct.Quantity, reloadedFirstProduct.AvailableQuantity);
         Assert.Equal(2, reloadedSecondProduct.AvailableQuantity);
-        Assert.Single(sale.Products);
-        Assert.Equal(secondProduct.Id, sale.Products.Single().ProductId);
+        Assert.Single(sale.ProductVariants);
+        Assert.Equal(secondProduct.Id, sale.ProductVariants.Single().ProductId);
         Assert.Single(movements);
-        Assert.Equal(sale.Products.Single().Id, movements.Single().SaleProductId);
+        Assert.Equal(sale.ProductVariants.Single().Id, movements.Single().SaleProductId);
     }
     [Fact]
     public async Task ReplaceProductsAsync_AllowsPaidSaleWithPendingDeliveryAndMarksRefundPendingWhenOverpaid()
@@ -930,7 +930,7 @@ public class SaleServiceTests
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.ReadyForDelivery,
-            Products =
+            ProductVariants =
             [
                 new CreateSaleProductDTO
                 {
@@ -965,7 +965,7 @@ public class SaleServiceTests
 
         await service.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
         {
-            Products =
+            ProductVariants =
             [
                 new ReplaceSaleProductDTO
                 {
@@ -976,16 +976,16 @@ public class SaleServiceTests
             ]
         });
 
-        var sale = await context.Sales.Include(item => item.Products).SingleAsync(item => item.Id == saleId);
-        var reloadedFirstProduct = await context.Products.SingleAsync(item => item.Id == firstProduct.Id);
-        var reloadedSecondProduct = await context.Products.SingleAsync(item => item.Id == secondProduct.Id);
+        var sale = await context.Sales.Include(item => item.ProductVariants).SingleAsync(item => item.Id == saleId);
+        var reloadedFirstProduct = await context.ProductVariants.SingleAsync(item => item.Id == firstProduct.Id);
+        var reloadedSecondProduct = await context.ProductVariants.SingleAsync(item => item.Id == secondProduct.Id);
 
         Assert.Equal(300m, sale.Total);
         Assert.Equal((int)SalePaymentStatusOption.RefundPending, sale.SalePaymentStatusId);
         Assert.Equal(firstProduct.Quantity, reloadedFirstProduct.AvailableQuantity);
         Assert.Equal(3, reloadedSecondProduct.AvailableQuantity);
-        Assert.Single(sale.Products);
-        Assert.Equal(secondProduct.Id, sale.Products.Single().ProductId);
+        Assert.Single(sale.ProductVariants);
+        Assert.Equal(secondProduct.Id, sale.ProductVariants.Single().ProductId);
     }
 
     [Fact]
@@ -1002,7 +1002,7 @@ public class SaleServiceTests
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products =
+            ProductVariants =
             [
                 new CreateSaleProductDTO { ProductId = firstProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None },
                 new CreateSaleProductDTO { ProductId = secondProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }
@@ -1024,7 +1024,7 @@ public class SaleServiceTests
 
         await service.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
         {
-            Products =
+            ProductVariants =
             [
                 new ReplaceSaleProductDTO { SaleProductId = firstLine.Id, ProductId = firstProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None },
                 new ReplaceSaleProductDTO { SaleProductId = secondLine.Id, ProductId = secondProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None },
@@ -1054,7 +1054,7 @@ public class SaleServiceTests
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products =
+            ProductVariants =
             [
                 new CreateSaleProductDTO { ProductId = retainedProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None },
                 new CreateSaleProductDTO { ProductId = removedProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }
@@ -1069,7 +1069,7 @@ public class SaleServiceTests
 
         await service.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
         {
-            Products =
+            ProductVariants =
             [
                 new ReplaceSaleProductDTO
                 {
@@ -1083,8 +1083,8 @@ public class SaleServiceTests
 
         var updatedLine = await context.SaleProducts.SingleAsync(line => line.SaleId == saleId);
         var movement = await context.InventoryMovements.SingleAsync();
-        var updatedRetainedProduct = await context.Products.SingleAsync(product => product.Id == retainedProduct.Id);
-        var updatedRemovedProduct = await context.Products.SingleAsync(product => product.Id == removedProduct.Id);
+        var updatedRetainedProduct = await context.ProductVariants.SingleAsync(productVariant => productVariant.Id == retainedProduct.Id);
+        var updatedRemovedProduct = await context.ProductVariants.SingleAsync(productVariant => productVariant.Id == removedProduct.Id);
 
         Assert.Equal(retainedLine.Id, updatedLine.Id);
         Assert.Equal(retainedMovementId, movement.Id);
@@ -1097,29 +1097,29 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 4, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 4, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         var line = await context.SaleProducts.SingleAsync(item => item.SaleId == saleId);
         var originalMovementId = await context.InventoryMovements.Select(movement => movement.Id).SingleAsync();
 
-        product.SalePrice = 900m;
-        product.UnitCostNio = 450m;
+        productVariant.SalePrice = 900m;
+        productVariant.UnitCostNio = 450m;
         await context.SaveChangesAsync();
 
         await service.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
         {
-            Products =
+            ProductVariants =
             [
                 new ReplaceSaleProductDTO
                 {
                     SaleProductId = line.Id,
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 2,
                     DiscountSourceId = (int)DiscountSourceOption.None
                 }
@@ -1135,29 +1135,29 @@ public class SaleServiceTests
         Assert.Equal(2, increasedMovements.Count);
         Assert.Contains(increasedMovements, movement => movement.Id == originalMovementId);
         Assert.Contains(increasedMovements, movement => movement.Quantity == 1 && movement.Comments == "Cantidad de la linea de venta aumentada.");
-        Assert.Equal(2, (await context.Products.SingleAsync(item => item.Id == product.Id)).AvailableQuantity);
+        Assert.Equal(2, (await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id)).AvailableQuantity);
 
         await service.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
         {
-            Products =
+            ProductVariants =
             [
                 new ReplaceSaleProductDTO
                 {
                     SaleProductId = line.Id,
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 1,
                     DiscountSourceId = (int)DiscountSourceOption.None
                 }
             ]
         });
 
-        Assert.Equal(3, (await context.Products.SingleAsync(item => item.Id == product.Id)).AvailableQuantity);
+        Assert.Equal(3, (await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id)).AvailableQuantity);
         Assert.Contains(await context.InventoryMovements.ToListAsync(), movement =>
             movement.InventoryMovementTypeId == (int)InventoryMovementTypeOption.ReservationReleased && movement.Quantity == 1);
 
         await service.CancelAsync(saleId);
 
-        Assert.Equal(4, (await context.Products.SingleAsync(item => item.Id == product.Id)).AvailableQuantity);
+        Assert.Equal(4, (await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id)).AvailableQuantity);
     }
 
     [Fact]
@@ -1166,13 +1166,13 @@ public class SaleServiceTests
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
         context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
-        var product = await AddProductAsync(context, availableQuantity: 5, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 5, salePrice: 500m, unitCostNio: 200m);
         var saleService = CreateService(context);
         var saleId = await saleService.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 3, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 3, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         var line = await context.SaleProducts.SingleAsync(item => item.SaleId == saleId);
         var deliveryId = await saleService.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
@@ -1209,30 +1209,30 @@ public class SaleServiceTests
 
         await saleService.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
         {
-            Products =
+            ProductVariants =
             [
                 new ReplaceSaleProductDTO
                 {
                     SaleProductId = line.Id,
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 3,
                     DiscountSourceId = (int)DiscountSourceOption.None
                 }
             ]
         });
 
-        var inventoryAfterPriceOnlyReplacement = await context.Products.SingleAsync(item => item.Id == product.Id);
+        var inventoryAfterPriceOnlyReplacement = await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id);
         Assert.Equal(4, inventoryAfterPriceOnlyReplacement.AvailableQuantity);
         Assert.Equal(1, inventoryAfterPriceOnlyReplacement.ReservedQuantity);
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => saleService.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
         {
-            Products =
+            ProductVariants =
             [
                 new ReplaceSaleProductDTO
                 {
                     SaleProductId = line.Id,
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 1,
                     DiscountSourceId = (int)DiscountSourceOption.None
                 }
@@ -1258,7 +1258,7 @@ public class SaleServiceTests
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products = [new CreateSaleProductDTO { ProductId = originalProduct.Id, Quantity = 2, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = originalProduct.Id, Quantity = 2, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         var line = await context.SaleProducts.SingleAsync(item => item.SaleId == saleId);
         var deliveryId = await saleService.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
@@ -1295,7 +1295,7 @@ public class SaleServiceTests
 
         await saleService.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
         {
-            Products =
+            ProductVariants =
             [
                 new ReplaceSaleProductDTO
                 {
@@ -1307,13 +1307,13 @@ public class SaleServiceTests
             ]
         });
 
-        var inventoryAfterPriceOnlyReplacement = await context.Products.SingleAsync(item => item.Id == originalProduct.Id);
+        var inventoryAfterPriceOnlyReplacement = await context.ProductVariants.SingleAsync(item => item.Id == originalProduct.Id);
         Assert.Equal(2, inventoryAfterPriceOnlyReplacement.AvailableQuantity);
         Assert.Equal(1, inventoryAfterPriceOnlyReplacement.ReservedQuantity);
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => saleService.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
         {
-            Products =
+            ProductVariants =
             [
                 new ReplaceSaleProductDTO
                 {
@@ -1337,18 +1337,18 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products =
+            ProductVariants =
             [
                 new CreateSaleProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 1,
                     DiscountSourceId = (int)DiscountSourceOption.None
                 }
@@ -1377,18 +1377,18 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products =
+            ProductVariants =
             [
                 new CreateSaleProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 1,
                     DiscountSourceId = (int)DiscountSourceOption.None
                 }
@@ -1430,18 +1430,18 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products =
+            ProductVariants =
             [
                 new CreateSaleProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 1,
                     DiscountSourceId = (int)DiscountSourceOption.None
                 }
@@ -1483,18 +1483,18 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products =
+            ProductVariants =
             [
                 new CreateSaleProductDTO
                 {
-                    ProductId = product.Id,
+                    ProductId = productVariant.Id,
                     Quantity = 1,
                     DiscountSourceId = (int)DiscountSourceOption.None
                 }
@@ -1537,15 +1537,15 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products =
+            ProductVariants =
             [
-                new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }
+                new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }
             ],
             PaymentMovements =
             [
@@ -1572,13 +1572,13 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
             PaymentMovements =
             [
                 new CreateSalePaymentMovementDTO
@@ -1609,13 +1609,13 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 800m, unitCostNio: 400m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.InStoreSale,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
             PaymentMovements =
             [
                 new CreateSalePaymentMovementDTO
@@ -1645,15 +1645,15 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
 
         await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products =
+            ProductVariants =
             [
-                new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }
+                new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }
             ],
             PaymentMovements =
             [
@@ -1670,13 +1670,13 @@ public class SaleServiceTests
         context.Departments.Add(new Department { Id = 1, Name = "Managua" });
         context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
         await context.SaveChangesAsync();
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
 
         var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
@@ -1690,7 +1690,7 @@ public class SaleServiceTests
 
         var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
         var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
-        var reservedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        var reservedProduct = await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id);
         Assert.Equal(550m, delivery.AmountToCollect);
         Assert.Equal("De la rotonda 2 cuadras al norte", delivery.DeliveryAddress);
         Assert.Equal((int)SaleStatusOption.ReadyForDelivery, sale.SaleStatusId);
@@ -1701,7 +1701,7 @@ public class SaleServiceTests
 
         delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
         sale = await context.Sales.SingleAsync(item => item.Id == saleId);
-        var sentProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        var sentProduct = await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id);
         Assert.Equal((int)DeliveryStatusCode.Sent, delivery.DeliveryStatusId);
         Assert.Equal((int)SaleStatusOption.SentForDelivery, sale.SaleStatusId);
         Assert.Equal(0, sentProduct.ReservedQuantity);
@@ -1724,12 +1724,12 @@ public class SaleServiceTests
         context.Departments.Add(new Department { Id = 1, Name = "Managua" });
         context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
         await context.SaveChangesAsync();
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
             PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Transfer, ProductAmount = 500m }]
         });
 
@@ -1779,13 +1779,13 @@ public class SaleServiceTests
         context.Departments.Add(new Department { Id = 1, Name = "Managua" });
         context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
         await context.SaveChangesAsync();
-        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
         var saleService = CreateService(context);
         var saleId = await saleService.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Pending,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 2, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 2, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         var saleProduct = await context.SaleProducts.SingleAsync(item => item.SaleId == saleId);
         var deliveryId = await saleService.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
@@ -1822,7 +1822,7 @@ public class SaleServiceTests
 
         await saleService.MarkDeliveryAsFailedAsync(saleId, deliveryId);
 
-        var updatedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        var updatedProduct = await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id);
         Assert.Equal(1, updatedProduct.AvailableQuantity);
         Assert.Equal(1, updatedProduct.ReservedQuantity);
         var failedReservation = await context.InventoryMovements.SingleAsync(item =>
@@ -1841,13 +1841,13 @@ public class SaleServiceTests
         await SeedCatalogAsync(context);
         context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
         await context.SaveChangesAsync();
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
         var saleService = CreateService(context);
         var saleId = await saleService.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         var saleProductId = await context.SaleProducts
             .Where(item => item.SaleId == saleId)
@@ -1885,7 +1885,7 @@ public class SaleServiceTests
             saleService.MarkDeliveryAsFailedAsync(saleId, deliveryId));
 
         Assert.Contains("devoluciones pendientes", exception.Message, StringComparison.OrdinalIgnoreCase);
-        var unchangedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        var unchangedProduct = await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id);
         var unchangedDelivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
         var unchangedSale = await context.Sales.SingleAsync(item => item.Id == saleId);
         Assert.Equal(0, unchangedProduct.AvailableQuantity);
@@ -1908,7 +1908,7 @@ public class SaleServiceTests
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products = [new CreateSaleProductDTO { ProductId = originalProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = originalProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         var saleProductId = await context.SaleProducts
             .Where(item => item.SaleId == saleId)
@@ -1947,7 +1947,7 @@ public class SaleServiceTests
             saleService.MarkDeliveryAsFailedAsync(saleId, deliveryId));
 
         Assert.Contains("cambios pendientes", exception.Message, StringComparison.OrdinalIgnoreCase);
-        var unchangedOriginal = await context.Products.SingleAsync(item => item.Id == originalProduct.Id);
+        var unchangedOriginal = await context.ProductVariants.SingleAsync(item => item.Id == originalProduct.Id);
         var unchangedDelivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
         var unchangedSale = await context.Sales.SingleAsync(item => item.Id == saleId);
         Assert.Equal(0, unchangedOriginal.AvailableQuantity);
@@ -1964,14 +1964,14 @@ public class SaleServiceTests
         context.Departments.Add(new Department { Id = 1, Name = "Managua" });
         context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
         await context.SaveChangesAsync();
-        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
         {
@@ -1982,11 +1982,11 @@ public class SaleServiceTests
 
         await service.CancelAsync(saleId);
 
-        var sale = await context.Sales.Include(item => item.Products).SingleAsync(item => item.Id == saleId);
+        var sale = await context.Sales.Include(item => item.ProductVariants).SingleAsync(item => item.Id == saleId);
         var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
-        var updatedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        var updatedProduct = await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id);
         var inventoryMovement = await context.InventoryMovements.SingleAsync(item =>
-            item.SaleProductId == sale.Products.Single().Id &&
+            item.SaleProductId == sale.ProductVariants.Single().Id &&
             item.InventoryMovementTypeId == (int)InventoryMovementTypeOption.ReservationReleased);
 
         Assert.Equal((int)SaleStatusOption.Cancelled, sale.SaleStatusId);
@@ -2004,14 +2004,14 @@ public class SaleServiceTests
         context.Departments.Add(new Department { Id = 1, Name = "Managua" });
         context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
         await context.SaveChangesAsync();
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Pending,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
         {
@@ -2024,7 +2024,7 @@ public class SaleServiceTests
 
         var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
         var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
-        var updatedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        var updatedProduct = await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id);
 
         Assert.Equal((int)SaleStatusOption.Cancelled, sale.SaleStatusId);
         Assert.Equal((int)DeliveryStatusCode.Cancelled, delivery.DeliveryStatusId);
@@ -2040,20 +2040,20 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
 
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            SelectionProducts = [new CreateSaleSelectionProductDTO { ProductId = product.Id, Quantity = 1 }]
+            SelectionProducts = [new CreateSaleSelectionProductDTO { ProductId = productVariant.Id, Quantity = 1 }]
         });
 
         await service.CancelAsync(saleId);
 
         var hold = await context.ProductHolds.SingleAsync(item => item.SaleId == saleId);
-        var updatedProduct = await context.Products.SingleAsync(item => item.Id == product.Id);
+        var updatedProduct = await context.ProductVariants.SingleAsync(item => item.Id == productVariant.Id);
         var movement = await context.InventoryMovements.SingleAsync(item => item.ProductHoldId == hold.Id &&
             item.Comments == "Seleccion liberada por cancelacion de venta.");
 
@@ -2070,13 +2070,13 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
             PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Cash, ProductAmount = 500m }]
         });
 
@@ -2096,12 +2096,12 @@ public class SaleServiceTests
         context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
         context.DeliveryAgencies.Add(new DeliveryAgency { Id = 2, Name = "Agencia prepago", PhoneNumber = "88881111", CanCollectCashOnDelivery = false });
         await context.SaveChangesAsync();
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
@@ -2139,12 +2139,12 @@ public class SaleServiceTests
         context.Departments.Add(new Department { Id = 1, Name = "Managua" });
         context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
         await context.SaveChangesAsync();
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
         {
@@ -2176,12 +2176,12 @@ public class SaleServiceTests
         context.Clients.Add(new Client { Id = 1, Name = "Cliente original" });
         context.Clients.Add(new Client { Id = 2, Name = "Cliente actualizado" });
         await context.SaveChangesAsync();
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
         {
@@ -2220,12 +2220,12 @@ public class SaleServiceTests
         context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
         context.DeliveryAgencies.Add(new DeliveryAgency { Id = 2, Name = "Agencia prepago", PhoneNumber = "88881111", CanCollectCashOnDelivery = false });
         await context.SaveChangesAsync();
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
         {
@@ -2251,12 +2251,12 @@ public class SaleServiceTests
         context.Departments.Add(new Department { Id = 1, Name = "Managua" });
         context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
         await context.SaveChangesAsync();
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
         {
@@ -2296,12 +2296,12 @@ public class SaleServiceTests
         context.Departments.Add(new Department { Id = 1, Name = "Managua" });
         context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
         await context.SaveChangesAsync();
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
         {
@@ -2330,12 +2330,12 @@ public class SaleServiceTests
         context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
         context.DeliveryAgencies.Add(new DeliveryAgency { Id = 2, Name = "Agencia prepago", PhoneNumber = "88881111", CanCollectCashOnDelivery = false });
         await context.SaveChangesAsync();
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
         var service = CreateService(context);
         var saleId = await service.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
             PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Transfer, ProductAmount = 500m }]
         });
         var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
@@ -2431,13 +2431,13 @@ public class SaleServiceTests
         context.Departments.Add(new Department { Id = 1, Name = "Managua" });
         context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
         await context.SaveChangesAsync();
-        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var productVariant = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
         var saleService = CreateService(context);
         var reconciliationService = new DeliveryAgencyReconciliationService(context, new TestCurrentUserService());
         var saleId = await saleService.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         var deliveryId = await saleService.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
         {
@@ -2523,7 +2523,7 @@ public class SaleServiceTests
         var saleId = await saleService.CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products = [new CreateSaleProductDTO { ProductId = expensiveProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            ProductVariants = [new CreateSaleProductDTO { ProductId = expensiveProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
             PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Transfer, ProductAmount = 500m }]
         });
         var deliveryId = await saleService.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
@@ -2535,7 +2535,7 @@ public class SaleServiceTests
         });
         await saleService.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
         {
-            Products = [new ReplaceSaleProductDTO { ProductId = cheaperProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new ReplaceSaleProductDTO { ProductId = cheaperProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         await saleService.MarkDeliveryAsSentAsync(saleId, deliveryId);
 
@@ -2555,8 +2555,8 @@ public class SaleServiceTests
         });
 
         var sale = await context.Sales.Include(item => item.PaymentMovements).SingleAsync(item => item.Id == saleId);
-        var reloadedExpensiveProduct = await context.Products.SingleAsync(item => item.Id == expensiveProduct.Id);
-        var reloadedCheaperProduct = await context.Products.SingleAsync(item => item.Id == cheaperProduct.Id);
+        var reloadedExpensiveProduct = await context.ProductVariants.SingleAsync(item => item.Id == expensiveProduct.Id);
+        var reloadedCheaperProduct = await context.ProductVariants.SingleAsync(item => item.Id == cheaperProduct.Id);
         var saleMovement = await context.InventoryMovements.SingleAsync(item =>
             item.ToStockBucketId == (int)InventoryStockBucketOption.OutOfInventory);
 
@@ -2603,7 +2603,7 @@ public class SaleServiceTests
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)SaleStatusOption.Reserved,
-            Products = [new CreateSaleProductDTO { ProductId = originalProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = originalProduct.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
         await MoveSaleToSentAsync(context, saleId);
         var originalLineId = await context.SaleProducts.Where(item => item.SaleId == saleId).Select(item => item.Id).SingleAsync();
@@ -2625,8 +2625,8 @@ public class SaleServiceTests
         Assert.Equal((int)SaleExchangeStatusOption.Completed, exchange.StatusId);
 
         Assert.Equal(300m, exchange.BalanceToCollect);
-        Assert.Equal(1, (await context.Products.SingleAsync(item => item.Id == originalProduct.Id)).AvailableQuantity);
-        var updatedReplacement = await context.Products.SingleAsync(item => item.Id == replacementProduct.Id);
+        Assert.Equal(1, (await context.ProductVariants.SingleAsync(item => item.Id == originalProduct.Id)).AvailableQuantity);
+        var updatedReplacement = await context.ProductVariants.SingleAsync(item => item.Id == replacementProduct.Id);
         Assert.Equal(1, updatedReplacement.AvailableQuantity);
         Assert.Equal(0, updatedReplacement.ReservedQuantity);
         Assert.Single(await context.SaleProducts.Where(item => item.SaleId == saleId).ToListAsync());
@@ -2665,8 +2665,8 @@ public class SaleServiceTests
 
         await Assert.ThrowsAsync<AppBadRequestException>(() => service.CompleteHandoverAsync(saleId, exchangeId));
 
-        Assert.Equal(0, (await context.Products.SingleAsync(item => item.Id == original.Id)).AvailableQuantity);
-        Assert.Equal(1, (await context.Products.SingleAsync(item => item.Id == replacement.Id)).AvailableQuantity);
+        Assert.Equal(0, (await context.ProductVariants.SingleAsync(item => item.Id == original.Id)).AvailableQuantity);
+        Assert.Equal(1, (await context.ProductVariants.SingleAsync(item => item.Id == replacement.Id)).AvailableQuantity);
         var outboundMovements = await context.InventoryMovements
             .Where(item => item.ExchangeOutboundItemId.HasValue)
             .OrderBy(item => item.Id)
@@ -2693,7 +2693,7 @@ public class SaleServiceTests
         }));
 
         Assert.Contains("no puede cancelarse", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(1, (await context.Products.SingleAsync(item => item.Id == replacement.Id)).AvailableQuantity);
+        Assert.Equal(1, (await context.ProductVariants.SingleAsync(item => item.Id == replacement.Id)).AvailableQuantity);
     }
 
     [Fact]
@@ -2731,7 +2731,7 @@ public class SaleServiceTests
         }));
 
         Assert.Contains("cantidad vendida disponible", exception.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(1, (await context.Products.SingleAsync(item => item.Id == replacement.Id)).AvailableQuantity);
+        Assert.Equal(1, (await context.ProductVariants.SingleAsync(item => item.Id == replacement.Id)).AvailableQuantity);
         Assert.Empty(await context.SaleExchanges.ToListAsync());
     }
 
@@ -2740,12 +2740,12 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, 1, 500m, 200m);
+        var productVariant = await AddProductAsync(context, 1, 500m, 200m);
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => CreateService(context).CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountAmount = 50m, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountAmount = 50m, DiscountSourceId = (int)DiscountSourceOption.None }]
         }));
 
         Assert.Contains("fuente", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -2756,12 +2756,12 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, 1, 500m, 200m);
+        var productVariant = await AddProductAsync(context, 1, 500m, 200m);
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => CreateService(context).CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountAmount = 50m, DiscountSourceId = (int)DiscountSourceOption.Manual, DiscountCampaignId = 1 }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountAmount = 50m, DiscountSourceId = (int)DiscountSourceOption.Manual, DiscountCampaignId = 1 }]
         }));
 
         Assert.Contains("manual", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -2772,12 +2772,12 @@ public class SaleServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var product = await AddProductAsync(context, 1, 500m, 200m);
+        var productVariant = await AddProductAsync(context, 1, 500m, 200m);
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => CreateService(context).CreateAsync(new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            Products = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.Manual }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.Manual }]
         }));
 
         Assert.Contains("no hay descuento", exception.Message, StringComparison.OrdinalIgnoreCase);
@@ -2790,7 +2790,7 @@ public class SaleServiceTests
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
             SaleStatusId = (int)initialStatus,
-            Products = [new CreateSaleProductDTO { ProductId = productId, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productId, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
 
         if (initialStatus != status)
@@ -2802,13 +2802,13 @@ public class SaleServiceTests
     private static async Task MoveSaleToSentAsync(ApplicationDbContext context, int saleId)
     {
         var sale = await context.Sales
-            .Include(item => item.Products).ThenInclude(item => item.Product)
+            .Include(item => item.ProductVariants).ThenInclude(item => item.ProductVariant)
             .SingleAsync(item => item.Id == saleId);
         var inventoryService = new InventoryService(context);
-        foreach (var saleProduct in sale.Products)
+        foreach (var saleProduct in sale.ProductVariants)
         {
             var movement = inventoryService.Move(
-                saleProduct.Product!,
+                saleProduct.ProductVariant!,
                 InventoryStockBucketOption.Reserved,
                 InventoryStockBucketOption.OutOfInventory,
                 saleProduct.Quantity,
@@ -2841,12 +2841,12 @@ public class SaleServiceTests
         return new SaleReturnService(context, new InventoryService(context));
     }
 
-    private static async Task<Product> AddProductAsync(ApplicationDbContext context, int availableQuantity, decimal salePrice, decimal unitCostNio)
+    private static async Task<ProductVariant> AddProductAsync(ApplicationDbContext context, int availableQuantity, decimal salePrice, decimal unitCostNio)
     {
-        var product = new Product
+        var productVariant = new ProductVariant
         {
             OrderId = 1,
-            ProductDetailId = 1,
+            ProductId = 1,
             SizeId = 1,
             Quantity = availableQuantity,
             ReceivedQuantity = availableQuantity,
@@ -2855,10 +2855,10 @@ public class SaleServiceTests
             SalePrice = salePrice
         };
 
-        context.Products.Add(product);
+        context.ProductVariants.Add(productVariant);
         await context.SaveChangesAsync();
 
-        return product;
+        return productVariant;
     }
 
     private static async Task SeedCatalogAsync(ApplicationDbContext context)

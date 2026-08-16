@@ -7,7 +7,7 @@
 Ejemplo:
 
 ```txt
-product_details: Blusa floral 7000
+products: Blusa floral 7000
 products:
 - talla M / rojo
 - talla S / rojo

@@ -1,6 +1,6 @@
 namespace PrettyWoman.Application.DTOs.Orders;
 
-public class OrderProductDetailDTO
+public class OrderProductDTO
 {
     public int Id { get; set; }
     public required string SupplierProductCode { get; set; }

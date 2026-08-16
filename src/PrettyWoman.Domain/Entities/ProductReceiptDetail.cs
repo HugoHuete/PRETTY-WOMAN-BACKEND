@@ -10,5 +10,5 @@ public class ProductReceiptDetail
     public decimal AllocatedWarehouseShippingCostNio { get; set; }
 
     public ProductReceipt? ProductReceipt { get; set; }
-    public Product? Product { get; set; }
+    public ProductVariant? ProductVariant { get; set; }
 }

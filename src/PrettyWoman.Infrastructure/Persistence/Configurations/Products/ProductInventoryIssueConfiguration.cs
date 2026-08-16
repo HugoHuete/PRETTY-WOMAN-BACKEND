@@ -10,7 +10,7 @@ public class ProductInventoryIssueConfiguration : IEntityTypeConfiguration<Produ
     {
         builder.Property(x => x.Comments).HasMaxLength(500);
 
-        builder.HasOne(x => x.Product).WithMany(x => x.ProductInventoryIssues).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.ProductVariant).WithMany(x => x.ProductInventoryIssues).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.ProductInventoryIssueType).WithMany().HasForeignKey(x => x.ProductInventoryIssueTypeId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.ProductInventoryIssueStatus).WithMany().HasForeignKey(x => x.ProductInventoryIssueStatusId).OnDelete(DeleteBehavior.Restrict);
 

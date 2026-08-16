@@ -14,7 +14,7 @@ public class ExchangeOutboundItemConfiguration : IEntityTypeConfiguration<Exchan
         builder.Property(x => x.TotalCost).HasPrecision(18, 6);
         builder.Property(x => x.Comments).HasMaxLength(500);
         builder.HasOne(x => x.SaleExchange).WithMany(x => x.OutboundItems).HasForeignKey(x => x.SaleExchangeId).OnDelete(DeleteBehavior.Cascade);
-        builder.HasOne(x => x.Product).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.ProductVariant).WithMany().HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         builder.HasIndex(x => x.SaleExchangeId);
         builder.HasIndex(x => x.ProductId);
         builder.ToTable(t => t.HasCheckConstraint("ck_exchange_outbound_items_quantity_positive", "quantity > 0"));

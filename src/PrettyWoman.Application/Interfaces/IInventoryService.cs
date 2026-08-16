@@ -6,7 +6,7 @@ namespace PrettyWoman.Application.Interfaces;
 public interface IInventoryService
 {
     InventoryMovement Move(
-        Product product,
+        ProductVariant productVariant,
         InventoryStockBucketOption fromStockBucket,
         InventoryStockBucketOption toStockBucket,
         int quantity,

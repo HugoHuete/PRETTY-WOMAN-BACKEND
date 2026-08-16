@@ -25,11 +25,11 @@ public class InventoryServiceTests : IDisposable
     [Fact]
     public void Move_AvailableToUnavailable_UpdatesBucketsAndCreatesMovement()
     {
-        var product = CreateProduct();
+        var productVariant = CreateProduct();
         var movementDate = new DateTime(2026, 7, 16, 10, 0, 0, DateTimeKind.Utc);
 
         var movement = _service.Move(
-            product,
+            productVariant,
             InventoryStockBucketOption.Available,
             InventoryStockBucketOption.Unavailable,
             2,
@@ -37,10 +37,10 @@ public class InventoryServiceTests : IDisposable
             movementDate,
             "Costura abierta");
 
-        Assert.Equal(3, product.AvailableQuantity);
-        Assert.Equal(2, product.UnavailableQuantity);
-        Assert.Equal(5, product.ReceivedQuantity);
-        Assert.Same(product, movement.Product);
+        Assert.Equal(3, productVariant.AvailableQuantity);
+        Assert.Equal(2, productVariant.UnavailableQuantity);
+        Assert.Equal(5, productVariant.ReceivedQuantity);
+        Assert.Same(productVariant, movement.ProductVariant);
         Assert.Equal((int)InventoryStockBucketOption.Available, movement.FromStockBucketId);
         Assert.Equal((int)InventoryStockBucketOption.Unavailable, movement.ToStockBucketId);
         Assert.Equal((int)InventoryMovementTypeOption.IssueOpened, movement.InventoryMovementTypeId);
@@ -53,65 +53,65 @@ public class InventoryServiceTests : IDisposable
     [Fact]
     public void Move_ExternalToAvailable_IncreasesReceivedAndAvailable()
     {
-        var product = CreateProduct();
-        product.Quantity = 7;
+        var productVariant = CreateProduct();
+        productVariant.Quantity = 7;
 
         _service.Move(
-            product,
+            productVariant,
             InventoryStockBucketOption.External,
             InventoryStockBucketOption.Available,
             2,
             InventoryMovementTypeOption.PurchaseReceived,
             DateTime.UtcNow);
 
-        Assert.Equal(7, product.ReceivedQuantity);
-        Assert.Equal(7, product.AvailableQuantity);
+        Assert.Equal(7, productVariant.ReceivedQuantity);
+        Assert.Equal(7, productVariant.AvailableQuantity);
     }
 
     [Fact]
     public void Move_ExternalToAvailable_AllowsReceivedQuantityAbovePurchasedQuantity()
     {
-        var product = CreateProduct();
+        var productVariant = CreateProduct();
 
         _service.Move(
-            product,
+            productVariant,
             InventoryStockBucketOption.External,
             InventoryStockBucketOption.Available,
             1,
             InventoryMovementTypeOption.PurchaseReceived,
             DateTime.UtcNow);
 
-        Assert.Equal(6, product.ReceivedQuantity);
-        Assert.Equal(6, product.AvailableQuantity);
+        Assert.Equal(6, productVariant.ReceivedQuantity);
+        Assert.Equal(6, productVariant.AvailableQuantity);
         Assert.Single(_context.InventoryMovements.Local);
     }
 
     [Fact]
     public void Move_OutOfInventoryToAvailable_DoesNotIncreaseReceived()
     {
-        var product = CreateProduct();
-        product.AvailableQuantity = 4;
+        var productVariant = CreateProduct();
+        productVariant.AvailableQuantity = 4;
 
         _service.Move(
-            product,
+            productVariant,
             InventoryStockBucketOption.OutOfInventory,
             InventoryStockBucketOption.Available,
             1,
             InventoryMovementTypeOption.SaleCancelled,
             DateTime.UtcNow);
 
-        Assert.Equal(5, product.ReceivedQuantity);
-        Assert.Equal(5, product.AvailableQuantity);
+        Assert.Equal(5, productVariant.ReceivedQuantity);
+        Assert.Equal(5, productVariant.AvailableQuantity);
     }
 
     [Fact]
     public void Move_OutOfInventoryToUnavailable_AddsDamagedReturnWithoutIncreasingReceived()
     {
-        var product = CreateProduct();
-        product.AvailableQuantity = 4;
+        var productVariant = CreateProduct();
+        productVariant.AvailableQuantity = 4;
 
         var movement = _service.Move(
-            product,
+            productVariant,
             InventoryStockBucketOption.OutOfInventory,
             InventoryStockBucketOption.Unavailable,
             1,
@@ -119,9 +119,9 @@ public class InventoryServiceTests : IDisposable
             DateTime.UtcNow,
             "Devolución recibida dañada.");
 
-        Assert.Equal(5, product.ReceivedQuantity);
-        Assert.Equal(4, product.AvailableQuantity);
-        Assert.Equal(1, product.UnavailableQuantity);
+        Assert.Equal(5, productVariant.ReceivedQuantity);
+        Assert.Equal(4, productVariant.AvailableQuantity);
+        Assert.Equal(1, productVariant.UnavailableQuantity);
         Assert.Equal((int)InventoryStockBucketOption.OutOfInventory, movement.FromStockBucketId);
         Assert.Equal((int)InventoryStockBucketOption.Unavailable, movement.ToStockBucketId);
         Assert.Contains(movement, _context.InventoryMovements.Local);
@@ -130,10 +130,10 @@ public class InventoryServiceTests : IDisposable
     [Fact]
     public void Move_RejectsInsufficientSourceStockWithoutChangingProduct()
     {
-        var product = CreateProduct();
+        var productVariant = CreateProduct();
 
         var exception = Assert.Throws<AppBadRequestException>(() => _service.Move(
-            product,
+            productVariant,
             InventoryStockBucketOption.Available,
             InventoryStockBucketOption.OutOfInventory,
             6,
@@ -141,21 +141,21 @@ public class InventoryServiceTests : IDisposable
             DateTime.UtcNow));
 
         Assert.Equal("La variante con id '1' no tiene suficiente inventario disponible.", exception.Message);
-        Assert.Equal(5, product.ReceivedQuantity);
-        Assert.Equal(5, product.AvailableQuantity);
-        Assert.Equal(0, product.ReservedQuantity);
-        Assert.Equal(0, product.UnavailableQuantity);
+        Assert.Equal(5, productVariant.ReceivedQuantity);
+        Assert.Equal(5, productVariant.AvailableQuantity);
+        Assert.Equal(0, productVariant.ReservedQuantity);
+        Assert.Equal(0, productVariant.UnavailableQuantity);
     }
 
     [Fact]
     public void Move_RejectsUnsupportedTransitionWithoutChangingProduct()
     {
-        var product = CreateProduct();
-        product.AvailableQuantity = 4;
-        product.ReservedQuantity = 1;
+        var productVariant = CreateProduct();
+        productVariant.AvailableQuantity = 4;
+        productVariant.ReservedQuantity = 1;
 
         var exception = Assert.Throws<AppBadRequestException>(() => _service.Move(
-            product,
+            productVariant,
             InventoryStockBucketOption.Reserved,
             InventoryStockBucketOption.Unavailable,
             1,
@@ -163,27 +163,27 @@ public class InventoryServiceTests : IDisposable
             DateTime.UtcNow));
 
         Assert.Equal("La transición de inventario 'Reserved -> Unavailable' no está permitida.", exception.Message);
-        Assert.Equal(4, product.AvailableQuantity);
-        Assert.Equal(1, product.ReservedQuantity);
-        Assert.Equal(0, product.UnavailableQuantity);
+        Assert.Equal(4, productVariant.AvailableQuantity);
+        Assert.Equal(1, productVariant.ReservedQuantity);
+        Assert.Equal(0, productVariant.UnavailableQuantity);
     }
 
     [Fact]
     public void Move_AllowsOutOfInventoryToReturnToReservedAfterFailedDelivery()
     {
-        var product = CreateProduct();
-        product.AvailableQuantity = 3;
+        var productVariant = CreateProduct();
+        productVariant.AvailableQuantity = 3;
 
         var movement = _service.Move(
-            product,
+            productVariant,
             InventoryStockBucketOption.OutOfInventory,
             InventoryStockBucketOption.Reserved,
             2,
             InventoryMovementTypeOption.ReservationCreated,
             DateTime.UtcNow);
 
-        Assert.Equal(3, product.AvailableQuantity);
-        Assert.Equal(2, product.ReservedQuantity);
+        Assert.Equal(3, productVariant.AvailableQuantity);
+        Assert.Equal(2, productVariant.ReservedQuantity);
         Assert.Equal((int)InventoryStockBucketOption.OutOfInventory, movement.FromStockBucketId);
         Assert.Equal((int)InventoryStockBucketOption.Reserved, movement.ToStockBucketId);
     }
@@ -191,10 +191,10 @@ public class InventoryServiceTests : IDisposable
     [Fact]
     public void Move_RejectsWhenResultWouldExceedReceivedQuantity()
     {
-        var product = CreateProduct();
+        var productVariant = CreateProduct();
 
         var exception = Assert.Throws<AppBadRequestException>(() => _service.Move(
-            product,
+            productVariant,
             InventoryStockBucketOption.OutOfInventory,
             InventoryStockBucketOption.Available,
             1,
@@ -202,12 +202,12 @@ public class InventoryServiceTests : IDisposable
             DateTime.UtcNow));
 
         Assert.Equal("La transición dejaría más inventario activo que recibido en la variante con id '1'.", exception.Message);
-        Assert.Equal(5, product.AvailableQuantity);
+        Assert.Equal(5, productVariant.AvailableQuantity);
     }
 
-    private static Product CreateProduct()
+    private static ProductVariant CreateProduct()
     {
-        return new Product
+        return new ProductVariant
         {
             Id = 1,
             Quantity = 5,

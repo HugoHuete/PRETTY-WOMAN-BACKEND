@@ -12,40 +12,40 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
 {
     private readonly IApplicationDbContext _context = context;
 
-    public async Task<PaginatedResult<ProductDetailDTO>> GetAllAsync(ProductQueryDTO query)
+    public async Task<PaginatedResult<ProductDTO>> GetAllAsync(ProductQueryDTO query)
     {
         NormalizePagination(query);
 
-        var productDetailsQuery = _context.ProductDetails
+        var productsQuery = _context.Products
             .AsNoTracking()
             .AsQueryable();
 
-        productDetailsQuery = ApplyProductDetailFilters(productDetailsQuery, query);
+        productsQuery = ApplyProductFilters(productsQuery, query);
 
-        var totalCount = await productDetailsQuery.CountAsync();
-        var productDetails = await productDetailsQuery
-            .Include(productDetail => productDetail.Subcategory)
+        var totalCount = await productsQuery.CountAsync();
+        var products = await productsQuery
+            .Include(product => product.Subcategory)
                 .ThenInclude(subcategory => subcategory!.Category)
-            .Include(productDetail => productDetail.ProductImages)
+            .Include(product => product.ProductImages)
                 .ThenInclude(productImage => productImage.MediaAsset)
                     .ThenInclude(mediaAsset => mediaAsset!.Variants)
-            .Include(productDetail => productDetail.DiscountCampaignProducts)
+            .Include(product => product.DiscountCampaignProducts)
                 .ThenInclude(discount => discount.DiscountCampaign)
-            .Include(productDetail => productDetail.Products)
-                .ThenInclude(product => product.Size)
+            .Include(product => product.ProductVariants)
+                .ThenInclude(productVariant => productVariant.Size)
                     .ThenInclude(size => size!.SizeGroup)
-            .OrderBy(productDetail => productDetail.Name)
-            .ThenBy(productDetail => productDetail.Code)
+            .OrderBy(product => product.Name)
+            .ThenBy(product => product.Code)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
             .ToListAsync();
 
         var now = DateTime.UtcNow;
-        var items = productDetails
-            .Select(productDetail => MapProductDetail(productDetail, query, now))
+        var items = products
+            .Select(product => MapProduct(product, query, now))
             .ToList();
 
-        return new PaginatedResult<ProductDetailDTO>
+        return new PaginatedResult<ProductDTO>
         {
             Items = items,
             Page = query.Page,
@@ -54,66 +54,66 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
         };
     }
 
-    public async Task<ProductDetailDTO> GetByIdAsync(int id)
-    {
-        var productDetail = await _context.ProductDetails
-            .AsNoTracking()
-            .Include(productDetail => productDetail.Subcategory)
-                .ThenInclude(subcategory => subcategory!.Category)
-            .Include(productDetail => productDetail.ProductImages)
-                .ThenInclude(productImage => productImage.MediaAsset)
-                    .ThenInclude(mediaAsset => mediaAsset!.Variants)
-            .Include(productDetail => productDetail.DiscountCampaignProducts)
-                .ThenInclude(discount => discount.DiscountCampaign)
-            .Include(productDetail => productDetail.Products)
-                .ThenInclude(product => product.Size)
-                    .ThenInclude(size => size!.SizeGroup)
-            .FirstOrDefaultAsync(productDetail => productDetail.Id == id)
-            ?? throw new AppNotFoundException($"El producto con id '{id}' no existe.");
-
-        return MapProductDetail(productDetail, new ProductQueryDTO(), DateTime.UtcNow);
-    }
-
-    public async Task UpdatePriceAsync(int productDetailId, int productId, UpdateProductPriceDTO request)
+    public async Task<ProductDTO> GetByIdAsync(int id)
     {
         var product = await _context.Products
-            .FirstOrDefaultAsync(product => product.Id == productId && product.ProductDetailId == productDetailId)
-            ?? throw new AppNotFoundException($"La variante con id '{productId}' no existe para el producto con id '{productDetailId}'.");
+            .AsNoTracking()
+            .Include(product => product.Subcategory)
+                .ThenInclude(subcategory => subcategory!.Category)
+            .Include(product => product.ProductImages)
+                .ThenInclude(productImage => productImage.MediaAsset)
+                    .ThenInclude(mediaAsset => mediaAsset!.Variants)
+            .Include(product => product.DiscountCampaignProducts)
+                .ThenInclude(discount => discount.DiscountCampaign)
+            .Include(product => product.ProductVariants)
+                .ThenInclude(productVariant => productVariant.Size)
+                    .ThenInclude(size => size!.SizeGroup)
+            .FirstOrDefaultAsync(product => product.Id == id)
+            ?? throw new AppNotFoundException($"El producto con id '{id}' no existe.");
 
-        product.SalePrice = request.SalePrice;
+        return MapProduct(product, new ProductQueryDTO(), DateTime.UtcNow);
+    }
+
+    public async Task UpdatePriceAsync(int productId, int productVariantId, UpdateProductPriceDTO request)
+    {
+        var productVariant = await _context.ProductVariants
+            .FirstOrDefaultAsync(productVariant => productVariant.Id == productVariantId && productVariant.ProductId == productId)
+            ?? throw new AppNotFoundException($"La variante con id '{productVariantId}' no existe para el producto con id '{productId}'.");
+
+        productVariant.SalePrice = request.SalePrice;
         await _context.SaveChangesAsync();
     }
 
-    public async Task<IEnumerable<ProductInventoryMovementDTO>> GetInventoryMovementsAsync(int productDetailId, int? productId = null)
+    public async Task<IEnumerable<ProductInventoryMovementDTO>> GetInventoryMovementsAsync(int productId, int? productVariantId = null)
     {
-        var productDetailExists = await _context.ProductDetails
+        var productExists = await _context.Products
             .AsNoTracking()
-            .AnyAsync(productDetail => productDetail.Id == productDetailId);
+            .AnyAsync(product => product.Id == productId);
 
-        if (!productDetailExists)
+        if (!productExists)
         {
-            throw new AppNotFoundException($"El producto con id '{productDetailId}' no existe.");
+            throw new AppNotFoundException($"El producto con id '{productId}' no existe.");
         }
 
-        if (productId.HasValue)
+        if (productVariantId.HasValue)
         {
-            var productBelongsToProductDetail = await _context.Products
+            var productBelongsToProduct = await _context.ProductVariants
                 .AsNoTracking()
-                .AnyAsync(product => product.Id == productId.Value && product.ProductDetailId == productDetailId);
+                .AnyAsync(productVariant => productVariant.Id == productVariantId.Value && productVariant.ProductId == productId);
 
-            if (!productBelongsToProductDetail)
+            if (!productBelongsToProduct)
             {
-                throw new AppNotFoundException($"La variante con id '{productId.Value}' no existe para el producto con id '{productDetailId}'.");
+                throw new AppNotFoundException($"La variante con id '{productVariantId.Value}' no existe para el producto con id '{productId}'.");
             }
         }
 
         var movementsQuery = _context.InventoryMovements
             .AsNoTracking()
-            .Where(movement => movement.Product != null && movement.Product.ProductDetailId == productDetailId);
+            .Where(movement => movement.ProductVariant != null && movement.ProductVariant.ProductId == productId);
 
-        if (productId.HasValue)
+        if (productVariantId.HasValue)
         {
-            movementsQuery = movementsQuery.Where(movement => movement.ProductId == productId.Value);
+            movementsQuery = movementsQuery.Where(movement => movement.ProductId == productVariantId.Value);
         }
 
         return await movementsQuery
@@ -123,13 +123,13 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             .Select(movement => new ProductInventoryMovementDTO
             {
                 Id = movement.Id,
-                ProductId = movement.ProductId,
-                ProductDetailId = movement.Product!.ProductDetailId,
-                ProductName = movement.Product.ProductDetail != null ? movement.Product.ProductDetail.Name : null,
-                ProductCode = movement.Product.ProductDetail != null ? movement.Product.ProductDetail.Code : null,
-                SizeId = movement.Product.SizeId,
-                SizeName = movement.Product.Size != null ? movement.Product.Size.Name : null,
-                Variant = movement.Product.Variant,
+                ProductVariantId = movement.ProductId,
+                ProductId = movement.ProductVariant!.ProductId,
+                ProductName = movement.ProductVariant.Product != null ? movement.ProductVariant.Product.Name : null,
+                ProductCode = movement.ProductVariant.Product != null ? movement.ProductVariant.Product.Code : null,
+                SizeId = movement.ProductVariant.SizeId,
+                SizeName = movement.ProductVariant.Size != null ? movement.ProductVariant.Size.Name : null,
+                Variant = movement.ProductVariant.Variant,
                 MovementDate = movement.MovementDate,
                 InventoryMovementTypeId = movement.InventoryMovementTypeId,
                 InventoryMovementTypeName = movement.InventoryMovementType != null ? movement.InventoryMovementType.Name : null,
@@ -148,74 +148,74 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             .ToListAsync();
     }
 
-    private static IQueryable<ProductDetail> ApplyProductDetailFilters(IQueryable<ProductDetail> query, ProductQueryDTO filters)
+    private static IQueryable<Product> ApplyProductFilters(IQueryable<Product> query, ProductQueryDTO filters)
     {
         if (filters.Code.HasValue)
         {
-            query = query.Where(productDetail => productDetail.Code == filters.Code.Value);
+            query = query.Where(product => product.Code == filters.Code.Value);
         }
 
         if (filters.DiscountCampaignId.HasValue)
         {
-            query = query.Where(productDetail => productDetail.DiscountCampaignProducts
+            query = query.Where(product => product.DiscountCampaignProducts
                 .Any(discount => discount.DiscountCampaignId == filters.DiscountCampaignId.Value));
         }
 
         if (filters.CategoryId.HasValue)
         {
-            query = query.Where(productDetail =>
-                productDetail.Subcategory != null &&
-                productDetail.Subcategory.CategoryId == filters.CategoryId.Value);
+            query = query.Where(product =>
+                product.Subcategory != null &&
+                product.Subcategory.CategoryId == filters.CategoryId.Value);
         }
 
         if (filters.SubcategoryId.HasValue)
         {
-            query = query.Where(productDetail => productDetail.SubcategoryId == filters.SubcategoryId.Value);
+            query = query.Where(product => product.SubcategoryId == filters.SubcategoryId.Value);
         }
 
         if (filters.SizeId.HasValue || filters.Availability.HasValue)
         {
-            query = query.Where(productDetail => productDetail.Products.Any(product =>
-                (!filters.SizeId.HasValue || product.SizeId == filters.SizeId.Value) &&
+            query = query.Where(product => product.ProductVariants.Any(productVariant =>
+                (!filters.SizeId.HasValue || productVariant.SizeId == filters.SizeId.Value) &&
                 (!filters.Availability.HasValue ||
-                    (filters.Availability.Value == ProductAvailabilityFilter.Available && product.AvailableQuantity > 0) ||
-                    (filters.Availability.Value == ProductAvailabilityFilter.Reserved && product.ReservedQuantity > 0) ||
-                    (filters.Availability.Value == ProductAvailabilityFilter.Unavailable && product.UnavailableQuantity > 0))));
+                    (filters.Availability.Value == ProductAvailabilityFilter.Available && productVariant.AvailableQuantity > 0) ||
+                    (filters.Availability.Value == ProductAvailabilityFilter.Reserved && productVariant.ReservedQuantity > 0) ||
+                    (filters.Availability.Value == ProductAvailabilityFilter.Unavailable && productVariant.UnavailableQuantity > 0))));
         }
 
         return query;
     }
 
-    private ProductDetailDTO MapProductDetail(ProductDetail productDetail, ProductQueryDTO query, DateTime now)
+    private ProductDTO MapProduct(Product product, ProductQueryDTO query, DateTime now)
     {
-        return new ProductDetailDTO
+        return new ProductDTO
         {
-            Id = productDetail.Id,
-            SupplierProductCode = productDetail.SupplierProductCode,
-            Code = productDetail.Code,
-            Name = productDetail.Name,
-            SubcategoryId = productDetail.SubcategoryId,
-            SubcategoryName = productDetail.Subcategory?.Name,
-            CategoryId = productDetail.Subcategory?.CategoryId,
-            CategoryName = productDetail.Subcategory?.Category?.Name,
-            PrimaryImageUrl = GetPrimaryImageUrl(productDetail),
-            Products = productDetail.Products
-                .Where(product =>
-                    (!query.SizeId.HasValue || product.SizeId == query.SizeId.Value) &&
+            Id = product.Id,
+            SupplierProductCode = product.SupplierProductCode,
+            Code = product.Code,
+            Name = product.Name,
+            SubcategoryId = product.SubcategoryId,
+            SubcategoryName = product.Subcategory?.Name,
+            CategoryId = product.Subcategory?.CategoryId,
+            CategoryName = product.Subcategory?.Category?.Name,
+            PrimaryImageUrl = GetPrimaryImageUrl(product),
+            Variants = product.ProductVariants
+                .Where(productVariant =>
+                    (!query.SizeId.HasValue || productVariant.SizeId == query.SizeId.Value) &&
                     (!query.Availability.HasValue ||
-                        (query.Availability.Value == ProductAvailabilityFilter.Available && product.AvailableQuantity > 0) ||
-                        (query.Availability.Value == ProductAvailabilityFilter.Reserved && product.ReservedQuantity > 0) ||
-                        (query.Availability.Value == ProductAvailabilityFilter.Unavailable && product.UnavailableQuantity > 0)))
-                .OrderBy(product => product.Size?.DisplayOrder ?? 0)
-                .ThenBy(product => product.Variant)
-                .Select(product => MapProductVariant(productDetail, product, now))
+                        (query.Availability.Value == ProductAvailabilityFilter.Available && productVariant.AvailableQuantity > 0) ||
+                        (query.Availability.Value == ProductAvailabilityFilter.Reserved && productVariant.ReservedQuantity > 0) ||
+                        (query.Availability.Value == ProductAvailabilityFilter.Unavailable && productVariant.UnavailableQuantity > 0)))
+                .OrderBy(productVariant => productVariant.Size?.DisplayOrder ?? 0)
+                .ThenBy(productVariant => productVariant.Variant)
+                .Select(productVariant => MapProductVariant(product, productVariant, now))
                 .ToList()
         };
     }
 
-    private string? GetPrimaryImageUrl(ProductDetail productDetail)
+    private string? GetPrimaryImageUrl(Product product)
     {
-        var primaryImage = productDetail.ProductImages
+        var primaryImage = product.ProductImages
             .OrderByDescending(image => image.IsPrimary)
             .ThenBy(image => image.SortOrder)
             .FirstOrDefault();
@@ -227,33 +227,33 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
         return storageKey is null ? null : mediaUrlResolver.GetPublicUrl(storageKey);
     }
 
-    private static ProductVariantDTO MapProductVariant(ProductDetail productDetail, Product product, DateTime now)
+    private static ProductVariantDTO MapProductVariant(Product product, ProductVariant productVariant, DateTime now)
     {
-        var discount = GetBestActiveDiscount(productDetail, product.SalePrice, now);
+        var discount = GetBestActiveDiscount(product, productVariant.SalePrice, now);
 
         return new ProductVariantDTO
         {
-            Id = product.Id,
-            SizeId = product.SizeId,
-            SizeName = product.Size?.Name,
-            SizeGroupId = product.Size?.SizeGroupId,
-            SizeGroupName = product.Size?.SizeGroup?.Name,
-            Variant = product.Variant,
-            Quantity = product.Quantity,
-            ReceivedQuantity = product.ReceivedQuantity,
-            AvailableQuantity = product.AvailableQuantity,
-            ReservedQuantity = product.ReservedQuantity,
-            UnavailableQuantity = product.UnavailableQuantity,
-            SalePrice = product.SalePrice,
+            Id = productVariant.Id,
+            SizeId = productVariant.SizeId,
+            SizeName = productVariant.Size?.Name,
+            SizeGroupId = productVariant.Size?.SizeGroupId,
+            SizeGroupName = productVariant.Size?.SizeGroup?.Name,
+            Variant = productVariant.Variant,
+            Quantity = productVariant.Quantity,
+            ReceivedQuantity = productVariant.ReceivedQuantity,
+            AvailableQuantity = productVariant.AvailableQuantity,
+            ReservedQuantity = productVariant.ReservedQuantity,
+            UnavailableQuantity = productVariant.UnavailableQuantity,
+            SalePrice = productVariant.SalePrice,
             DiscountedSalePrice = discount?.DiscountedSalePrice,
             DiscountCampaignId = discount?.CampaignId,
             DiscountCampaignName = discount?.CampaignName
         };
     }
 
-    private static ActiveDiscountDTO? GetBestActiveDiscount(ProductDetail productDetail, decimal salePrice, DateTime now)
+    private static ActiveDiscountDTO? GetBestActiveDiscount(Product product, decimal salePrice, DateTime now)
     {
-        return productDetail.DiscountCampaignProducts
+        return product.DiscountCampaignProducts
             .Where(discount =>
                 discount.DiscountCampaign is { CancelledAt: null } &&
                 discount.DiscountCampaign.StartDate <= now &&

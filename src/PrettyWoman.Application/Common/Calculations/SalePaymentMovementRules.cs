@@ -21,7 +21,7 @@ public static class SalePaymentMovementRules
         return (int)SalePaymentStatusOption.Paid;
     }
 
-    // AllowOverpayment is used when replacing products after payments were already received.
+    // AllowOverpayment is used when replacing productVariants after payments were already received.
     public static void EnsureAllowedProductTotal(int saleChannelId, decimal amountToCharge, decimal productPaymentTotal, bool allowOverpayment = false)
     {
         if (!allowOverpayment && productPaymentTotal > amountToCharge)

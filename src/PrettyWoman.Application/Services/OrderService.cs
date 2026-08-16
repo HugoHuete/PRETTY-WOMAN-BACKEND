@@ -20,10 +20,10 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         NormalizeOrderFields(createOrderDTO);
         await ValidateOrderRequestAsync(createOrderDTO);
 
-        var nextProductDetailCode = await GetNextProductDetailCodeAsync();
-        var createdProducts = CreateProductDetails(createOrderDTO, nextProductDetailCode);
-        var productDetails = createdProducts.ProductDetails;
-        var products = productDetails.SelectMany(detail => detail.Products).ToList();
+        var nextProductCode = await GetNextProductCodeAsync();
+        var createdProducts = CreateProducts(createOrderDTO, nextProductCode);
+        var products = createdProducts.Products;
+        var productVariants = products.SelectMany(detail => detail.ProductVariants).ToList();
         var exchangeRate = await GetOrderExchangeRateAsync();
         var totals = CalculateCosts(createdProducts.ProductCosts, createOrderDTO.PurchaseCurrencyId, exchangeRate, createOrderDTO.SupplierShippingCostUsd);
 
@@ -41,7 +41,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             WarehouseShippingCostUsd = 0,
             TotalCostNio = totals.TotalCostNio,
             Comments = createOrderDTO.Comments,
-            Products = products
+            ProductVariants = productVariants
         };
 
         await _context.Orders.AddAsync(order);
@@ -61,41 +61,41 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         await ValidateOrderRequestAsync(updateOrderDTO);
 
         var order = await _context.Orders
-            .Include(order => order.Products)
-                .ThenInclude(product => product.ProductDetail)
+            .Include(order => order.ProductVariants)
+                .ThenInclude(productVariant => productVariant.Product)
             .FirstOrDefaultAsync(order => order.Id == id)
             ?? throw new AppNotFoundException($"La orden con id '{id}' no existe.");
 
         await EnsureOrderProductsCanBeReplacedAsync(order);
 
-        var oldProductDetailIds = order.Products
-            .Select(product => product.ProductDetailId)
+        var oldProductIds = order.ProductVariants
+            .Select(productVariant => productVariant.ProductId)
             .Distinct()
             .ToList();
 
-        var oldProductDetails = await _context.ProductDetails
-            .Where(productDetail => oldProductDetailIds.Contains(productDetail.Id))
-            .OrderBy(productDetail => productDetail.Code)
+        var oldProducts = await _context.Products
+            .Where(product => oldProductIds.Contains(product.Id))
+            .OrderBy(product => product.Code)
             .ToListAsync();
 
-        var nextProductDetailCode = await GetNextProductDetailCodeAsync();
-        var createdProducts = CreateProductDetails(updateOrderDTO, nextProductDetailCode, oldProductDetails);
-        var productDetails = createdProducts.ProductDetails;
-        var products = productDetails.SelectMany(detail => detail.Products).ToList();
+        var nextProductCode = await GetNextProductCodeAsync();
+        var createdProducts = CreateProducts(updateOrderDTO, nextProductCode, oldProducts);
+        var products = createdProducts.Products;
+        var productVariants = products.SelectMany(detail => detail.ProductVariants).ToList();
         var exchangeRate = await GetOrderExchangeRateAsync();
         var totals = CalculateCosts(createdProducts.ProductCosts, updateOrderDTO.PurchaseCurrencyId, exchangeRate, updateOrderDTO.SupplierShippingCostUsd);
-        _context.Products.RemoveRange(order.Products);
+        _context.ProductVariants.RemoveRange(order.ProductVariants);
 
-        var reusedProductDetailIds = productDetails
-            .Where(productDetail => productDetail.Id != 0)
-            .Select(productDetail => productDetail.Id)
+        var reusedProductIds = products
+            .Where(product => product.Id != 0)
+            .Select(product => product.Id)
             .ToHashSet();
 
-        var removedProductDetails = oldProductDetails
-            .Where(productDetail => !reusedProductDetailIds.Contains(productDetail.Id))
+        var removedProducts = oldProducts
+            .Where(product => !reusedProductIds.Contains(product.Id))
             .ToList();
 
-        _context.ProductDetails.RemoveRange(removedProductDetails);
+        _context.Products.RemoveRange(removedProducts);
 
         order.PurchaseDate = updateOrderDTO.PurchaseDate.NormalizeToUtc() ?? order.PurchaseDate;
         order.SupplierId = updateOrderDTO.SupplierId;
@@ -107,7 +107,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         order.SupplierShippingCostUsd = updateOrderDTO.SupplierShippingCostUsd;
         order.TotalCostNio = totals.TotalCostNio;
         order.Comments = updateOrderDTO.Comments;
-        order.Products = products;
+        order.ProductVariants = productVariants;
 
         await SyncSupplierPaymentMovementAsync(order);
 
@@ -134,8 +134,8 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             throw new AppBadRequestException("Los faltantes de la orden ya fueron cerrados.");
         }
 
-        var productsWithPendingQuantity = order.Products
-            .Where(product => product.ReceivedQuantity < product.Quantity)
+        var productsWithPendingQuantity = order.ProductVariants
+            .Where(productVariant => productVariant.ReceivedQuantity < productVariant.Quantity)
             .ToList();
         if (productsWithPendingQuantity.Count == 0)
         {
@@ -144,7 +144,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
 
         if (closeShortagesDTO.Items.Count != productsWithPendingQuantity.Count ||
             closeShortagesDTO.Items.Select(item => item.ProductId).Distinct().Count() != closeShortagesDTO.Items.Count ||
-            closeShortagesDTO.Items.Any(item => productsWithPendingQuantity.All(product => product.Id != item.ProductId)))
+            closeShortagesDTO.Items.Any(item => productsWithPendingQuantity.All(productVariant => productVariant.Id != item.ProductId)))
         {
             throw new AppBadRequestException("Debe registrar exactamente un faltante por cada variante pendiente de la orden.");
         }
@@ -154,32 +154,32 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
 
         foreach (var item in closeShortagesDTO.Items)
         {
-            var product = productsWithPendingQuantity.Single(product => product.Id == item.ProductId);
-            var originalQuantity = product.Quantity;
-            var shortageQuantity = originalQuantity - product.ReceivedQuantity;
-            var originalMerchandiseTotalNio = product.MerchandiseTotalCostNio;
+            var productVariant = productsWithPendingQuantity.Single(productVariant => productVariant.Id == item.ProductId);
+            var originalQuantity = productVariant.Quantity;
+            var shortageQuantity = originalQuantity - productVariant.ReceivedQuantity;
+            var originalMerchandiseTotalNio = productVariant.MerchandiseTotalCostNio;
             var lossAmountNio = Math.Round(originalMerchandiseTotalNio * shortageQuantity / originalQuantity, 2);
 
             shortages.Add(new PurchaseShortage
             {
                 OrderId = order.Id,
-                ProductId = product.Id,
+                ProductId = productVariant.Id,
                 Quantity = shortageQuantity,
                 LossAmountNio = lossAmountNio,
                 ShortageDate = shortageDate
             });
 
-            product.MerchandiseTotalCostNio = originalMerchandiseTotalNio - lossAmountNio;
-            product.TotalCostNio = product.MerchandiseTotalCostNio + product.AllocatedShippingCostNio;
-            product.Quantity = product.ReceivedQuantity;
-            product.UnitCostNio = product.Quantity == 0 ? 0 : Math.Round(product.TotalCostNio / product.Quantity, 6);
-            product.UnitCostUsd = order.ExchangeRate == 0 ? 0 : Math.Round(product.UnitCostNio / order.ExchangeRate, 2);
+            productVariant.MerchandiseTotalCostNio = originalMerchandiseTotalNio - lossAmountNio;
+            productVariant.TotalCostNio = productVariant.MerchandiseTotalCostNio + productVariant.AllocatedShippingCostNio;
+            productVariant.Quantity = productVariant.ReceivedQuantity;
+            productVariant.UnitCostNio = productVariant.Quantity == 0 ? 0 : Math.Round(productVariant.TotalCostNio / productVariant.Quantity, 6);
+            productVariant.UnitCostUsd = order.ExchangeRate == 0 ? 0 : Math.Round(productVariant.UnitCostNio / order.ExchangeRate, 2);
         }
 
-        order.MerchandiseTotalNio = order.Products.Sum(product => product.MerchandiseTotalCostNio);
+        order.MerchandiseTotalNio = order.ProductVariants.Sum(productVariant => productVariant.MerchandiseTotalCostNio);
         order.AmountUsd = order.ExchangeRate == 0 ? 0 : Math.Round(order.MerchandiseTotalNio / order.ExchangeRate, 2);
         order.ReceivedAmountNio = order.MerchandiseTotalNio;
-        order.TotalCostNio = order.Products.Sum(product => product.TotalCostNio);
+        order.TotalCostNio = order.ProductVariants.Sum(productVariant => productVariant.TotalCostNio);
         order.OrderStatusId = shortages.Any(shortage => shortage.LossAmountNio > 0)
             ? (int)OrderStatusCode.PendingRefund
             : (int)OrderStatusCode.Received;
@@ -373,11 +373,11 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         var orders = await ordersQuery
             .Include(order => order.Supplier)
             .Include(order => order.OrderStatus)
-            .Include(order => order.Products)
-                .ThenInclude(product => product.ProductDetail)
-                    .ThenInclude(productDetail => productDetail!.Subcategory)
-            .Include(order => order.Products)
-                .ThenInclude(product => product.Size)
+            .Include(order => order.ProductVariants)
+                .ThenInclude(productVariant => productVariant.Product)
+                    .ThenInclude(product => product!.Subcategory)
+            .Include(order => order.ProductVariants)
+                .ThenInclude(productVariant => productVariant.Size)
             .Include(order => order.PurchaseShortages)
             .Include(order => order.SupplierRefund)
             .OrderByDescending(order => order.PurchaseDate)
@@ -400,11 +400,11 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         var order = await _context.Orders
             .Include(order => order.Supplier)
             .Include(order => order.OrderStatus)
-            .Include(order => order.Products)
-                .ThenInclude(product => product.ProductDetail)
-                    .ThenInclude(productDetail => productDetail!.Subcategory)
-            .Include(order => order.Products)
-                .ThenInclude(product => product.Size)
+            .Include(order => order.ProductVariants)
+                .ThenInclude(productVariant => productVariant.Product)
+                    .ThenInclude(product => product!.Subcategory)
+            .Include(order => order.ProductVariants)
+                .ThenInclude(productVariant => productVariant.Size)
             .Include(order => order.PurchaseShortages)
             .Include(order => order.SupplierRefund)
             .FirstOrDefaultAsync(order => order.Id == id)
@@ -529,8 +529,8 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         await EnsureSupplierExistsAsync(orderDTO.SupplierId);
 
 
-        var subcategoryIds = orderDTO.ProductDetails
-            .Select(productDetail => productDetail.SubcategoryId)
+        var subcategoryIds = orderDTO.Products
+            .Select(product => product.SubcategoryId)
             .Distinct()
             .ToList();
 
@@ -545,8 +545,8 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             throw new AppNotFoundException($"La subcategoría con id '{missingSubcategoryId}' no existe.");
         }
 
-        var sizeIds = orderDTO.ProductDetails
-            .SelectMany(productDetail => productDetail.Variants)
+        var sizeIds = orderDTO.Products
+            .SelectMany(product => product.Variants)
             .Select(variant => variant.SizeId)
             .Distinct()
             .ToList();
@@ -562,14 +562,14 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             throw new AppNotFoundException($"La talla con id '{missingSizeId}' no existe.");
         }
 
-        foreach (var productDetail in orderDTO.ProductDetails)
+        foreach (var product in orderDTO.Products)
         {
-            if (productDetail.Variants.Count == 0)
+            if (product.Variants.Count == 0)
             {
                 throw new AppBadRequestException("Cada producto debe tener al menos una variante.");
             }
 
-            var duplicatedVariant = productDetail.Variants
+            var duplicatedVariant = product.Variants
                 .GroupBy(variant => new
                 {
                     variant.SizeId,
@@ -584,35 +584,35 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         }
     }
 
-    private static CreatedProductDetails CreateProductDetails(CreateOrderDTO orderDTO, int nextProductDetailCode, List<ProductDetail>? reusableProductDetails = null)
+    private static CreatedProducts CreateProducts(CreateOrderDTO orderDTO, int nextProductCode, List<Product>? reusableProducts = null)
     {
-        var reusableDetails = reusableProductDetails?.ToList();
-        var productDetails = new List<ProductDetail>();
+        var reusableDetails = reusableProducts?.ToList();
+        var products = new List<Product>();
         var productCosts = new List<ProductPurchaseCost>();
 
-        foreach (var productDetailDTO in orderDTO.ProductDetails)
+        foreach (var productDTO in orderDTO.Products)
         {
-            var productDetail = reusableDetails is null
+            var product = reusableDetails is null
                 ? null
-                : TakeReusableProductDetail(productDetailDTO, reusableDetails);
+                : TakeReusableProduct(productDTO, reusableDetails);
 
-            productDetail ??= new ProductDetail
+            product ??= new Product
             {
-                Code = nextProductDetailCode++,
-                SupplierProductCode = productDetailDTO.SupplierProductCode,
-                Name = productDetailDTO.Name
+                Code = nextProductCode++,
+                SupplierProductCode = productDTO.SupplierProductCode,
+                Name = productDTO.Name
             };
 
-            productDetail.SupplierProductCode = productDetailDTO.SupplierProductCode;
-            productDetail.Name = productDetailDTO.Name;
-            productDetail.SubcategoryId = productDetailDTO.SubcategoryId;
-            productDetail.Products = [];
+            product.SupplierProductCode = productDTO.SupplierProductCode;
+            product.Name = productDTO.Name;
+            product.SubcategoryId = productDTO.SubcategoryId;
+            product.ProductVariants = [];
 
-            foreach (var variant in productDetailDTO.Variants)
+            foreach (var variant in productDTO.Variants)
             {
-                var product = new Product
+                var productVariant = new ProductVariant
                 {
-                    ProductDetail = productDetail,
+                    Product = product,
                     SizeId = variant.SizeId,
                     Variant = variant.Variant.NormalizeOptional(),
                     Quantity = variant.Quantity,
@@ -622,37 +622,37 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                     SalePrice = variant.SalePrice
                 };
 
-                productDetail.Products.Add(product);
-                productCosts.Add(new ProductPurchaseCost(product, variant.UnitCost));
+                product.ProductVariants.Add(productVariant);
+                productCosts.Add(new ProductPurchaseCost(productVariant, variant.UnitCost));
             }
 
-            productDetails.Add(productDetail);
+            products.Add(product);
         }
 
-        return new CreatedProductDetails(productDetails, productCosts);
+        return new CreatedProducts(products, productCosts);
     }
 
-    private static ProductDetail? TakeReusableProductDetail(CreateOrderProductDetailDTO productDetailDTO, List<ProductDetail> reusableProductDetails)
+    private static Product? TakeReusableProduct(CreateOrderProductDTO productDTO, List<Product> reusableProducts)
     {
-        if (!productDetailDTO.Id.HasValue)
+        if (!productDTO.Id.HasValue)
         {
             return null;
         }
 
-        var reusableProductDetail = reusableProductDetails.FirstOrDefault(productDetail =>
-            productDetail.Id == productDetailDTO.Id.Value)
-            ?? throw new AppBadRequestException($"El producto detalle con id '{productDetailDTO.Id.Value}' no pertenece a la orden.");
+        var reusableProduct = reusableProducts.FirstOrDefault(product =>
+            product.Id == productDTO.Id.Value)
+            ?? throw new AppBadRequestException($"El producto con id '{productDTO.Id.Value}' no pertenece a la orden.");
 
-        reusableProductDetails.Remove(reusableProductDetail);
+        reusableProducts.Remove(reusableProduct);
 
-        return reusableProductDetail;
+        return reusableProduct;
     }
 
     private static OrderTotals CalculateCosts(List<ProductPurchaseCost> productCosts, int purchaseCurrencyId, decimal exchangeRate, decimal supplierShippingCostUsd)
     {
         var isUsdPurchase = purchaseCurrencyId == (int)PurchaseCurrencyOption.Usd;
         var merchandiseTotalInPurchaseCurrency = Math.Round(
-            productCosts.Sum(item => item.Product.Quantity * item.UnitCostInPurchaseCurrency),
+            productCosts.Sum(item => item.ProductVariant.Quantity * item.UnitCostInPurchaseCurrency),
             2);
         var amountUsd = isUsdPurchase
             ? merchandiseTotalInPurchaseCurrency
@@ -673,14 +673,14 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
 
         for (var index = 0; index < productCosts.Count; index++)
         {
-            var product = productCosts[index].Product;
-            product.MerchandiseTotalCostNio = merchandiseAllocations[index];
-            product.AllocatedShippingCostNio = shippingAllocations[index];
-            product.TotalCostNio = product.MerchandiseTotalCostNio + product.AllocatedShippingCostNio;
-            product.UnitCostNio = Math.Round(product.TotalCostNio / product.Quantity, 6);
-            product.UnitCostUsd = exchangeRate == 0
+            var productVariant = productCosts[index].ProductVariant;
+            productVariant.MerchandiseTotalCostNio = merchandiseAllocations[index];
+            productVariant.AllocatedShippingCostNio = shippingAllocations[index];
+            productVariant.TotalCostNio = productVariant.MerchandiseTotalCostNio + productVariant.AllocatedShippingCostNio;
+            productVariant.UnitCostNio = Math.Round(productVariant.TotalCostNio / productVariant.Quantity, 6);
+            productVariant.UnitCostUsd = exchangeRate == 0
                 ? 0
-                : Math.Round(product.UnitCostNio / exchangeRate, 2);
+                : Math.Round(productVariant.UnitCostNio / exchangeRate, 2);
         }
 
         return new OrderTotals(
@@ -694,14 +694,14 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         bool isUsdPurchase,
         decimal exchangeRate)
     {
-        var product = productCost.Product;
+        var productVariant = productCost.ProductVariant;
 
         if (isUsdPurchase)
         {
-            return product.Quantity * productCost.UnitCostInPurchaseCurrency * exchangeRate;
+            return productVariant.Quantity * productCost.UnitCostInPurchaseCurrency * exchangeRate;
         }
 
-        return product.Quantity * productCost.UnitCostInPurchaseCurrency;
+        return productVariant.Quantity * productCost.UnitCostInPurchaseCurrency;
     }
     private static List<decimal> AllocateAmount(decimal total, List<decimal> weights)
     {
@@ -745,23 +745,23 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
     /// <summary>
     /// Get next consecutive store code
     /// </summary>
-    private async Task<int> GetNextProductDetailCodeAsync()
+    private async Task<int> GetNextProductCodeAsync()
     {
-        var maxCode = await _context.ProductDetails
-            .MaxAsync(productDetail => (int?)productDetail.Code) ?? 0;
+        var maxCode = await _context.Products
+            .MaxAsync(product => (int?)product.Code) ?? 0;
 
         return maxCode + 1;
     }
 
     /// <summary>
-    /// Checks if order already have received products. If true, it can't be changed.
+    /// Checks if order already have received productVariants. If true, it can't be changed.
     /// </summary>
     private static async Task EnsureOrderProductsCanBeReplacedAsync(Order order)
     {
-        if (order.Products.Any(product =>
-            product.ReceivedQuantity > 0 ||
-            product.AvailableQuantity > 0 ||
-            product.ReservedQuantity > 0))
+        if (order.ProductVariants.Any(productVariant =>
+            productVariant.ReceivedQuantity > 0 ||
+            productVariant.AvailableQuantity > 0 ||
+            productVariant.ReservedQuantity > 0))
         {
             throw new AppBadRequestException("No se puede modificar productos de una orden que ya tiene inventario recibido o reservado.");
         }
@@ -770,7 +770,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
     private async Task<Order> GetOrderForShortageUpdateAsync(int id)
     {
         return await _context.Orders
-            .Include(order => order.Products)
+            .Include(order => order.ProductVariants)
             .Include(order => order.PurchaseShortages)
             .Include(order => order.SupplierRefund)
             .FirstOrDefaultAsync(order => order.Id == id)
@@ -825,10 +825,10 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             };
         }
 
-        orderDto.ProductDetails = order.Products
-            .Where(product => product.ProductDetail != null)
-            .GroupBy(product => product.ProductDetail!)
-            .Select(group => new OrderProductDetailDTO
+        orderDto.Products = order.ProductVariants
+            .Where(productVariant => productVariant.Product != null)
+            .GroupBy(productVariant => productVariant.Product!)
+            .Select(group => new OrderProductDTO
             {
                 Id = group.Key.Id,
                 SupplierProductCode = group.Key.SupplierProductCode,
@@ -837,28 +837,28 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                 SubcategoryId = group.Key.SubcategoryId,
                 SubcategoryName = group.Key.Subcategory?.Name,
                 Variants = group
-                    .OrderBy(product => product.Size != null ? product.Size.DisplayOrder : 0)
-                    .ThenBy(product => product.Variant)
-                    .Select(product => new OrderProductVariantDTO
+                    .OrderBy(productVariant => productVariant.Size != null ? productVariant.Size.DisplayOrder : 0)
+                    .ThenBy(productVariant => productVariant.Variant)
+                    .Select(productVariant => new OrderProductVariantDTO
                     {
-                        Id = product.Id,
-                        SizeId = product.SizeId,
-                        SizeName = product.Size?.Name,
-                        Variant = product.Variant,
-                        Quantity = product.Quantity,
-                        ReceivedQuantity = product.ReceivedQuantity,
-                        AvailableQuantity = product.AvailableQuantity,
-                        ReservedQuantity = product.ReservedQuantity,
-                        UnitCostUsd = product.UnitCostUsd,
-                        MerchandiseTotalCostNio = product.MerchandiseTotalCostNio,
-                        AllocatedShippingCostNio = product.AllocatedShippingCostNio,
-                        TotalCostNio = product.TotalCostNio,
-                        UnitCostNio = product.UnitCostNio,
-                        SalePrice = product.SalePrice
+                        Id = productVariant.Id,
+                        SizeId = productVariant.SizeId,
+                        SizeName = productVariant.Size?.Name,
+                        Variant = productVariant.Variant,
+                        Quantity = productVariant.Quantity,
+                        ReceivedQuantity = productVariant.ReceivedQuantity,
+                        AvailableQuantity = productVariant.AvailableQuantity,
+                        ReservedQuantity = productVariant.ReservedQuantity,
+                        UnitCostUsd = productVariant.UnitCostUsd,
+                        MerchandiseTotalCostNio = productVariant.MerchandiseTotalCostNio,
+                        AllocatedShippingCostNio = productVariant.AllocatedShippingCostNio,
+                        TotalCostNio = productVariant.TotalCostNio,
+                        UnitCostNio = productVariant.UnitCostNio,
+                        SalePrice = productVariant.SalePrice
                     })
                     .ToList()
             })
-            .OrderBy(productDetail => productDetail.Code)
+            .OrderBy(product => product.Code)
             .ToList();
 
         return orderDto;
@@ -943,14 +943,14 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
     private static void NormalizeOrderFields(CreateOrderDTO orderDTO)
     {
         orderDTO.Comments = orderDTO.Comments.NormalizeOptional();
-        orderDTO.ProductDetails ??= [];
+        orderDTO.Products ??= [];
 
-        foreach (var productDetail in orderDTO.ProductDetails)
+        foreach (var product in orderDTO.Products)
         {
-            productDetail.SupplierProductCode = productDetail.SupplierProductCode.NormalizeRequired("Código de proveedor");
-            productDetail.Name = productDetail.Name.NormalizeRequired("Nombre");
+            product.SupplierProductCode = product.SupplierProductCode.NormalizeRequired("Código de proveedor");
+            product.Name = product.Name.NormalizeRequired("Nombre");
 
-            foreach (var variant in productDetail.Variants)
+            foreach (var variant in product.Variants)
             {
                 variant.Variant = variant.Variant.NormalizeOptional();
             }
@@ -962,12 +962,12 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         trackingDTO.TrackingNumber = trackingDTO.TrackingNumber.NormalizeRequired("Número de tracking");
     }
 
-    private sealed record CreatedProductDetails(
-        List<ProductDetail> ProductDetails,
+    private sealed record CreatedProducts(
+        List<Product> Products,
         List<ProductPurchaseCost> ProductCosts);
 
     private sealed record ProductPurchaseCost(
-        Product Product,
+        ProductVariant ProductVariant,
         decimal UnitCostInPurchaseCurrency);
 
     private sealed record OrderTotals(

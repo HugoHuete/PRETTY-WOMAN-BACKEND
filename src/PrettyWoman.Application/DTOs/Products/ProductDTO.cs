@@ -1,6 +1,6 @@
 namespace PrettyWoman.Application.DTOs.Products;
 
-public class ProductDetailDTO
+public class ProductDTO
 {
     public int Id { get; set; }
     public required string SupplierProductCode { get; set; }
@@ -11,5 +11,5 @@ public class ProductDetailDTO
     public int? CategoryId { get; set; }
     public string? CategoryName { get; set; }
     public string? PrimaryImageUrl { get; set; }
-    public List<ProductVariantDTO> Products { get; set; } = [];
+    public List<ProductVariantDTO> Variants { get; set; } = [];
 }

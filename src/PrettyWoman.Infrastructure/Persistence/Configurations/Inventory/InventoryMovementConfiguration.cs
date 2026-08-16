@@ -10,7 +10,7 @@ public class InventoryMovementConfiguration : IEntityTypeConfiguration<Inventory
     {
         builder.Property(x => x.Comments).HasMaxLength(500);
 
-        builder.HasOne(x => x.Product).WithMany(x => x.InventoryMovements).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.ProductVariant).WithMany(x => x.InventoryMovements).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.InventoryMovementType).WithMany().HasForeignKey(x => x.InventoryMovementTypeId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.FromStockBucket).WithMany().HasForeignKey(x => x.FromStockBucketId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.ToStockBucket).WithMany().HasForeignKey(x => x.ToStockBucketId).OnDelete(DeleteBehavior.Restrict);

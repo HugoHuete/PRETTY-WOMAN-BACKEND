@@ -68,8 +68,8 @@ Puede trabajar con:
 | Autenticacion | Login | Admin, Vendedor | Iniciar sesion | Credenciales | `POST /api/v1/auth/login` |
 | Autenticacion | Usuarios | Admin | Crear usuario, desbloquear usuario | Usuarios, roles/permisos | `POST /api/v1/auth/users`, `POST /api/v1/auth/users/{id}/unlock` |
 | Dashboard | Resumen | Admin, Vendedor | Ver ventas, pagos, reservas, entregas e incidencias | Ventas, cobros, reservas, entregas e incidencias; el bloque financiero es exclusivo de Admin | `GET /api/v1/dashboard/summary` |
-| Productos | Lista de productos | Admin, Vendedor | Buscar, filtrar, paginar, abrir detalle | Productos, categoria, subcategoria, talla, stock | `GET /api/v1/product-details` |
-| Productos | Detalle de producto | Admin, Vendedor | Ver informacion completa, disponibilidad, imágenes e historial | Producto, variantes/detalle, stock, imágenes, movimientos | `GET /api/v1/product-details/{productDetailId}`, rutas de imágenes e inventario del detalle |
+| Productos | Lista de productos | Admin, Vendedor | Buscar, filtrar, paginar, abrir detalle | Productos, categoria, subcategoria, talla, stock | `GET /api/v1/products` |
+| Productos | Detalle de producto | Admin, Vendedor | Ver informacion completa, disponibilidad, imágenes e historial | Producto, variantes, stock, imágenes, movimientos | `GET /api/v1/products/{productId}`, rutas de imágenes e inventario del producto |
 | Catalogos | Categorias | Admin | Listar, crear, editar | Categorias | `GET /api/v1/categories`, `POST /api/v1/categories`, `PUT /api/v1/categories/{id}` |
 | Catalogos | Subcategorias | Admin | Listar, filtrar por categoria, crear, editar | Subcategorias, categorias | `GET /api/v1/subcategories`, `GET /api/v1/categories/{id}/subcategories`, `POST /api/v1/subcategories`, `PUT /api/v1/subcategories/{id}` |
 | Catalogos | Tallas | Admin | Listar, crear, editar | Tallas | `GET /api/v1/sizes`, `POST /api/v1/sizes`, `PUT /api/v1/sizes/{id}` |
@@ -253,13 +253,13 @@ Las acciones de imágenes e historial están disponibles para Admin y Vendedor d
 
 | Flujo | Endpoint | Request / resultado |
 |---|---|---|
-| Consultar imagen | `GET /api/v1/product-details/{productDetailId}/images/{imageId}` | Devuelve `{ id, thumbnailUrl, webUrl, isPrimary, sortOrder }`. |
-| Subir imagen | `POST /api/v1/product-details/{productDetailId}/images` | `multipart/form-data`, campo `file`; máximo 8 MB. Devuelve la imagen creada. |
-| Ordenar y seleccionar portada | `PUT /api/v1/product-details/{productDetailId}/images` | `{ "primaryImageId": 10, "imageIdsInOrder": [10, 11, 12] }`; devuelve la colección ordenada. |
-| Eliminar imagen | `DELETE /api/v1/product-details/{productDetailId}/images/{imageId}` | Devuelve `204`. Pedir confirmación. |
-| Historial del detalle | `GET /api/v1/product-details/{productDetailId}/inventory-movements` | Devuelve movimientos de todas las variantes del detalle. |
-| Historial de variante | `GET /api/v1/product-details/{productDetailId}/variants/{productId}/inventory-movements` | Devuelve movimientos de una variante. |
-| Actualizar precio de variante | `PATCH /api/v1/product-details/{productDetailId}/variants/{productId}/price` | Recibe `{ "salePrice": 750 }`; `salePrice` debe ser mayor que cero. Actualiza solo el precio actual de la variante y devuelve `204 No Content`. Las ventas existentes conservan sus precios históricos. |
+| Consultar imagen | `GET /api/v1/products/{productId}/images/{imageId}` | Devuelve `{ id, thumbnailUrl, webUrl, isPrimary, sortOrder }`. |
+| Subir imagen | `POST /api/v1/products/{productId}/images` | `multipart/form-data`, campo `file`; máximo 8 MB. Devuelve la imagen creada. |
+| Ordenar y seleccionar portada | `PUT /api/v1/products/{productId}/images` | `{ "primaryImageId": 10, "imageIdsInOrder": [10, 11, 12] }`; devuelve la colección ordenada. |
+| Eliminar imagen | `DELETE /api/v1/products/{productId}/images/{imageId}` | Devuelve `204`. Pedir confirmación. |
+| Historial del producto | `GET /api/v1/products/{productId}/inventory-movements` | Devuelve movimientos de todas las variantes del producto. |
+| Historial de variante | `GET /api/v1/products/{productId}/variants/{productVariantId}/inventory-movements` | Devuelve movimientos de una variante. |
+| Actualizar precio de variante | `PATCH /api/v1/products/{productId}/variants/{productVariantId}/price` | Recibe `{ "salePrice": 750 }`; `salePrice` debe ser mayor que cero. Actualiza solo el precio actual de la variante y devuelve `204 No Content`. Las ventas existentes conservan sus precios históricos. |
 
 Después de subir, ordenar o eliminar, actualizar la colección con la respuesta o recargar el detalle. Usar `thumbnailUrl` en listas y `webUrl` para vista ampliada.
 
@@ -304,9 +304,9 @@ La respuesta paginada tiene la forma:
 }
 ```
 
-Los elementos de `items` son resúmenes: **no incluyen `products`**. Usarlos para la tabla, el filtro y la paginación sin solicitar ni asumir el detalle de prendas.
+Los elementos de `items` son resúmenes: **no incluyen `productVariants`**. Usarlos para la tabla, el filtro y la paginación sin solicitar ni asumir el detalle de prendas.
 
-Para abrir o editar una campaña, `GET /api/v1/discountcampaigns/{id}` mantiene la respuesta de detalle `DiscountCampaignDTO`, que **sí incluye `products`**, `statusId` y `statusName`. Cada producto contiene `id`, `productDetailId`, `productName`, `productCode`, `discountTypeId`, `discountTypeName` y `discountValue`.
+Para abrir o editar una campaña, `GET /api/v1/discountcampaigns/{id}` mantiene la respuesta de detalle `DiscountCampaignDTO`, que **sí incluye `productVariants`**, `statusId` y `statusName`. Cada producto contiene `id`, `productId`, `productName`, `productCode`, `discountTypeId`, `discountTypeName` y `discountValue`.
 
 Para cancelar usar `PATCH /api/v1/discountcampaigns/{id}/cancel`; para reactivar, `PATCH /api/v1/discountcampaigns/{id}/reactivate`. Ambos devuelven `204 No Content`. Reactivar elimina la cancelación, pero no fuerza `Active`: el backend vuelve a calcular el estado según las fechas, por lo que puede resultar `Scheduled`, `Active` o `Finished`.
 
@@ -479,7 +479,7 @@ Respuesta paginada:
         {
           "id": 33,
           "productId": 123,
-          "productDetailId": 45,
+          "productId": 45,
           "productName": "Vestido floral",
           "productCode": 10045,
           "sizeId": 2,
