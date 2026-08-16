@@ -8,7 +8,7 @@ Registrar una compra al proveedor junto con los artículos comprados y sus varia
 
 - Se hizo una compra nueva a un proveedor.
 - La compra incluye uno o varios modelos de ropa.
-- Cada modelo puede traer varias tallas y/o colores.
+- Cada modelo puede traer varias tallas y/o variantes.
 - La mercadería todavía no ha sido recibida físicamente.
 
 ## Tablas involucradas
@@ -27,7 +27,7 @@ Registrar una compra al proveedor junto con los artículos comprados y sus varia
 2. Crear la orden en estado `Pending`.
 3. Crear un `product_detail` por cada modelo/artículo comprado.
 4. Generar `product_details.code` en backend usando el siguiente consecutivo interno.
-5. Crear un `product` por cada variante de talla/color.
+5. Crear un `product` por cada combinación de talla y variante.
 6. Inicializar `received_quantity`, `available_quantity`, `reserved_quantity` y `unavailable_quantity` en `0`.
 7. Obtener la tasa de cambio bancaria habilitada para conservar equivalencias históricas entre USD y NIO.
 8. Calcular totales de orden a partir de las variantes.
@@ -50,14 +50,14 @@ Registrar una compra al proveedor junto con los artículos comprados y sus varia
       "variants": [
         {
           "sizeId": 1,
-          "color": "Azul",
+          "variant": "Azul",
           "quantity": 2,
           "unitCost": 8.5,
           "salePrice": 650
         },
         {
           "sizeId": 2,
-          "color": "Azul",
+          "variant": "Azul",
           "quantity": 3,
           "unitCost": 8.5,
           "salePrice": 650
@@ -90,7 +90,7 @@ Estos valores se calculan en backend.
 
 - Una orden puede crearse sin `productDetails` cuando la lista de productos todavía no está disponible.
 - Si se envía un `product_detail`, debe traer al menos una variante `product`.
-- No se permiten variantes duplicadas dentro del mismo `product_detail` para la misma talla y color.
+- No se permiten variantes duplicadas dentro del mismo `product_detail` para la misma talla y variante.
 - `purchaseCurrencyId = 1` representa compra en USD.
 - `purchaseCurrencyId = 2` representa compra local en NIO.
 - El frontend no envía `exchangeRate`; el backend la calcula.
@@ -149,5 +149,3 @@ Para conservar el código interno del negocio, cada `product_detail` existente d
 ```
 
 El backend conserva `product_details.code` para ese `id`. Solo los `product_details` nuevos, enviados sin `id`, reciben un código consecutivo nuevo.
-
-

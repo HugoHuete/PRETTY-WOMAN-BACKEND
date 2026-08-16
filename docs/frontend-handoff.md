@@ -483,7 +483,7 @@ Respuesta paginada:
           "productCode": 10045,
           "sizeId": 2,
           "sizeName": "M",
-          "color": "Rojo",
+          "variant": "Rojo",
           "fromStockBucketId": 2,
           "fromStockBucketName": "Available",
           "toStockBucketId": 5,

@@ -206,7 +206,7 @@ public class ProductInventoryIssueService(
             ProductCode = issue.Product != null && issue.Product.ProductDetail != null ? issue.Product.ProductDetail.Code : null,
             SizeId = issue.Product != null ? issue.Product.SizeId : 0,
             SizeName = issue.Product != null && issue.Product.Size != null ? issue.Product.Size.Name : null,
-            Color = issue.Product != null ? issue.Product.Color : null,
+            Variant = issue.Product != null ? issue.Product.Variant : null,
             ProductInventoryIssueTypeId = issue.ProductInventoryIssueTypeId,
             ProductInventoryIssueTypeName = issue.ProductInventoryIssueType != null ? issue.ProductInventoryIssueType.Name : null,
             ProductInventoryIssueStatusId = issue.ProductInventoryIssueStatusId,

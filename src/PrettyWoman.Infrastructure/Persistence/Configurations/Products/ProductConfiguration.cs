@@ -14,7 +14,7 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(p => p.TotalCostNio).HasPrecision(14, 2);
         builder.Property(p => p.UnitCostNio).HasPrecision(18, 6);
         builder.Property(p => p.SalePrice).HasPrecision(12, 2);
-        builder.Property(x => x.Color).HasMaxLength(50);
+        builder.Property(x => x.Variant).HasMaxLength(50);
 
         builder.HasOne(x => x.Size).WithMany().HasForeignKey(x => x.SizeId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Order).WithMany(x => x.Products).HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Restrict);
@@ -24,7 +24,7 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         {
             x.ProductDetailId,
             x.SizeId,
-            x.Color
+            x.Variant
         });
 
         builder.ToTable(t =>

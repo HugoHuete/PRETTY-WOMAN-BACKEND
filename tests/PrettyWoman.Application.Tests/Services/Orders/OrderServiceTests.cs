@@ -256,7 +256,7 @@ public class OrderServiceTests
                         new CreateOrderProductVariantDTO
                         {
                             SizeId = 1,
-                            Color = "Negro",
+                            Variant = "Negro",
                             Quantity = 2,
                             UnitCost = 250m,
                             SalePrice = 600m
@@ -374,7 +374,7 @@ public class OrderServiceTests
                         new CreateOrderProductVariantDTO
                         {
                             SizeId = 1,
-                            Color = "Azul",
+                            Variant = "Azul",
                             Quantity = 2,
                             UnitCost = 8m,
                             SalePrice = 600m
@@ -428,7 +428,7 @@ public class OrderServiceTests
                         new CreateOrderProductVariantDTO
                         {
                             SizeId = 1,
-                            Color = "Azul",
+                            Variant = "Azul",
                             Quantity = 2,
                             UnitCost = 8m,
                             SalePrice = 600m
@@ -470,7 +470,7 @@ public class OrderServiceTests
                         new CreateOrderProductVariantDTO
                         {
                             SizeId = 1,
-                            Color = "Azul",
+                            Variant = "Azul",
                             Quantity = 3,
                             UnitCost = 9m,
                             SalePrice = 650m
@@ -519,7 +519,7 @@ public class OrderServiceTests
                         new CreateOrderProductVariantDTO
                         {
                             SizeId = 1,
-                            Color = "Azul",
+                            Variant = "Azul",
                             Quantity = 1,
                             UnitCost = 8m,
                             SalePrice = 600m
@@ -618,7 +618,7 @@ public class OrderServiceTests
                         new CreateOrderProductVariantDTO
                         {
                             SizeId = 1,
-                            Color = "Azul",
+                            Variant = "Azul",
                             Quantity = 2,
                             UnitCost = 8m,
                             SalePrice = 600m

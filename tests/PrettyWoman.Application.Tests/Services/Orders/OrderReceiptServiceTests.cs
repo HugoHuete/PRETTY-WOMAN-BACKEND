@@ -443,7 +443,7 @@ public class OrderReceiptServiceTests
                         new CreateOrderProductVariantDTO
                         {
                             SizeId = 1,
-                            Color = "Azul",
+                            Variant = "Azul",
                             Quantity = quantity,
                             UnitCost = 8m,
                             SalePrice = 600m
@@ -474,7 +474,7 @@ public class OrderReceiptServiceTests
                         new CreateOrderProductVariantDTO
                         {
                             SizeId = 1,
-                            Color = "Azul",
+                            Variant = "Azul",
                             Quantity = 1,
                             UnitCost = 10m,
                             SalePrice = 600m
@@ -491,7 +491,7 @@ public class OrderReceiptServiceTests
                         new CreateOrderProductVariantDTO
                         {
                             SizeId = 1,
-                            Color = "Rojo",
+                            Variant = "Rojo",
                             Quantity = 1,
                             UnitCost = 10m,
                             SalePrice = 900m

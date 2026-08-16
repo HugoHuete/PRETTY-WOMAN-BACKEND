@@ -64,7 +64,7 @@ Razón: operativamente se abren todas las cajas y luego se separa por producto.
 Por tanto:
 
 * `order_tracking_numbers` registra los paquetes.
-* `products` registra lo comprado por producto, talla y color.
+* `products` registra lo comprado por producto, talla y variante.
 * La recepción real se registra por producto, no por tracking.
 
 ## Regla: una orden puede tener varios tracking numbers
@@ -299,7 +299,7 @@ Por tanto, al crear una orden se deben registrar también los `product_details` 
 `products` representa las variantes vendibles de ese modelo:
 
 * talla
-* color
+* variante
 * cantidad comprada
 * costo unitario en la moneda de compra
 * precio de venta

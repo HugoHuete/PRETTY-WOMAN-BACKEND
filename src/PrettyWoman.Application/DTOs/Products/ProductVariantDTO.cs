@@ -7,7 +7,7 @@ public class ProductVariantDTO
     public string? SizeName { get; set; }
     public int? SizeGroupId { get; set; }
     public string? SizeGroupName { get; set; }
-    public string? Color { get; set; }
+    public string? Variant { get; set; }
     public int Quantity { get; set; }
     public int ReceivedQuantity { get; set; }
     public int AvailableQuantity { get; set; }

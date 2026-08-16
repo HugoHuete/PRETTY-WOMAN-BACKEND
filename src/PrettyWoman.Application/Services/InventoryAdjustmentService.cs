@@ -266,7 +266,7 @@ public class InventoryAdjustmentService(
                 ProductCode = item.Product?.ProductDetail?.Code,
                 SizeId = item.Product?.SizeId ?? 0,
                 SizeName = item.Product?.Size?.Name,
-                Color = item.Product?.Color,
+                Variant = item.Product?.Variant,
                 FromStockBucketId = item.FromStockBucketId,
                 FromStockBucketName = item.FromStockBucket?.Name,
                 ToStockBucketId = item.ToStockBucketId,

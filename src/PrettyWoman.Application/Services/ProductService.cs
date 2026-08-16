@@ -119,7 +119,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
                 ProductCode = movement.Product.ProductDetail != null ? movement.Product.ProductDetail.Code : null,
                 SizeId = movement.Product.SizeId,
                 SizeName = movement.Product.Size != null ? movement.Product.Size.Name : null,
-                Color = movement.Product.Color,
+                Variant = movement.Product.Variant,
                 MovementDate = movement.MovementDate,
                 InventoryMovementTypeId = movement.InventoryMovementTypeId,
                 InventoryMovementTypeName = movement.InventoryMovementType != null ? movement.InventoryMovementType.Name : null,
@@ -197,7 +197,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
                         (query.Availability.Value == ProductAvailabilityFilter.Reserved && product.ReservedQuantity > 0) ||
                         (query.Availability.Value == ProductAvailabilityFilter.Unavailable && product.UnavailableQuantity > 0)))
                 .OrderBy(product => product.Size?.DisplayOrder ?? 0)
-                .ThenBy(product => product.Color)
+                .ThenBy(product => product.Variant)
                 .Select(product => MapProductVariant(productDetail, product, now))
                 .ToList()
         };
@@ -228,7 +228,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             SizeName = product.Size?.Name,
             SizeGroupId = product.Size?.SizeGroupId,
             SizeGroupName = product.Size?.SizeGroup?.Name,
-            Color = product.Color,
+            Variant = product.Variant,
             Quantity = product.Quantity,
             ReceivedQuantity = product.ReceivedQuantity,
             AvailableQuantity = product.AvailableQuantity,

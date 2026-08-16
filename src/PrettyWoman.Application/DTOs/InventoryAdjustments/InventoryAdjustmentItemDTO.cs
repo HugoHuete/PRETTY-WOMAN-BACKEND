@@ -9,7 +9,7 @@ public class InventoryAdjustmentItemDTO
     public int? ProductCode { get; set; }
     public int SizeId { get; set; }
     public string? SizeName { get; set; }
-    public string? Color { get; set; }
+    public string? Variant { get; set; }
     public int FromStockBucketId { get; set; }
     public string? FromStockBucketName { get; set; }
     public int ToStockBucketId { get; set; }

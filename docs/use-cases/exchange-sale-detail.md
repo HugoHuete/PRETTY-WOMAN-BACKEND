@@ -7,7 +7,7 @@ Registrar el cambio de un producto vendido por otra talla u otro producto.
 ## Cuándo aplica
 
 - Cambio por otra talla.
-- Cambio por otro color.
+- Cambio por otra variante.
 - Cambio por otro producto.
 - Cambio con pago de diferencia.
 - Cambio con devolución parcial.

@@ -9,7 +9,7 @@ public class ProductInventoryMovementDTO
     public int? ProductCode { get; set; }
     public int SizeId { get; set; }
     public string? SizeName { get; set; }
-    public string? Color { get; set; }
+    public string? Variant { get; set; }
     public DateTime MovementDate { get; set; }
     public int InventoryMovementTypeId { get; set; }
     public string? InventoryMovementTypeName { get; set; }

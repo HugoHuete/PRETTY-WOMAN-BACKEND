@@ -9,7 +9,7 @@ public class ProductInventoryIssueDTO
     public int? ProductCode { get; set; }
     public int SizeId { get; set; }
     public string? SizeName { get; set; }
-    public string? Color { get; set; }
+    public string? Variant { get; set; }
     public int ProductInventoryIssueTypeId { get; set; }
     public string? ProductInventoryIssueTypeName { get; set; }
     public int ProductInventoryIssueStatusId { get; set; }

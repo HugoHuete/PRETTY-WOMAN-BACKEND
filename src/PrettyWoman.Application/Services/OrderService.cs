@@ -573,7 +573,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                 .GroupBy(variant => new
                 {
                     variant.SizeId,
-                    Color = variant.Color.NormalizeOptional()?.ToLower()
+                    Variant = variant.Variant.NormalizeOptional()?.ToLower()
                 })
                 .FirstOrDefault(group => group.Count() > 1);
 
@@ -614,7 +614,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                 {
                     ProductDetail = productDetail,
                     SizeId = variant.SizeId,
-                    Color = variant.Color.NormalizeOptional(),
+                    Variant = variant.Variant.NormalizeOptional(),
                     Quantity = variant.Quantity,
                     ReceivedQuantity = 0,
                     AvailableQuantity = 0,
@@ -838,13 +838,13 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                 SubcategoryName = group.Key.Subcategory?.Name,
                 Variants = group
                     .OrderBy(product => product.Size != null ? product.Size.DisplayOrder : 0)
-                    .ThenBy(product => product.Color)
+                    .ThenBy(product => product.Variant)
                     .Select(product => new OrderProductVariantDTO
                     {
                         Id = product.Id,
                         SizeId = product.SizeId,
                         SizeName = product.Size?.Name,
-                        Color = product.Color,
+                        Variant = product.Variant,
                         Quantity = product.Quantity,
                         ReceivedQuantity = product.ReceivedQuantity,
                         AvailableQuantity = product.AvailableQuantity,
@@ -952,7 +952,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
 
             foreach (var variant in productDetail.Variants)
             {
-                variant.Color = variant.Color.NormalizeOptional();
+                variant.Variant = variant.Variant.NormalizeOptional();
             }
         }
     }

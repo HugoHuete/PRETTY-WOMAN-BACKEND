@@ -32,6 +32,7 @@ public class ProductServiceTests
         Assert.Equal("Pantalon cargo", productDetail.Name);
         Assert.Equal("pantalon-primary.jpg", productDetail.PrimaryImageUrl);
         Assert.Equal(2, product.SizeId);
+        Assert.Equal("Negro", product.Variant);
         Assert.Equal(1, product.UnavailableQuantity);
     }
 
@@ -260,8 +261,8 @@ public class ProductServiceTests
             ],
             Products =
             [
-                new Product { SizeId = 1, Quantity = 3, ReceivedQuantity = 3, AvailableQuantity = 2, SalePrice = 650m },
-                new Product { SizeId = 2, Quantity = 1, ReceivedQuantity = 1, UnavailableQuantity = 1, SalePrice = 650m }
+                new Product { SizeId = 1, Variant = "Negro", Quantity = 3, ReceivedQuantity = 3, AvailableQuantity = 2, SalePrice = 650m },
+                new Product { SizeId = 2, Variant = "Negro", Quantity = 1, ReceivedQuantity = 1, UnavailableQuantity = 1, SalePrice = 650m }
             ]
         };
 
@@ -274,7 +275,7 @@ public class ProductServiceTests
             SubcategoryId = 2,
             Products =
             [
-                new Product { SizeId = 1, Quantity = 1, ReceivedQuantity = 1, ReservedQuantity = 1, SalePrice = 500m }
+                new Product { SizeId = 1, Variant = "Rayas", Quantity = 1, ReceivedQuantity = 1, ReservedQuantity = 1, SalePrice = 500m }
             ]
         };
 
@@ -287,7 +288,7 @@ public class ProductServiceTests
             SubcategoryId = 3,
             Products =
             [
-                new Product { SizeId = 2, Quantity = 1, ReceivedQuantity = 1, UnavailableQuantity = 1, SalePrice = 900m }
+                new Product { SizeId = 2, Variant = "Tacón", Quantity = 1, ReceivedQuantity = 1, UnavailableQuantity = 1, SalePrice = 900m }
             ]
         };
 
