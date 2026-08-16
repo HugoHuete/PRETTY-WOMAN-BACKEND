@@ -29,6 +29,16 @@ public class ProductDetailsController(IProductService productService, IProductIm
         return Ok(product);
     }
 
+    [HttpPatch("{productDetailId:int}/variants/{productId:int}/price")]
+    public async Task<IActionResult> UpdatePrice(
+        int productDetailId,
+        int productId,
+        UpdateProductPriceDTO request)
+    {
+        await _productService.UpdatePriceAsync(productDetailId, productId, request);
+        return NoContent();
+    }
+
     [HttpGet("{productDetailId:int}/images/{imageId:int}")]
     public async Task<ActionResult<ProductImageDTO>> GetImageById(int productDetailId, int imageId, CancellationToken cancellationToken)
     {

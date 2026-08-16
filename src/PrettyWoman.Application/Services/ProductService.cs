@@ -74,6 +74,16 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
         return MapProductDetail(productDetail, new ProductQueryDTO(), DateTime.UtcNow);
     }
 
+    public async Task UpdatePriceAsync(int productDetailId, int productId, UpdateProductPriceDTO request)
+    {
+        var product = await _context.Products
+            .FirstOrDefaultAsync(product => product.Id == productId && product.ProductDetailId == productDetailId)
+            ?? throw new AppNotFoundException($"La variante con id '{productId}' no existe para el producto con id '{productDetailId}'.");
+
+        product.SalePrice = request.SalePrice;
+        await _context.SaveChangesAsync();
+    }
+
     public async Task<IEnumerable<ProductInventoryMovementDTO>> GetInventoryMovementsAsync(int productDetailId, int? productId = null)
     {
         var productDetailExists = await _context.ProductDetails

@@ -157,6 +157,79 @@ public class ProductServiceTests
     }
 
     [Fact]
+    public async Task UpdatePriceAsync_UpdatesOnlyTheRequestedVariant()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var service = CreateService(context);
+
+        await service.UpdatePriceAsync(1, 1, new UpdateProductPriceDTO { SalePrice = 750m });
+
+        Assert.Equal(750m, await context.Products
+            .Where(product => product.Id == 1)
+            .Select(product => product.SalePrice)
+            .SingleAsync());
+        Assert.Equal(650m, await context.Products
+            .Where(product => product.Id == 2)
+            .Select(product => product.SalePrice)
+            .SingleAsync());
+    }
+
+    [Fact]
+    public async Task UpdatePriceAsync_ThrowsWhenVariantDoesNotExist()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var service = CreateService(context);
+
+        var exception = await Assert.ThrowsAsync<AppNotFoundException>(() =>
+            service.UpdatePriceAsync(1, 999, new UpdateProductPriceDTO { SalePrice = 750m }));
+
+        Assert.Equal("La variante con id '999' no existe para el producto con id '1'.", exception.Message);
+    }
+
+    [Fact]
+    public async Task UpdatePriceAsync_ThrowsWhenVariantBelongsToAnotherProductDetail()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var service = CreateService(context);
+
+        var exception = await Assert.ThrowsAsync<AppNotFoundException>(() =>
+            service.UpdatePriceAsync(2, 1, new UpdateProductPriceDTO { SalePrice = 750m }));
+
+        Assert.Equal("La variante con id '1' no existe para el producto con id '2'.", exception.Message);
+    }
+
+    [Fact]
+    public async Task UpdatePriceAsync_DoesNotChangeHistoricalSalePrice()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var saleProduct = new SaleProduct
+        {
+            ProductId = 1,
+            Quantity = 1,
+            UnitCostAtSale = 400m,
+            OriginalUnitPrice = 500m,
+            FinalUnitPrice = 500m,
+            LineTotal = 500m,
+            TotalCostAtSale = 400m,
+            GrossProfit = 100m
+        };
+        context.Sales.Add(new Sale { UserId = "seller", Products = [saleProduct] });
+        await context.SaveChangesAsync();
+        var service = CreateService(context);
+
+        await service.UpdatePriceAsync(1, 1, new UpdateProductPriceDTO { SalePrice = 750m });
+
+        var persistedSaleProduct = await context.SaleProducts.SingleAsync();
+        Assert.Equal(500m, persistedSaleProduct.OriginalUnitPrice);
+        Assert.Equal(500m, persistedSaleProduct.FinalUnitPrice);
+        Assert.Equal(750m, await context.Products.Where(product => product.Id == 1).Select(product => product.SalePrice).SingleAsync());
+    }
+
+    [Fact]
     public async Task GetInventoryMovementsAsync_ReturnsMovementsForAllProductDetailVariants()
     {
         await using var context = CreateContext();

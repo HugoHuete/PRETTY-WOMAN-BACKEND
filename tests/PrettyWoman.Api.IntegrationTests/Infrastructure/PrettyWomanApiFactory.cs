@@ -159,7 +159,7 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
         context.Products.Add(product);
         await context.SaveChangesAsync();
 
-        return new SeededProduct(order.Id, product.Id);
+        return new SeededProduct(order.Id, detail.Id, product.Id);
     }
 
     public async Task<ProductStock> GetProductStockAsync(int productId)
@@ -201,7 +201,7 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
         Environment.SetEnvironmentVariable(name, value);
     }
 
-    public sealed record SeededProduct(int OrderId, int ProductId);
+    public sealed record SeededProduct(int OrderId, int ProductDetailId, int ProductId);
     public sealed record ProductStock(int ReceivedQuantity, int AvailableQuantity, int ReservedQuantity, int UnavailableQuantity);
     public sealed record DeliveryLocation(int MunicipalityId, int DeliveryAgencyId);
 }

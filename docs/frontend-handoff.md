@@ -259,6 +259,7 @@ Las acciones de imágenes e historial están disponibles para Admin y Vendedor d
 | Eliminar imagen | `DELETE /api/v1/product-details/{productDetailId}/images/{imageId}` | Devuelve `204`. Pedir confirmación. |
 | Historial del detalle | `GET /api/v1/product-details/{productDetailId}/inventory-movements` | Devuelve movimientos de todas las variantes del detalle. |
 | Historial de variante | `GET /api/v1/product-details/{productDetailId}/variants/{productId}/inventory-movements` | Devuelve movimientos de una variante. |
+| Actualizar precio de variante | `PATCH /api/v1/product-details/{productDetailId}/variants/{productId}/price` | Recibe `{ "salePrice": 750 }`; `salePrice` debe ser mayor que cero. Actualiza solo el precio actual de la variante y devuelve `204 No Content`. Las ventas existentes conservan sus precios históricos. |
 
 Después de subir, ordenar o eliminar, actualizar la colección con la respuesta o recargar el detalle. Usar `thumbnailUrl` en listas y `webUrl` para vista ampliada.
 
