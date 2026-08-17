@@ -30,6 +30,7 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
                 .Select(productVariant => new DiscountCampaignProduct
                 {
                     ProductId = productVariant.ProductId,
+                    ProductVariantId = productVariant.ProductVariantId,
                     DiscountTypeId = productVariant.DiscountTypeId,
                     DiscountValue = productVariant.DiscountValue
                 })
@@ -57,21 +58,21 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         discountCampaign.StartDate = updateDiscountCampaignDTO.StartDate;
         discountCampaign.EndDate = updateDiscountCampaignDTO.EndDate;
 
-        var existingProductsByProductId = discountCampaign.DiscountCampaignProducts
-            .ToDictionary(productVariant => productVariant.ProductId);
-        var requestedProductIds = updateDiscountCampaignDTO.ProductVariants
-            .Select(productVariant => productVariant.ProductId)
+        var existingProductsByTarget = discountCampaign.DiscountCampaignProducts
+            .ToDictionary(GetTargetKey);
+        var requestedTargets = updateDiscountCampaignDTO.ProductVariants
+            .Select(GetTargetKey)
             .ToHashSet();
 
         var productsToRemove = discountCampaign.DiscountCampaignProducts
-            .Where(productVariant => !requestedProductIds.Contains(productVariant.ProductId))
+            .Where(productVariant => !requestedTargets.Contains(GetTargetKey(productVariant)))
             .ToList();
 
         _context.DiscountCampaignProducts.RemoveRange(productsToRemove);
 
         foreach (var productVariant in updateDiscountCampaignDTO.ProductVariants)
         {
-            if (existingProductsByProductId.TryGetValue(productVariant.ProductId, out var existingProduct))
+            if (existingProductsByTarget.TryGetValue(GetTargetKey(productVariant), out var existingProduct))
             {
                 existingProduct.DiscountTypeId = productVariant.DiscountTypeId;
                 existingProduct.DiscountValue = productVariant.DiscountValue;
@@ -81,6 +82,7 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             discountCampaign.DiscountCampaignProducts.Add(new DiscountCampaignProduct
             {
                 ProductId = productVariant.ProductId,
+                ProductVariantId = productVariant.ProductVariantId,
                 DiscountTypeId = productVariant.DiscountTypeId,
                 DiscountValue = productVariant.DiscountValue
             });
@@ -175,6 +177,12 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             .Include(campaign => campaign.DiscountCampaignProducts)
                 .ThenInclude(productVariant => productVariant.Product)
             .Include(campaign => campaign.DiscountCampaignProducts)
+                .ThenInclude(productVariant => productVariant.ProductVariant)
+                    .ThenInclude(productVariant => productVariant!.Size)
+            .Include(campaign => campaign.DiscountCampaignProducts)
+                .ThenInclude(productVariant => productVariant.ProductVariant)
+                    .ThenInclude(productVariant => productVariant!.Product)
+            .Include(campaign => campaign.DiscountCampaignProducts)
                 .ThenInclude(productVariant => productVariant.DiscountType)
             .FirstOrDefaultAsync(campaign => campaign.Id == id)
             ?? throw new AppNotFoundException($"La campania de descuento con id '{id}' no existe.");
@@ -218,13 +226,17 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             CreatedById = campaign.CreatedById,
             UpdatedById = campaign.UpdatedById,
             ProductVariants = campaign.DiscountCampaignProducts
-                .OrderBy(productVariant => productVariant.Product?.Name ?? string.Empty)
+                .OrderBy(productVariant => productVariant.Product?.Name ?? productVariant.ProductVariant?.Product?.Name ?? string.Empty)
                 .Select(productVariant => new DiscountCampaignProductDTO
                 {
                     Id = productVariant.Id,
-                    ProductId = productVariant.ProductId,
-                    ProductName = productVariant.Product?.Name,
-                    ProductCode = productVariant.Product?.Code,
+                    ProductId = productVariant.ProductId ?? productVariant.ProductVariant?.ProductId,
+                    ProductVariantId = productVariant.ProductVariantId,
+                    ProductName = productVariant.Product?.Name ?? productVariant.ProductVariant?.Product?.Name,
+                    ProductCode = productVariant.Product?.Code ?? productVariant.ProductVariant?.Product?.Code,
+                    SizeId = productVariant.ProductVariant?.SizeId,
+                    SizeName = productVariant.ProductVariant?.Size?.Name,
+                    Variant = productVariant.ProductVariant?.Variant,
                     DiscountTypeId = productVariant.DiscountTypeId,
                     DiscountTypeName = productVariant.DiscountType?.Name,
                     DiscountValue = productVariant.DiscountValue
@@ -274,8 +286,17 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             ValidateDiscountValue(productVariant);
         }
 
+        var invalidTarget = productVariants
+            .FirstOrDefault(productVariant => productVariant.ProductId.HasValue == productVariant.ProductVariantId.HasValue);
+
+        if (invalidTarget is not null)
+        {
+            throw new AppBadRequestException("Cada regla de descuento debe tener exactamente uno de estos destinos: producto o variante.");
+        }
+
         var repeatedProductId = productVariants
-            .GroupBy(productVariant => productVariant.ProductId)
+            .Where(productVariant => productVariant.ProductId.HasValue)
+            .GroupBy(productVariant => productVariant.ProductId!.Value)
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
             .FirstOrDefault();
@@ -286,7 +307,8 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         }
 
         var productIds = productVariants
-            .Select(productVariant => productVariant.ProductId)
+            .Where(productVariant => productVariant.ProductId.HasValue)
+            .Select(productVariant => productVariant.ProductId!.Value)
             .Distinct()
             .ToList();
 
@@ -300,6 +322,48 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         if (missingProductId > 0)
         {
             throw new AppNotFoundException($"El producto con id '{missingProductId}' no existe.");
+        }
+
+        var productVariantIds = productVariants
+            .Where(productVariant => productVariant.ProductVariantId.HasValue)
+            .Select(productVariant => productVariant.ProductVariantId!.Value)
+            .Distinct()
+            .ToList();
+
+        var existingProductVariants = await _context.ProductVariants
+            .Where(productVariant => productVariantIds.Contains(productVariant.Id))
+            .Select(productVariant => new { productVariant.Id, productVariant.ProductId })
+            .ToListAsync();
+
+        var missingProductVariantId = productVariantIds
+            .Except(existingProductVariants.Select(productVariant => productVariant.Id))
+            .FirstOrDefault();
+
+        if (missingProductVariantId > 0)
+        {
+            throw new AppNotFoundException($"La variante con id '{missingProductVariantId}' no existe.");
+        }
+
+        var productVariantById = existingProductVariants.ToDictionary(productVariant => productVariant.Id);
+        foreach (var productVariant in productVariants.Where(productVariant => productVariant.ProductVariantId.HasValue))
+        {
+            var productVariantEntity = productVariantById[productVariant.ProductVariantId!.Value];
+            if (productVariant.ProductId.HasValue && productVariantEntity.ProductId != productVariant.ProductId.Value)
+            {
+                throw new AppBadRequestException($"La variante con id '{productVariant.ProductVariantId}' no pertenece al producto con id '{productVariant.ProductId}'.");
+            }
+        }
+
+        var repeatedProductVariantId = productVariants
+            .Where(productVariant => productVariant.ProductVariantId.HasValue)
+            .GroupBy(productVariant => productVariant.ProductVariantId!.Value)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .FirstOrDefault();
+
+        if (repeatedProductVariantId > 0)
+        {
+            throw new AppBadRequestException($"La variante con id '{repeatedProductVariantId}' esta repetida en la campania.");
         }
 
         var discountTypeIds = productVariants
@@ -319,6 +383,16 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             throw new AppNotFoundException($"El tipo de descuento con id '{missingDiscountTypeId}' no existe.");
         }
     }
+
+    private static string GetTargetKey(CreateDiscountCampaignProductDTO productVariant) =>
+        productVariant.ProductId.HasValue
+            ? $"product:{productVariant.ProductId}"
+            : $"variant:{productVariant.ProductVariantId}";
+
+    private static string GetTargetKey(DiscountCampaignProduct productVariant) =>
+        productVariant.ProductId.HasValue
+            ? $"product:{productVariant.ProductId}"
+            : $"variant:{productVariant.ProductVariantId}";
 
     private async Task EnsureNameIsUniqueAsync(string name, int? currentCampaignId = null)
     {

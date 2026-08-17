@@ -103,6 +103,41 @@ public class ProductServiceTests
     }
 
     [Fact]
+    public async Task GetAllAsync_UsesBestDiscountBetweenProductAndSpecificVariantRules()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var variant = await context.ProductVariants.SingleAsync(productVariant => productVariant.Id == 1);
+        var now = DateTime.UtcNow;
+        context.DiscountCampaigns.Add(new DiscountCampaign
+        {
+            Id = 4,
+            Name = "Promo variante específica",
+            StartDate = now.AddDays(-1),
+            EndDate = now.AddDays(1),
+            DiscountCampaignProducts =
+            [
+                new DiscountCampaignProduct
+                {
+                    ProductVariantId = variant.Id,
+                    DiscountTypeId = (int)DiscountTypeOption.FixedPrice,
+                    DiscountValue = 400m
+                }
+            ]
+        });
+        await context.SaveChangesAsync();
+        var service = CreateService(context);
+
+        var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1001 });
+
+        var specificVariant = result.Items.Single().Variants.Single(productVariant => productVariant.Id == variant.Id);
+        var otherVariant = result.Items.Single().Variants.Single(productVariant => productVariant.Id != variant.Id);
+        Assert.Equal(400m, specificVariant.DiscountedSalePrice);
+        Assert.Equal(585m, otherVariant.DiscountedSalePrice);
+        Assert.Equal(4, specificVariant.DiscountCampaignId);
+    }
+
+    [Fact]
     public async Task GetAllAsync_IgnoresCancelledAndOutOfRangeCampaigns()
     {
         await using var context = CreateContext();

@@ -111,6 +111,85 @@ public class DiscountCampaignServiceTests
     }
 
     [Fact]
+    public async Task CreateAsync_CreatesCampaignForSpecificProductVariant()
+    {
+        await using var context = CreateContext();
+        var productVariant = await AddProductAsync(context, "Vestido variante", 109);
+        await AddDiscountTypesAsync(context);
+        var service = CreateService(context);
+
+        var campaignId = await service.CreateAsync(new CreateDiscountCampaignDTO
+        {
+            Name = "Promo talla M",
+            StartDate = DateTime.UtcNow.AddDays(-1),
+            EndDate = DateTime.UtcNow.AddDays(1),
+            ProductVariants =
+            [
+                new CreateDiscountCampaignProductDTO
+                {
+                    ProductVariantId = productVariant.Id,
+                    DiscountTypeId = (int)DiscountTypeOption.FixedPrice,
+                    DiscountValue = 450
+                }
+            ]
+        });
+
+        var rule = await context.DiscountCampaignProducts.SingleAsync();
+
+        Assert.Equal(campaignId, rule.DiscountCampaignId);
+        Assert.Null(rule.ProductId);
+        Assert.Equal(productVariant.Id, rule.ProductVariantId);
+
+        var detail = Assert.Single((await service.GetByIdAsync(campaignId)).ProductVariants);
+        Assert.Equal(productVariant.Id, detail.ProductVariantId);
+        Assert.Equal("M", detail.SizeName);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsRuleWithoutExactlyOneTarget()
+    {
+        await using var context = CreateContext();
+        var productVariant = await AddProductAsync(context, "Vestido destino", 110);
+        await AddDiscountTypesAsync(context);
+        var service = CreateService(context);
+
+        var withoutTarget = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(new CreateDiscountCampaignDTO
+        {
+            Name = "Promo sin destino",
+            StartDate = DateTime.UtcNow.AddDays(-1),
+            EndDate = DateTime.UtcNow.AddDays(1),
+            ProductVariants =
+            [
+                new CreateDiscountCampaignProductDTO
+                {
+                    DiscountTypeId = (int)DiscountTypeOption.Percentage,
+                    DiscountValue = 10
+                }
+            ]
+        }));
+
+        var bothTargets = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(new CreateDiscountCampaignDTO
+        {
+            Name = "Promo dos destinos",
+            StartDate = DateTime.UtcNow.AddDays(-1),
+            EndDate = DateTime.UtcNow.AddDays(1),
+            ProductVariants =
+            [
+                new CreateDiscountCampaignProductDTO
+                {
+                    ProductId = productVariant.ProductId,
+                    ProductVariantId = productVariant.Id,
+                    DiscountTypeId = (int)DiscountTypeOption.Percentage,
+                    DiscountValue = 10
+                }
+            ]
+        }));
+
+        Assert.Contains("exactamente uno", withoutTarget.Message);
+        Assert.Contains("exactamente uno", bothTargets.Message);
+    }
+
+    [Fact]
     public async Task CreateAsync_ThrowsWhenProductIsRepeated()
     {
         await using var context = CreateContext();

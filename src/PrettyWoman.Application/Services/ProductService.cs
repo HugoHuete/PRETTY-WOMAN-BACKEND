@@ -31,9 +31,14 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
                     .ThenInclude(mediaAsset => mediaAsset!.Variants)
             .Include(product => product.DiscountCampaignProducts)
                 .ThenInclude(discount => discount.DiscountCampaign)
+            .Include(product => product.DiscountCampaignProducts)
+                .ThenInclude(discount => discount.ProductVariant)
             .Include(product => product.ProductVariants)
                 .ThenInclude(productVariant => productVariant.Size)
                     .ThenInclude(size => size!.SizeGroup)
+            .Include(product => product.ProductVariants)
+                .ThenInclude(productVariant => productVariant.DiscountCampaignProducts)
+                    .ThenInclude(discount => discount.DiscountCampaign)
             .OrderBy(product => product.Name)
             .ThenBy(product => product.Code)
             .Skip((query.Page - 1) * query.PageSize)
@@ -65,9 +70,14 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
                     .ThenInclude(mediaAsset => mediaAsset!.Variants)
             .Include(product => product.DiscountCampaignProducts)
                 .ThenInclude(discount => discount.DiscountCampaign)
+            .Include(product => product.DiscountCampaignProducts)
+                .ThenInclude(discount => discount.ProductVariant)
             .Include(product => product.ProductVariants)
                 .ThenInclude(productVariant => productVariant.Size)
                     .ThenInclude(size => size!.SizeGroup)
+            .Include(product => product.ProductVariants)
+                .ThenInclude(productVariant => productVariant.DiscountCampaignProducts)
+                    .ThenInclude(discount => discount.DiscountCampaign)
             .FirstOrDefaultAsync(product => product.Id == id)
             ?? throw new AppNotFoundException($"El producto con id '{id}' no existe.");
 
@@ -158,7 +168,9 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
         if (filters.DiscountCampaignId.HasValue)
         {
             query = query.Where(product => product.DiscountCampaignProducts
-                .Any(discount => discount.DiscountCampaignId == filters.DiscountCampaignId.Value));
+                .Any(discount => discount.DiscountCampaignId == filters.DiscountCampaignId.Value) ||
+                product.ProductVariants.Any(productVariant => productVariant.DiscountCampaignProducts
+                    .Any(discount => discount.DiscountCampaignId == filters.DiscountCampaignId.Value)));
         }
 
         if (filters.CategoryId.HasValue)
@@ -229,7 +241,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
 
     private static ProductVariantDTO MapProductVariant(Product product, ProductVariant productVariant, DateTime now)
     {
-        var discount = GetBestActiveDiscount(product, productVariant.SalePrice, now);
+        var discount = GetBestActiveDiscount(product, productVariant, now);
 
         return new ProductVariantDTO
         {
@@ -251,9 +263,10 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
         };
     }
 
-    private static ActiveDiscountDTO? GetBestActiveDiscount(Product product, decimal salePrice, DateTime now)
+    private static ActiveDiscountDTO? GetBestActiveDiscount(Product product, ProductVariant productVariant, DateTime now)
     {
         return product.DiscountCampaignProducts
+            .Concat(productVariant.DiscountCampaignProducts)
             .Where(discount =>
                 discount.DiscountCampaign is { CancelledAt: null } &&
                 discount.DiscountCampaign.StartDate <= now &&
@@ -261,8 +274,8 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             .Select(discount => new ActiveDiscountDTO(
                 discount.DiscountCampaignId,
                 discount.DiscountCampaign!.Name,
-                CalculateDiscountedPrice(salePrice, discount.DiscountTypeId, discount.DiscountValue)))
-            .Where(discount => discount.DiscountedSalePrice < salePrice)
+                CalculateDiscountedPrice(productVariant.SalePrice, discount.DiscountTypeId, discount.DiscountValue)))
+            .Where(discount => discount.DiscountedSalePrice < productVariant.SalePrice)
             .OrderBy(discount => discount.DiscountedSalePrice)
             .ThenBy(discount => discount.CampaignId)
             .FirstOrDefault();

@@ -306,7 +306,9 @@ La respuesta paginada tiene la forma:
 
 Los elementos de `items` son resúmenes: **no incluyen `productVariants`**. Usarlos para la tabla, el filtro y la paginación sin solicitar ni asumir el detalle de prendas.
 
-Para abrir o editar una campaña, `GET /api/v1/discountcampaigns/{id}` mantiene la respuesta de detalle `DiscountCampaignDTO`, que **sí incluye `productVariants`**, `statusId` y `statusName`. Cada producto contiene `id`, `productId`, `productName`, `productCode`, `discountTypeId`, `discountTypeName` y `discountValue`.
+Para abrir o editar una campaña, `GET /api/v1/discountcampaigns/{id}` mantiene la respuesta de detalle `DiscountCampaignDTO`, que **sí incluye `productVariants`**, `statusId` y `statusName`. Cada regla contiene `id`, `productId`, `productVariantId`, `productName`, `productCode`, `sizeId`, `sizeName`, `variant`, `discountTypeId`, `discountTypeName` y `discountValue`.
+
+Al crear o editar, cada elemento de `productVariants` debe enviar exactamente uno de `productId` o `productVariantId`. `productId` aplica a todas las variantes del producto; `productVariantId` aplica únicamente a esa variante/talla. `productId` se devuelve también en reglas específicas como referencia del producto al que pertenece la variante.
 
 Para cancelar usar `PATCH /api/v1/discountcampaigns/{id}/cancel`; para reactivar, `PATCH /api/v1/discountcampaigns/{id}/reactivate`. Ambos devuelven `204 No Content`. Reactivar elimina la cancelación, pero no fuerza `Active`: el backend vuelve a calcular el estado según las fechas, por lo que puede resultar `Scheduled`, `Active` o `Finished`.
 

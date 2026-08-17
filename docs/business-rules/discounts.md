@@ -34,12 +34,17 @@ current_date <= end_date
 
 ## Regla: productos en promoción
 
-`discount_campaign_products` define que productos generales (`products`) participan en una campania y que descuento aplica.
+`discount_campaign_products` define el destino y descuento de cada regla de una campania. Una regla debe apuntar exactamente a uno de estos destinos:
+
+- `product_id`: aplica a todas las variantes (`product_variants`) del producto.
+- `product_variant_id`: aplica unicamente a esa variante/talla.
+
+El frontend puede enviar cualquiera de los dos identificadores, pero no ambos ni ninguno. Cuando varias reglas activas aplican a una variante, se utiliza la que produzca el menor precio final.
 
 Cada registro debe indicar:
 
 - campaña
-- producto general (`product_id`)
+- producto general (`product_id`) o variante específica (`product_variant_id`)
 - tipo de descuento
 - valor del descuento
 
@@ -51,17 +56,17 @@ Tipos sugeridos:
 
 ## Regla: evitar promociones traslapadas
 
-Un producto general no deberia tener dos promociones activas al mismo tiempo.
+Un mismo destino no debe repetirse dentro de una campaña.
 
 La primera versión puede validar esto desde la app antes de crear una promoción.
 
 Regla recomendada:
 
 ```txt
-No permitir dos descuentos activos para el mismo producto general (`product_id`) en rangos de fecha que se traslapan.
+No permitir dos reglas con el mismo destino dentro de una campaña.
 ```
 
-Si en el futuro se decide permitirlo, debe existir una regla de prioridad clara.
+Una campaña puede combinar reglas globales y reglas específicas; el precio de la variante se resuelve con la mejor regla activa.
 
 ## Regla: consistencia entre monto, fuente y campaña
 
