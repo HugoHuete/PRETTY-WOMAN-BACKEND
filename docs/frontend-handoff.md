@@ -95,6 +95,19 @@ Puede trabajar con:
 
 Los endpoints siguientes ya están implementados y son la base de las pantallas críticas. Todos requieren JWT. `Employee` es el rol técnico de Vendedor.
 
+### Autenticación y usuarios
+
+`POST /api/v1/auth/login` es anónimo y recibe el nombre de usuario, no el correo:
+
+```json
+{
+  "username": "maria.vendedora",
+  "password": "contraseña"
+}
+```
+
+El correo sigue siendo un dato del perfil. Al crear un usuario con `POST /api/v1/auth/users`, enviar también `username`, `email`, `password`, `name`, `lastname` y `role`. Las respuestas de usuario incluyen `username` y `email`.
+
 ### Compras: faltantes confirmados y reembolso de proveedor
 
 `GET /api/v1/orders` devuelve un `PaginatedResult<OrderDTO>` y acepta `page`, `pageSize`, `purchaseDateFrom`, `purchaseDateTo`, `orderStatusId` y `supplierId`. Las fechas filtran por `purchaseDate`; `pageSize` se limita a 100.

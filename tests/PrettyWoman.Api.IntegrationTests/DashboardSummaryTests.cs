@@ -21,7 +21,7 @@ public class DashboardSummaryTests(PrettyWomanApiFactory factory)
     public async Task Admin_CanGetSummaryForRequestedPeriod_WithFinancialBlock()
     {
         using var client = await CreateAuthenticatedClientAsync(
-            PrettyWomanApiFactory.AdminEmail,
+            PrettyWomanApiFactory.AdminUsername,
             PrettyWomanApiFactory.AdminPassword);
 
         var response = await client.GetAsync("/api/v1/dashboard/summary?fromDate=2099-01-01&toDate=2099-01-01");
@@ -57,7 +57,7 @@ public class DashboardSummaryTests(PrettyWomanApiFactory factory)
         var date = new DateTime(2098, 12, 30, 12, 0, 0, DateTimeKind.Utc);
         await SeedDashboardDataAsync(date);
         using var client = await CreateAuthenticatedClientAsync(
-            PrettyWomanApiFactory.AdminEmail,
+            PrettyWomanApiFactory.AdminUsername,
             PrettyWomanApiFactory.AdminPassword);
 
         var response = await client.GetAsync("/api/v1/dashboard/summary?fromDate=2098-12-30&toDate=2098-12-30");
@@ -81,7 +81,7 @@ public class DashboardSummaryTests(PrettyWomanApiFactory factory)
     public async Task Summary_WithInvalidDateRange_ReturnsBadRequest()
     {
         using var client = await CreateAuthenticatedClientAsync(
-            PrettyWomanApiFactory.AdminEmail,
+            PrettyWomanApiFactory.AdminUsername,
             PrettyWomanApiFactory.AdminPassword);
 
         var response = await client.GetAsync("/api/v1/dashboard/summary?fromDate=2099-01-02&toDate=2099-01-01");
@@ -93,7 +93,7 @@ public class DashboardSummaryTests(PrettyWomanApiFactory factory)
     public async Task Summary_WithMaximumEndDate_ReturnsBadRequest()
     {
         using var client = await CreateAuthenticatedClientAsync(
-            PrettyWomanApiFactory.AdminEmail,
+            PrettyWomanApiFactory.AdminUsername,
             PrettyWomanApiFactory.AdminPassword);
 
         var response = await client.GetAsync("/api/v1/dashboard/summary?fromDate=9999-12-31&toDate=9999-12-31");
@@ -106,7 +106,7 @@ public class DashboardSummaryTests(PrettyWomanApiFactory factory)
         var client = _factory.CreateClient();
         var loginResponse = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
         {
-            Email = email,
+            Username = email,
             Password = password
         });
         var auth = await loginResponse.Content.ReadFromJsonAsync<AuthResponseDTO>();

@@ -23,6 +23,7 @@ Configura estas variables en el servicio de API. Los nombres con `__` se convier
 | `Jwt__Issuer` | Identificador del emisor de tokens, por ejemplo `PrettyWoman.Api`. |
 | `Jwt__Audience` | Identificador del cliente que consume los tokens. |
 | `Cors__AdminOrigins__0` | Origen HTTPS exacto del frontend administrativo, por ejemplo `https://admin.example.com`. |
+| `SeedAdmin__Username` | Nombre de usuario del administrador inicial, usado para iniciar sesión. |
 | `SeedAdmin__Email` | Correo del administrador inicial, solo mientras la base todavía no tenga administrador. |
 | `SeedAdmin__Password` | Contraseña fuerte del administrador inicial. |
 | `SeedAdmin__Name` | Opcional; nombre del administrador inicial. |

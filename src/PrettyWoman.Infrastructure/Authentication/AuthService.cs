@@ -21,7 +21,7 @@ public class AuthService(
 
     public async Task<AuthResponseDTO> LoginAsync(LoginRequestDTO loginRequest)
     {
-        var user = await _userManager.FindByEmailAsync(loginRequest.Email) 
+        var user = await _userManager.FindByNameAsync(loginRequest.Username)
             ?? throw new AppUnauthorizedException("Credenciales invalidas.");
 
         await EnsureLockoutIsEnabledAsync(user);
@@ -55,7 +55,7 @@ public class AuthService(
 
         var user = new User
         {
-            UserName = createUserRequest.Email,
+            UserName = createUserRequest.Username,
             Email = createUserRequest.Email,
             EmailConfirmed = true,
             LockoutEnabled = true,
@@ -151,6 +151,7 @@ public class AuthService(
         return new UserDTO
         {
             Id = user.Id,
+            Username = user.UserName ?? string.Empty,
             Email = user.Email ?? string.Empty,
             Name = user.Name,
             Lastname = user.Lastname,

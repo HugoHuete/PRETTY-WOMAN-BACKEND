@@ -31,7 +31,7 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
         {
             Content = JsonContent.Create(new LoginRequestDTO
             {
-                Email = PrettyWomanApiFactory.AdminEmail,
+                Username = PrettyWomanApiFactory.AdminUsername,
                 Password = "invalid-password"
             })
         };
@@ -122,7 +122,7 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
 
         var response = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
         {
-            Email = PrettyWomanApiFactory.AdminEmail,
+            Username = PrettyWomanApiFactory.AdminUsername,
             Password = "invalid-password"
         });
         var error = await response.Content.ReadFromJsonAsync<ApiErrorResponse>();
@@ -133,6 +133,20 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
         Assert.Equal("No autorizado", error.Title);
         Assert.Equal("Credenciales invalidas.", error.Detail);
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
+    public async Task Login_WithUsername_ReturnsToken()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/v1/auth/login", new
+        {
+            username = PrettyWomanApiFactory.AdminUsername,
+            password = PrettyWomanApiFactory.AdminPassword
+        });
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
     [Fact]
@@ -157,7 +171,7 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
         var client = _factory.CreateClient();
         var loginResponse = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
         {
-            Email = PrettyWomanApiFactory.EmployeeEmail,
+            Username = PrettyWomanApiFactory.EmployeeEmail,
             Password = PrettyWomanApiFactory.EmployeePassword
         });
         var auth = await loginResponse.Content.ReadFromJsonAsync<AuthResponseDTO>();

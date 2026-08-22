@@ -14,6 +14,7 @@ namespace PrettyWoman.Api.IntegrationTests.Infrastructure;
 public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsyncLifetime
 {
     public const string AdminEmail = "admin.integration@prettywoman.test";
+    public const string AdminUsername = "admin.integration";
     public const string AdminPassword = "Admin123!Integration";
     public const string EmployeeEmail = "employee.integration@prettywoman.test";
     public const string EmployeePassword = "Employee123!Integration";
@@ -33,6 +34,7 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
         SetEnvironmentVariable("Jwt__Audience", "PrettyWoman.IntegrationTests.Client");
         SetEnvironmentVariable("Jwt__ExpirationMinutes", "60");
         SetEnvironmentVariable("SeedAdmin__Email", AdminEmail);
+        SetEnvironmentVariable("SeedAdmin__Username", AdminUsername);
         SetEnvironmentVariable("SeedAdmin__Password", AdminPassword);
         SetEnvironmentVariable("SeedAdmin__Name", "Admin");
         SetEnvironmentVariable("SeedAdmin__Lastname", "Integration");

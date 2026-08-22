@@ -77,7 +77,7 @@ public class ProductsApiTests(PrettyWomanApiFactory factory)
         var client = _factory.CreateClient();
         var login = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
         {
-            Email = PrettyWomanApiFactory.EmployeeEmail,
+            Username = PrettyWomanApiFactory.EmployeeEmail,
             Password = PrettyWomanApiFactory.EmployeePassword
         });
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);

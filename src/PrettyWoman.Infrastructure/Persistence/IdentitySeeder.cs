@@ -29,21 +29,22 @@ public static class IdentitySeeder
         }
 
         var email = configuration["SeedAdmin:Email"];
+        var username = configuration["SeedAdmin:Username"];
         var password = configuration["SeedAdmin:Password"];
 
-        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(password))
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
         {
             throw new InvalidOperationException(
-                "No existe ningun usuario administrador. Debe configurar SeedAdmin:Email y SeedAdmin:Password para inicializar el sistema.");
+                "No existe ningun usuario administrador. Debe configurar SeedAdmin:Username, SeedAdmin:Email y SeedAdmin:Password para inicializar el sistema.");
         }
 
-        var admin = await userManager.FindByEmailAsync(email);
+        var admin = await userManager.FindByNameAsync(username);
 
         if (admin is null)
         {
             admin = new User
             {
-                UserName = email,
+                UserName = username,
                 Email = email,
                 EmailConfirmed = true,
                 Name = configuration["SeedAdmin:Name"] ?? "Admin",

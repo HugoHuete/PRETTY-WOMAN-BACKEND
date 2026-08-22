@@ -326,7 +326,7 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
     }
 
     private async Task<HttpClient> CreateAdminClientAsync()
-        => await CreateAuthenticatedClientAsync(PrettyWomanApiFactory.AdminEmail, PrettyWomanApiFactory.AdminPassword);
+        => await CreateAuthenticatedClientAsync(PrettyWomanApiFactory.AdminUsername, PrettyWomanApiFactory.AdminPassword);
 
     private async Task<HttpClient> CreateEmployeeClientAsync()
     {
@@ -337,7 +337,7 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
     private async Task<HttpClient> CreateAuthenticatedClientAsync(string email, string password)
     {
         var client = _factory.CreateClient();
-        var login = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO { Email = email, Password = password });
+        var login = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO { Username = email, Password = password });
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
         var auth = await login.Content.ReadFromJsonAsync<AuthResponseDTO>();
         Assert.NotNull(auth);

@@ -48,7 +48,7 @@ public class OrderReceiptApiTests(PrettyWomanApiFactory factory)
         var client = factory.CreateClient();
         var login = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
         {
-            Email = email,
+            Username = email,
             Password = password
         });
         Assert.Equal(HttpStatusCode.OK, login.StatusCode);
