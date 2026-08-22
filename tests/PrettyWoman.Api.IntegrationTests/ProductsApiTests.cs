@@ -54,6 +54,23 @@ public class ProductsApiTests(PrettyWomanApiFactory factory)
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
     }
 
+    [Fact]
+    public async Task EmployeeCanExportProductsToExcel()
+    {
+        await _factory.SeedProductAsync(quantity: 2, receivedQuantity: 2, availableQuantity: 2, salePrice: 500m);
+        using var client = await CreateEmployeeClientAsync();
+
+        var response = await client.GetAsync("/api/v1/products/export");
+        var content = await response.Content.ReadAsByteArrayAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", response.Content.Headers.ContentType?.MediaType);
+        Assert.NotNull(response.Content.Headers.ContentDisposition);
+        Assert.EndsWith(".xlsx", response.Content.Headers.ContentDisposition.FileNameStar ?? response.Content.Headers.ContentDisposition.FileName);
+        Assert.Equal((byte)'P', content[0]);
+        Assert.Equal((byte)'K', content[1]);
+    }
+
     private async Task<HttpClient> CreateEmployeeClientAsync()
     {
         await _factory.EnsureEmployeeAsync();

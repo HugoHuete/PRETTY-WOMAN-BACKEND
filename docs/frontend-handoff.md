@@ -69,6 +69,7 @@ Puede trabajar con:
 | Autenticacion | Usuarios | Admin | Crear usuario, desbloquear usuario | Usuarios, roles/permisos | `POST /api/v1/auth/users`, `POST /api/v1/auth/users/{id}/unlock` |
 | Dashboard | Resumen | Admin, Vendedor | Ver ventas, pagos, reservas, entregas e incidencias | Ventas, cobros, reservas, entregas e incidencias; el bloque financiero es exclusivo de Admin | `GET /api/v1/dashboard/summary` |
 | Productos | Lista de productos | Admin, Vendedor | Buscar, filtrar, paginar, abrir detalle | Productos, categoria, subcategoria, talla, stock | `GET /api/v1/products` |
+| Productos | Exportar productos | Admin, Vendedor | Descargar catálogo filtrado en Excel | Productos y variantes | `GET /api/v1/products/export` |
 | Productos | Detalle de producto | Admin, Vendedor | Ver informacion completa, disponibilidad, imágenes e historial | Producto, variantes, stock, imágenes, movimientos | `GET /api/v1/products/{productId}`, rutas de imágenes e inventario del producto |
 | Catalogos | Categorias | Admin | Listar, crear, editar | Categorias | `GET /api/v1/categories`, `POST /api/v1/categories`, `PUT /api/v1/categories/{id}` |
 | Catalogos | Subcategorias | Admin | Listar, filtrar por categoria, crear, editar | Subcategorias, categorias | `GET /api/v1/subcategories`, `GET /api/v1/categories/{id}/subcategories`, `POST /api/v1/subcategories`, `PUT /api/v1/subcategories/{id}` |
@@ -248,6 +249,12 @@ Para una orden con tracking, sustituir el costo directo por elementos como:
 - Después de una recepción, recargar el detalle de la orden para mostrar cantidades y costos calculados. Si quedan pendientes que el proveedor ya confirmó que no llegarán, habilitar el flujo de faltantes descrito arriba.
 
 ### Productos: imágenes e historial de inventario
+
+### Productos: exportación a Excel
+
+Usar `GET /api/v1/products/export` para descargar el catálogo en formato `.xlsx`. Acepta los mismos filtros del listado (`availability`, `code`, `discountCampaignId`, `categoryId`, `subcategoryId` y `sizeId`), pero ignora `page` y `pageSize` para exportar todos los resultados coincidentes.
+
+El archivo contiene una fila por variante, con producto, código, proveedor, talla, variante, existencias, costo unitario, precio de venta, precio con descuento y campaña aplicada. La respuesta es `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` y debe manejarse en el frontend como descarga de tipo `blob`.
 
 Las acciones de imágenes e historial están disponibles para Admin y Vendedor desde el detalle de producto.
 

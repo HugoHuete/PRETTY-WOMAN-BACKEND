@@ -22,6 +22,18 @@ public class ProductsController(IProductService productService, IProductImageSer
         return Ok(productVariants);
     }
 
+    [HttpGet("export")]
+    public async Task<IActionResult> Export([FromQuery] ProductQueryDTO query)
+    {
+        var content = await _productService.ExportAsync(query);
+        var fileName = $"products-{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx";
+
+        return File(
+            content,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            fileName);
+    }
+
     [HttpGet("{productId:int}")]
     public async Task<ActionResult<ProductDTO>> GetById(int productId)
     {

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using ClosedXML.Excel;
 using PrettyWoman.Application.DTOs.Products;
 using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Interfaces;
@@ -135,6 +136,44 @@ public class ProductServiceTests
         Assert.Equal(400m, specificVariant.DiscountedSalePrice);
         Assert.Equal(585m, otherVariant.DiscountedSalePrice);
         Assert.Equal(4, specificVariant.DiscountCampaignId);
+    }
+
+    [Fact]
+    public async Task ExportAsync_ReturnsExcelWithFilteredProductVariants()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var service = CreateService(context);
+
+        var file = await service.ExportAsync(new ProductQueryDTO { Code = 1001 });
+
+        using var workbook = new XLWorkbook(new MemoryStream(file));
+        var worksheet = workbook.Worksheets.Single();
+        var rows = worksheet.RowsUsed().ToList();
+
+        Assert.Equal("Productos", worksheet.Name);
+        Assert.Equal("Producto", worksheet.Cell(1, 1).GetString());
+        Assert.Equal("Variante", worksheet.Cell(1, 5).GetString());
+        Assert.Equal("Pantalon cargo", worksheet.Cell(2, 1).GetString());
+        Assert.Equal("Negro", worksheet.Cell(2, 5).GetString());
+        Assert.Equal(3, rows.Count);
+    }
+
+    [Fact]
+    public async Task ExportAsync_AppliesVariantFiltersBeforeWritingRows()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var service = CreateService(context);
+
+        var file = await service.ExportAsync(new ProductQueryDTO { Code = 1001, SizeId = 2 });
+
+        using var workbook = new XLWorkbook(new MemoryStream(file));
+        var worksheet = workbook.Worksheets.Single();
+        var rows = worksheet.RowsUsed().ToList();
+
+        Assert.Equal(2, rows.Count);
+        Assert.Equal("M", worksheet.Cell(2, 4).GetString());
     }
 
     [Fact]

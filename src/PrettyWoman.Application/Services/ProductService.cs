@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using ClosedXML.Excel;
 using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.DTOs.Products;
 using PrettyWoman.Application.Exceptions;
@@ -57,6 +58,85 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             PageSize = query.PageSize,
             TotalCount = totalCount
         };
+    }
+
+    public async Task<byte[]> ExportAsync(ProductQueryDTO query)
+    {
+        var products = await ApplyProductFilters(_context.Products.AsNoTracking(), query)
+            .Include(product => product.DiscountCampaignProducts)
+                .ThenInclude(discount => discount.DiscountCampaign)
+            .Include(product => product.ProductVariants)
+                .ThenInclude(productVariant => productVariant.Size)
+            .Include(product => product.ProductVariants)
+                .ThenInclude(productVariant => productVariant.DiscountCampaignProducts)
+                    .ThenInclude(discount => discount.DiscountCampaign)
+            .OrderBy(product => product.Name)
+            .ThenBy(product => product.Code)
+            .ToListAsync();
+
+        using var workbook = new XLWorkbook();
+        var worksheet = workbook.Worksheets.Add("Productos");
+        var headers = new[]
+        {
+            "Producto",
+            "Código",
+            "Código proveedor",
+            "Talla",
+            "Variante",
+            "Cantidad",
+            "Recibida",
+            "Disponible",
+            "Reservada",
+            "No disponible",
+            "Costo unitario",
+            "Precio de venta",
+            "Precio con descuento",
+            "Campaña de descuento"
+        };
+
+        for (var column = 0; column < headers.Length; column++)
+        {
+            worksheet.Cell(1, column + 1).Value = headers[column];
+        }
+
+        var headerRange = worksheet.Range(1, 1, 1, headers.Length);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.LightGray;
+
+        var row = 2;
+        var now = DateTime.UtcNow;
+        foreach (var product in products)
+        {
+            foreach (var productVariant in product.ProductVariants
+                .Where(productVariant => MatchesVariantFilters(productVariant, query))
+                .OrderBy(productVariant => productVariant.Size?.DisplayOrder ?? 0)
+                .ThenBy(productVariant => productVariant.Variant))
+            {
+                var discount = GetBestActiveDiscount(product, productVariant, now);
+                worksheet.Cell(row, 1).Value = product.Name;
+                worksheet.Cell(row, 2).Value = product.Code;
+                worksheet.Cell(row, 3).Value = product.SupplierProductCode;
+                worksheet.Cell(row, 4).Value = productVariant.Size?.Name ?? string.Empty;
+                worksheet.Cell(row, 5).Value = productVariant.Variant ?? string.Empty;
+                worksheet.Cell(row, 6).Value = productVariant.Quantity;
+                worksheet.Cell(row, 7).Value = productVariant.ReceivedQuantity;
+                worksheet.Cell(row, 8).Value = productVariant.AvailableQuantity;
+                worksheet.Cell(row, 9).Value = productVariant.ReservedQuantity;
+                worksheet.Cell(row, 10).Value = productVariant.UnavailableQuantity;
+                worksheet.Cell(row, 11).Value = productVariant.UnitCostNio;
+                worksheet.Cell(row, 12).Value = productVariant.SalePrice;
+                worksheet.Cell(row, 13).Value = discount?.DiscountedSalePrice;
+                worksheet.Cell(row, 14).Value = discount?.CampaignName ?? string.Empty;
+                row++;
+            }
+        }
+
+        worksheet.Columns().AdjustToContents();
+        worksheet.SheetView.FreezeRows(1);
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
     }
 
     public async Task<ProductDTO> GetByIdAsync(int id)
@@ -212,12 +292,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             CategoryName = product.Subcategory?.Category?.Name,
             PrimaryImageUrl = GetPrimaryImageUrl(product),
             Variants = product.ProductVariants
-                .Where(productVariant =>
-                    (!query.SizeId.HasValue || productVariant.SizeId == query.SizeId.Value) &&
-                    (!query.Availability.HasValue ||
-                        (query.Availability.Value == ProductAvailabilityFilter.Available && productVariant.AvailableQuantity > 0) ||
-                        (query.Availability.Value == ProductAvailabilityFilter.Reserved && productVariant.ReservedQuantity > 0) ||
-                        (query.Availability.Value == ProductAvailabilityFilter.Unavailable && productVariant.UnavailableQuantity > 0)))
+                .Where(productVariant => MatchesVariantFilters(productVariant, query))
                 .OrderBy(productVariant => productVariant.Size?.DisplayOrder ?? 0)
                 .ThenBy(productVariant => productVariant.Variant)
                 .Select(productVariant => MapProductVariant(product, productVariant, now))
@@ -238,6 +313,13 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
 
         return storageKey is null ? null : mediaUrlResolver.GetPublicUrl(storageKey);
     }
+
+    private static bool MatchesVariantFilters(ProductVariant productVariant, ProductQueryDTO query) =>
+        (!query.SizeId.HasValue || productVariant.SizeId == query.SizeId.Value) &&
+        (!query.Availability.HasValue ||
+            (query.Availability.Value == ProductAvailabilityFilter.Available && productVariant.AvailableQuantity > 0) ||
+            (query.Availability.Value == ProductAvailabilityFilter.Reserved && productVariant.ReservedQuantity > 0) ||
+            (query.Availability.Value == ProductAvailabilityFilter.Unavailable && productVariant.UnavailableQuantity > 0));
 
     private static ProductVariantDTO MapProductVariant(Product product, ProductVariant productVariant, DateTime now)
     {
