@@ -65,6 +65,16 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
     }
 
     [Fact]
+    public async Task RailwayHealthCheck_VerifiesPostgreSqlAndReturnsOk()
+    {
+        using var client = _factory.CreateClient();
+
+        var response = await client.GetAsync("/health");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Cors_PreflightFromAdminFrontend_ReturnsAllowedOrigin()
     {
         using var client = _factory.CreateClient();

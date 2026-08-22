@@ -2,6 +2,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using PrettyWoman.Api.Middlewares;
@@ -15,6 +16,12 @@ using PrettyWoman.Infrastructure.Persistence;
 var builder = WebApplication.CreateBuilder(args);
 const string AdminFrontendCorsPolicy = "AdminFrontend";
 
+if (int.TryParse(Environment.GetEnvironmentVariable("PORT"), out var railwayPort)
+    && railwayPort is > 0 and <= 65535)
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{railwayPort}");
+}
+
 var configuredAdminOrigins = builder.Configuration.GetSection("Cors:AdminOrigins").Get<string[]>() ?? [];
 var adminOrigins = configuredAdminOrigins.Length > 0
     ? configuredAdminOrigins
@@ -25,6 +32,12 @@ if (adminOrigins.Length == 0 || adminOrigins.Any(string.IsNullOrWhiteSpace))
 }
 
 builder.Services.AddDataProtection();
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddEndpointsApiExplorer();
@@ -143,6 +156,7 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
+    app.UseForwardedHeaders();
     app.UseHttpsRedirection();
 }
 
@@ -156,6 +170,10 @@ app.MapHealthChecks("/health/live", new HealthCheckOptions
     Predicate = healthCheck => healthCheck.Tags.Contains("live")
 }).AllowAnonymous();
 app.MapHealthChecks("/health/ready", new HealthCheckOptions
+{
+    Predicate = healthCheck => healthCheck.Tags.Contains("ready")
+}).AllowAnonymous();
+app.MapHealthChecks("/health", new HealthCheckOptions
 {
     Predicate = healthCheck => healthCheck.Tags.Contains("ready")
 }).AllowAnonymous();
