@@ -12,8 +12,8 @@ using PrettyWoman.Infrastructure.Persistence;
 namespace PrettyWoman.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    [Migration("20260802191916_RemovePurchaseShortageComments")]
-    partial class RemovePurchaseShortageComments
+    [Migration("20260822212405_InitialMigration")]
+    partial class InitialMigration
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -504,6 +504,10 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("cancelled_at");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -511,10 +515,6 @@ namespace PrettyWoman.Infrastructure.Migrations
                     b.Property<string>("CreatedById")
                         .HasColumnType("text")
                         .HasColumnName("created_by_id");
-
-                    b.Property<bool>("Enabled")
-                        .HasColumnType("boolean")
-                        .HasColumnName("enabled");
 
                     b.Property<DateTime>("EndDate")
                         .HasColumnType("timestamp with time zone")
@@ -541,8 +541,8 @@ namespace PrettyWoman.Infrastructure.Migrations
                     b.HasKey("Id")
                         .HasName("pk_discount_campaigns");
 
-                    b.HasIndex("Enabled", "StartDate", "EndDate")
-                        .HasDatabaseName("ix_discount_campaigns_enabled_start_date_end_date");
+                    b.HasIndex("CancelledAt", "StartDate", "EndDate")
+                        .HasDatabaseName("ix_discount_campaigns_cancelled_at_start_date_end_date");
 
                     b.ToTable("discount_campaigns", null, t =>
                         {
@@ -572,9 +572,13 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .HasColumnType("numeric(12,2)")
                         .HasColumnName("discount_value");
 
-                    b.Property<int>("ProductDetailId")
+                    b.Property<int?>("ProductId")
                         .HasColumnType("integer")
-                        .HasColumnName("product_detail_id");
+                        .HasColumnName("product_id");
+
+                    b.Property<int?>("ProductVariantId")
+                        .HasColumnType("integer")
+                        .HasColumnName("product_variant_id");
 
                     b.HasKey("Id")
                         .HasName("pk_discount_campaign_products");
@@ -582,15 +586,26 @@ namespace PrettyWoman.Infrastructure.Migrations
                     b.HasIndex("DiscountTypeId")
                         .HasDatabaseName("ix_discount_campaign_products_discount_type_id");
 
-                    b.HasIndex("ProductDetailId")
-                        .HasDatabaseName("ix_discount_campaign_products_product_detail_id");
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_discount_campaign_products_product_id");
 
-                    b.HasIndex("DiscountCampaignId", "ProductDetailId")
+                    b.HasIndex("ProductVariantId")
+                        .HasDatabaseName("ix_discount_campaign_products_product_variant_id");
+
+                    b.HasIndex("DiscountCampaignId", "ProductId")
                         .IsUnique()
-                        .HasDatabaseName("ix_discount_campaign_products_discount_campaign_id_product_det");
+                        .HasDatabaseName("ix_discount_campaign_products_discount_campaign_id_product_id")
+                        .HasFilter("product_id IS NOT NULL");
+
+                    b.HasIndex("DiscountCampaignId", "ProductVariantId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_discount_campaign_products_discount_campaign_id_product_var")
+                        .HasFilter("product_variant_id IS NOT NULL");
 
                     b.ToTable("discount_campaign_products", null, t =>
                         {
+                            t.HasCheckConstraint("ck_discount_campaign_product_exactly_one_target", "(product_id IS NOT NULL) <> (product_variant_id IS NOT NULL)");
+
                             t.HasCheckConstraint("ck_discount_campaign_product_value_non_negative", "discount_value > 0");
                         });
                 });
@@ -2361,122 +2376,6 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<decimal>("AllocatedShippingCostNio")
-                        .HasPrecision(14, 2)
-                        .HasColumnType("numeric(14,2)")
-                        .HasColumnName("allocated_shipping_cost_nio");
-
-                    b.Property<int>("AvailableQuantity")
-                        .HasColumnType("integer")
-                        .HasColumnName("available_quantity");
-
-                    b.Property<string>("Color")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("color");
-
-                    b.Property<decimal>("MerchandiseTotalCostNio")
-                        .HasPrecision(14, 2)
-                        .HasColumnType("numeric(14,2)")
-                        .HasColumnName("merchandise_total_cost_nio");
-
-                    b.Property<int>("OrderId")
-                        .HasColumnType("integer")
-                        .HasColumnName("order_id");
-
-                    b.Property<int>("ProductDetailId")
-                        .HasColumnType("integer")
-                        .HasColumnName("product_detail_id");
-
-                    b.Property<int>("Quantity")
-                        .HasColumnType("integer")
-                        .HasColumnName("quantity");
-
-                    b.Property<int>("ReceivedQuantity")
-                        .HasColumnType("integer")
-                        .HasColumnName("received_quantity");
-
-                    b.Property<int>("ReservedQuantity")
-                        .HasColumnType("integer")
-                        .HasColumnName("reserved_quantity");
-
-                    b.Property<decimal>("SalePrice")
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasColumnName("sale_price");
-
-                    b.Property<int>("SizeId")
-                        .HasColumnType("integer")
-                        .HasColumnName("size_id");
-
-                    b.Property<decimal>("TotalCostNio")
-                        .HasPrecision(14, 2)
-                        .HasColumnType("numeric(14,2)")
-                        .HasColumnName("total_cost_nio");
-
-                    b.Property<int>("UnavailableQuantity")
-                        .HasColumnType("integer")
-                        .HasColumnName("unavailable_quantity");
-
-                    b.Property<decimal>("UnitCostNio")
-                        .HasPrecision(18, 6)
-                        .HasColumnType("numeric(18,6)")
-                        .HasColumnName("unit_cost_nio");
-
-                    b.Property<decimal>("UnitCostUsd")
-                        .HasPrecision(14, 2)
-                        .HasColumnType("numeric(14,2)")
-                        .HasColumnName("unit_cost_usd");
-
-                    b.HasKey("Id")
-                        .HasName("pk_products");
-
-                    b.HasIndex("OrderId")
-                        .HasDatabaseName("ix_products_order_id");
-
-                    b.HasIndex("SizeId")
-                        .HasDatabaseName("ix_products_size_id");
-
-                    b.HasIndex("ProductDetailId", "SizeId", "Color")
-                        .HasDatabaseName("ix_products_product_detail_id_size_id_color");
-
-                    b.ToTable("products", null, t =>
-                        {
-                            t.HasCheckConstraint("ck_products_allocated_shipping_cost_nio_non_negative", "allocated_shipping_cost_nio >= 0");
-
-                            t.HasCheckConstraint("ck_products_available_quantity_non_negative", "available_quantity >= 0");
-
-                            t.HasCheckConstraint("ck_products_merchandise_total_cost_nio_non_negative", "merchandise_total_cost_nio >= 0");
-
-                            t.HasCheckConstraint("ck_products_quantity_non_negative", "quantity >= 0");
-
-                            t.HasCheckConstraint("ck_products_received_quantity_non_negative", "received_quantity >= 0");
-
-                            t.HasCheckConstraint("ck_products_reserved_quantity_non_negative", "reserved_quantity >= 0");
-
-                            t.HasCheckConstraint("ck_products_sale_price_positive", "sale_price >= 0");
-
-                            t.HasCheckConstraint("ck_products_stock_not_greater_than_received", "available_quantity + reserved_quantity + unavailable_quantity <= received_quantity");
-
-                            t.HasCheckConstraint("ck_products_total_cost_nio_non_negative", "total_cost_nio >= 0");
-
-                            t.HasCheckConstraint("ck_products_unavailable_quantity_non_negative", "unavailable_quantity >= 0");
-
-                            t.HasCheckConstraint("ck_products_unit_cost_nio_non_negative", "unit_cost_nio >= 0");
-
-                            t.HasCheckConstraint("ck_products_unit_cost_usd_non_negative", "unit_cost_usd >= 0");
-                        });
-                });
-
-            modelBuilder.Entity("PrettyWoman.Domain.Entities.ProductDetail", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
                     b.Property<int>("Code")
                         .HasColumnType("integer")
                         .HasColumnName("code");
@@ -2498,16 +2397,16 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .HasColumnName("supplier_product_code");
 
                     b.HasKey("Id")
-                        .HasName("pk_product_details");
+                        .HasName("pk_products");
 
                     b.HasIndex("Code")
                         .IsUnique()
-                        .HasDatabaseName("ix_product_details_code");
+                        .HasDatabaseName("ix_products_code");
 
                     b.HasIndex("SubcategoryId")
-                        .HasDatabaseName("ix_product_details_subcategory_id");
+                        .HasDatabaseName("ix_products_subcategory_id");
 
-                    b.ToTable("product_details", (string)null);
+                    b.ToTable("products", (string)null);
                 });
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.ProductHold", b =>
@@ -2649,9 +2548,9 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("media_asset_id");
 
-                    b.Property<int>("ProductDetailId")
+                    b.Property<int>("ProductId")
                         .HasColumnType("integer")
-                        .HasColumnName("product_detail_id");
+                        .HasColumnName("product_id");
 
                     b.Property<int>("SortOrder")
                         .HasColumnType("integer")
@@ -2665,16 +2564,16 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .HasDatabaseName("ix_product_images_media_asset_id")
                         .HasFilter("media_asset_id is not null");
 
-                    b.HasIndex("ProductDetailId")
-                        .HasDatabaseName("ix_product_images_product_detail_id");
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_product_images_product_id");
 
-                    b.HasIndex("ProductDetailId", "IsPrimary")
+                    b.HasIndex("ProductId", "IsPrimary")
                         .IsUnique()
-                        .HasDatabaseName("ix_product_images_product_detail_id_is_primary")
+                        .HasDatabaseName("ix_product_images_product_id_is_primary")
                         .HasFilter("is_primary = true");
 
-                    b.HasIndex("ProductDetailId", "SortOrder")
-                        .HasDatabaseName("ix_product_images_product_detail_id_sort_order");
+                    b.HasIndex("ProductId", "SortOrder")
+                        .HasDatabaseName("ix_product_images_product_id_sort_order");
 
                     b.ToTable("product_images", null, t =>
                         {
@@ -2891,6 +2790,16 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .HasColumnType("text")
                         .HasColumnName("updated_by_id");
 
+                    b.Property<decimal>("WarehouseShippingCostNio")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("warehouse_shipping_cost_nio");
+
+                    b.Property<decimal>("WarehouseShippingCostUsd")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("warehouse_shipping_cost_usd");
+
                     b.HasKey("Id")
                         .HasName("pk_product_receipts");
 
@@ -2906,7 +2815,12 @@ namespace PrettyWoman.Infrastructure.Migrations
                     b.HasIndex("OrderId", "ReceivedDate")
                         .HasDatabaseName("ix_product_receipts_order_id_received_date");
 
-                    b.ToTable("product_receipts", (string)null);
+                    b.ToTable("product_receipts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_product_receipt_warehouse_shipping_cost_nio_non_negative", "warehouse_shipping_cost_nio >= 0");
+
+                            t.HasCheckConstraint("ck_product_receipt_warehouse_shipping_cost_usd_non_negative", "warehouse_shipping_cost_usd >= 0");
+                        });
                 });
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.ProductReceiptDetail", b =>
@@ -2917,6 +2831,11 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .HasColumnName("id");
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AllocatedWarehouseShippingCostNio")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("allocated_warehouse_shipping_cost_nio");
 
                     b.Property<int>("ProductId")
                         .HasColumnType("integer")
@@ -2930,6 +2849,11 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .HasColumnType("numeric")
                         .HasColumnName("quantity");
 
+                    b.Property<decimal>("Weight")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("weight");
+
                     b.HasKey("Id")
                         .HasName("pk_product_receipt_details");
 
@@ -2941,7 +2865,127 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     b.ToTable("product_receipt_details", null, t =>
                         {
+                            t.HasCheckConstraint("ck_product_receipt_detail_allocated_warehouse_shipping_cost_nio_non_negative", "allocated_warehouse_shipping_cost_nio >= 0");
+
                             t.HasCheckConstraint("ck_product_receipt_detail_quantity_non_negative", "quantity >= 0");
+
+                            t.HasCheckConstraint("ck_product_receipt_detail_weight_positive", "weight > 0");
+                        });
+                });
+
+            modelBuilder.Entity("PrettyWoman.Domain.Entities.ProductVariant", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("AllocatedShippingCostNio")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("allocated_shipping_cost_nio");
+
+                    b.Property<int>("AvailableQuantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("available_quantity");
+
+                    b.Property<decimal>("MerchandiseTotalCostNio")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("merchandise_total_cost_nio");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("integer")
+                        .HasColumnName("order_id");
+
+                    b.Property<int>("ProductId")
+                        .HasColumnType("integer")
+                        .HasColumnName("product_id");
+
+                    b.Property<int>("Quantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("quantity");
+
+                    b.Property<int>("ReceivedQuantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("received_quantity");
+
+                    b.Property<int>("ReservedQuantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("reserved_quantity");
+
+                    b.Property<decimal>("SalePrice")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("sale_price");
+
+                    b.Property<int>("SizeId")
+                        .HasColumnType("integer")
+                        .HasColumnName("size_id");
+
+                    b.Property<decimal>("TotalCostNio")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("total_cost_nio");
+
+                    b.Property<int>("UnavailableQuantity")
+                        .HasColumnType("integer")
+                        .HasColumnName("unavailable_quantity");
+
+                    b.Property<decimal>("UnitCostNio")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("unit_cost_nio");
+
+                    b.Property<decimal>("UnitCostUsd")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("unit_cost_usd");
+
+                    b.Property<string>("Variant")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("variant");
+
+                    b.HasKey("Id")
+                        .HasName("pk_product_variants");
+
+                    b.HasIndex("OrderId")
+                        .HasDatabaseName("ix_product_variants_order_id");
+
+                    b.HasIndex("SizeId")
+                        .HasDatabaseName("ix_product_variants_size_id");
+
+                    b.HasIndex("ProductId", "SizeId", "Variant")
+                        .HasDatabaseName("ix_product_variants_product_id_size_id_variant");
+
+                    b.ToTable("product_variants", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_products_allocated_shipping_cost_nio_non_negative", "allocated_shipping_cost_nio >= 0");
+
+                            t.HasCheckConstraint("ck_products_available_quantity_non_negative", "available_quantity >= 0");
+
+                            t.HasCheckConstraint("ck_products_merchandise_total_cost_nio_non_negative", "merchandise_total_cost_nio >= 0");
+
+                            t.HasCheckConstraint("ck_products_quantity_non_negative", "quantity >= 0");
+
+                            t.HasCheckConstraint("ck_products_received_quantity_non_negative", "received_quantity >= 0");
+
+                            t.HasCheckConstraint("ck_products_reserved_quantity_non_negative", "reserved_quantity >= 0");
+
+                            t.HasCheckConstraint("ck_products_sale_price_positive", "sale_price >= 0");
+
+                            t.HasCheckConstraint("ck_products_stock_not_greater_than_received", "available_quantity + reserved_quantity + unavailable_quantity <= received_quantity");
+
+                            t.HasCheckConstraint("ck_products_total_cost_nio_non_negative", "total_cost_nio >= 0");
+
+                            t.HasCheckConstraint("ck_products_unavailable_quantity_non_negative", "unavailable_quantity >= 0");
+
+                            t.HasCheckConstraint("ck_products_unit_cost_nio_non_negative", "unit_cost_nio >= 0");
+
+                            t.HasCheckConstraint("ck_products_unit_cost_usd_non_negative", "unit_cost_usd >= 0");
                         });
                 });
 
@@ -4418,28 +4462,35 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_discount_campaign_products_discount_types_discount_type_id");
 
-                    b.HasOne("PrettyWoman.Domain.Entities.ProductDetail", "ProductDetail")
+                    b.HasOne("PrettyWoman.Domain.Entities.Product", "Product")
                         .WithMany("DiscountCampaignProducts")
-                        .HasForeignKey("ProductDetailId")
+                        .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_discount_campaign_products_product_details_product_detail_id");
+                        .HasConstraintName("fk_discount_campaign_products_products_product_id");
+
+                    b.HasOne("PrettyWoman.Domain.Entities.ProductVariant", "ProductVariant")
+                        .WithMany("DiscountCampaignProducts")
+                        .HasForeignKey("ProductVariantId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_discount_campaign_products_product_variants_product_variant");
 
                     b.Navigation("DiscountCampaign");
 
                     b.Navigation("DiscountType");
 
-                    b.Navigation("ProductDetail");
+                    b.Navigation("Product");
+
+                    b.Navigation("ProductVariant");
                 });
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.ExchangeOutboundItem", b =>
                 {
-                    b.HasOne("PrettyWoman.Domain.Entities.Product", "Product")
+                    b.HasOne("PrettyWoman.Domain.Entities.ProductVariant", "ProductVariant")
                         .WithMany()
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_exchange_outbound_items_products_product_id");
+                        .HasConstraintName("fk_exchange_outbound_items_product_variants_product_id");
 
                     b.HasOne("PrettyWoman.Domain.Entities.SaleExchange", "SaleExchange")
                         .WithMany("OutboundItems")
@@ -4448,7 +4499,7 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_exchange_outbound_items_sale_exchanges_sale_exchange_id");
 
-                    b.Navigation("Product");
+                    b.Navigation("ProductVariant");
 
                     b.Navigation("SaleExchange");
                 });
@@ -4462,12 +4513,12 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_exchange_return_items_sale_products_original_sale_product_id");
 
-                    b.HasOne("PrettyWoman.Domain.Entities.Product", "Product")
+                    b.HasOne("PrettyWoman.Domain.Entities.ProductVariant", "ProductVariant")
                         .WithMany()
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_exchange_return_items_products_product_id");
+                        .HasConstraintName("fk_exchange_return_items_product_variants_product_id");
 
                     b.HasOne("PrettyWoman.Domain.Entities.SaleExchange", "SaleExchange")
                         .WithMany("ReturnItems")
@@ -4478,7 +4529,7 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     b.Navigation("OriginalSaleProduct");
 
-                    b.Navigation("Product");
+                    b.Navigation("ProductVariant");
 
                     b.Navigation("SaleExchange");
                 });
@@ -4596,12 +4647,12 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_inventory_adjustment_items_inventory_adjustments_inventory_");
 
-                    b.HasOne("PrettyWoman.Domain.Entities.Product", "Product")
+                    b.HasOne("PrettyWoman.Domain.Entities.ProductVariant", "ProductVariant")
                         .WithMany("InventoryAdjustmentItems")
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_inventory_adjustment_items_products_product_id");
+                        .HasConstraintName("fk_inventory_adjustment_items_product_variants_product_id");
 
                     b.HasOne("PrettyWoman.Domain.Entities.InventoryStockBucket", "ToStockBucket")
                         .WithMany()
@@ -4614,7 +4665,7 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     b.Navigation("InventoryAdjustment");
 
-                    b.Navigation("Product");
+                    b.Navigation("ProductVariant");
 
                     b.Navigation("ToStockBucket");
                 });
@@ -4665,12 +4716,12 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_inventory_movements_product_holds_product_hold_id");
 
-                    b.HasOne("PrettyWoman.Domain.Entities.Product", "Product")
+                    b.HasOne("PrettyWoman.Domain.Entities.ProductVariant", "ProductVariant")
                         .WithMany("InventoryMovements")
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_inventory_movements_products_product_id");
+                        .HasConstraintName("fk_inventory_movements_product_variants_product_id");
 
                     b.HasOne("PrettyWoman.Domain.Entities.ProductInventoryIssue", "ProductInventoryIssue")
                         .WithMany("InventoryMovements")
@@ -4709,11 +4760,11 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     b.Navigation("Order");
 
-                    b.Navigation("Product");
-
                     b.Navigation("ProductHold");
 
                     b.Navigation("ProductInventoryIssue");
+
+                    b.Navigation("ProductVariant");
 
                     b.Navigation("SaleProduct");
 
@@ -4822,42 +4873,12 @@ namespace PrettyWoman.Infrastructure.Migrations
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.Product", b =>
                 {
-                    b.HasOne("PrettyWoman.Domain.Entities.Order", "Order")
-                        .WithMany("Products")
-                        .HasForeignKey("OrderId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_products_orders_order_id");
-
-                    b.HasOne("PrettyWoman.Domain.Entities.ProductDetail", "ProductDetail")
-                        .WithMany("Products")
-                        .HasForeignKey("ProductDetailId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_products_product_details_product_detail_id");
-
-                    b.HasOne("PrettyWoman.Domain.Entities.Size", "Size")
-                        .WithMany()
-                        .HasForeignKey("SizeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_products_sizes_size_id");
-
-                    b.Navigation("Order");
-
-                    b.Navigation("ProductDetail");
-
-                    b.Navigation("Size");
-                });
-
-            modelBuilder.Entity("PrettyWoman.Domain.Entities.ProductDetail", b =>
-                {
                     b.HasOne("PrettyWoman.Domain.Entities.Subcategory", "Subcategory")
-                        .WithMany("ProductDetails")
+                        .WithMany("Products")
                         .HasForeignKey("SubcategoryId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_product_details_subcategories_subcategory_id");
+                        .HasConstraintName("fk_products_subcategories_subcategory_id");
 
                     b.Navigation("Subcategory");
                 });
@@ -4871,12 +4892,12 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_product_holds_product_hold_statuses_product_hold_status_id");
 
-                    b.HasOne("PrettyWoman.Domain.Entities.Product", "Product")
+                    b.HasOne("PrettyWoman.Domain.Entities.ProductVariant", "ProductVariant")
                         .WithMany("ProductHolds")
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_product_holds_products_product_id");
+                        .HasConstraintName("fk_product_holds_product_variants_product_id");
 
                     b.HasOne("PrettyWoman.Domain.Entities.Sale", "Sale")
                         .WithMany("ProductHolds")
@@ -4884,9 +4905,9 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_product_holds_sales_sale_id");
 
-                    b.Navigation("Product");
-
                     b.Navigation("ProductHoldStatus");
+
+                    b.Navigation("ProductVariant");
 
                     b.Navigation("Sale");
                 });
@@ -4899,26 +4920,26 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_product_images_media_assets_media_asset_id");
 
-                    b.HasOne("PrettyWoman.Domain.Entities.ProductDetail", "ProductDetail")
+                    b.HasOne("PrettyWoman.Domain.Entities.Product", "Product")
                         .WithMany("ProductImages")
-                        .HasForeignKey("ProductDetailId")
+                        .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_product_images_product_details_product_detail_id");
+                        .HasConstraintName("fk_product_images_products_product_id");
 
                     b.Navigation("MediaAsset");
 
-                    b.Navigation("ProductDetail");
+                    b.Navigation("Product");
                 });
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.ProductInventoryIssue", b =>
                 {
-                    b.HasOne("PrettyWoman.Domain.Entities.Product", "Product")
+                    b.HasOne("PrettyWoman.Domain.Entities.ProductVariant", "ProductVariant")
                         .WithMany("ProductInventoryIssues")
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_product_inventory_issues_products_product_id");
+                        .HasConstraintName("fk_product_inventory_issues_product_variants_product_id");
 
                     b.HasOne("PrettyWoman.Domain.Entities.ProductInventoryIssueStatus", "ProductInventoryIssueStatus")
                         .WithMany()
@@ -4934,11 +4955,11 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_product_inventory_issues_product_inventory_issue_types_prod");
 
-                    b.Navigation("Product");
-
                     b.Navigation("ProductInventoryIssueStatus");
 
                     b.Navigation("ProductInventoryIssueType");
+
+                    b.Navigation("ProductVariant");
                 });
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.ProductReceipt", b =>
@@ -4955,12 +4976,12 @@ namespace PrettyWoman.Infrastructure.Migrations
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.ProductReceiptDetail", b =>
                 {
-                    b.HasOne("PrettyWoman.Domain.Entities.Product", "Product")
+                    b.HasOne("PrettyWoman.Domain.Entities.ProductVariant", "ProductVariant")
                         .WithMany("ProductReceiptDetails")
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_product_receipt_details_products_product_id");
+                        .HasConstraintName("fk_product_receipt_details_product_variants_product_id");
 
                     b.HasOne("PrettyWoman.Domain.Entities.ProductReceipt", "ProductReceipt")
                         .WithMany("ProductReceiptDetails")
@@ -4969,9 +4990,39 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_product_receipt_details_product_receipts_product_receipt_id");
 
+                    b.Navigation("ProductReceipt");
+
+                    b.Navigation("ProductVariant");
+                });
+
+            modelBuilder.Entity("PrettyWoman.Domain.Entities.ProductVariant", b =>
+                {
+                    b.HasOne("PrettyWoman.Domain.Entities.Order", "Order")
+                        .WithMany("ProductVariants")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_product_variants_orders_order_id");
+
+                    b.HasOne("PrettyWoman.Domain.Entities.Product", "Product")
+                        .WithMany("ProductVariants")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_product_variants_products_product_id");
+
+                    b.HasOne("PrettyWoman.Domain.Entities.Size", "Size")
+                        .WithMany()
+                        .HasForeignKey("SizeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_product_variants_sizes_size_id");
+
+                    b.Navigation("Order");
+
                     b.Navigation("Product");
 
-                    b.Navigation("ProductReceipt");
+                    b.Navigation("Size");
                 });
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.PurchaseShortage", b =>
@@ -4983,16 +5034,16 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_purchase_shortages_orders_order_id");
 
-                    b.HasOne("PrettyWoman.Domain.Entities.Product", "Product")
+                    b.HasOne("PrettyWoman.Domain.Entities.ProductVariant", "ProductVariant")
                         .WithMany("PurchaseShortages")
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_purchase_shortages_products_product_id");
+                        .HasConstraintName("fk_purchase_shortages_product_variants_product_id");
 
                     b.Navigation("Order");
 
-                    b.Navigation("Product");
+                    b.Navigation("ProductVariant");
                 });
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.Sale", b =>
@@ -5177,15 +5228,15 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_sale_products_discount_sources_discount_source_id");
 
-                    b.HasOne("PrettyWoman.Domain.Entities.Product", "Product")
+                    b.HasOne("PrettyWoman.Domain.Entities.ProductVariant", "ProductVariant")
                         .WithMany()
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_sale_products_products_product_id");
+                        .HasConstraintName("fk_sale_products_product_variants_product_id");
 
                     b.HasOne("PrettyWoman.Domain.Entities.Sale", "Sale")
-                        .WithMany("Products")
+                        .WithMany("ProductVariants")
                         .HasForeignKey("SaleId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
@@ -5195,7 +5246,7 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     b.Navigation("DiscountSource");
 
-                    b.Navigation("Product");
+                    b.Navigation("ProductVariant");
 
                     b.Navigation("Sale");
                 });
@@ -5245,12 +5296,12 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_sale_return_items_sale_products_original_sale_product_id");
 
-                    b.HasOne("PrettyWoman.Domain.Entities.Product", "Product")
+                    b.HasOne("PrettyWoman.Domain.Entities.ProductVariant", "ProductVariant")
                         .WithMany()
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
-                        .HasConstraintName("fk_sale_return_items_products_product_id");
+                        .HasConstraintName("fk_sale_return_items_product_variants_product_id");
 
                     b.HasOne("PrettyWoman.Domain.Entities.ProductInventoryIssue", "ProductInventoryIssue")
                         .WithMany()
@@ -5267,9 +5318,9 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     b.Navigation("OriginalSaleProduct");
 
-                    b.Navigation("Product");
-
                     b.Navigation("ProductInventoryIssue");
+
+                    b.Navigation("ProductVariant");
 
                     b.Navigation("SaleReturn");
                 });
@@ -5390,7 +5441,7 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     b.Navigation("ProductReceipts");
 
-                    b.Navigation("Products");
+                    b.Navigation("ProductVariants");
 
                     b.Navigation("PurchaseShortages");
 
@@ -5399,26 +5450,11 @@ namespace PrettyWoman.Infrastructure.Migrations
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.Product", b =>
                 {
-                    b.Navigation("InventoryAdjustmentItems");
-
-                    b.Navigation("InventoryMovements");
-
-                    b.Navigation("ProductHolds");
-
-                    b.Navigation("ProductInventoryIssues");
-
-                    b.Navigation("ProductReceiptDetails");
-
-                    b.Navigation("PurchaseShortages");
-                });
-
-            modelBuilder.Entity("PrettyWoman.Domain.Entities.ProductDetail", b =>
-                {
                     b.Navigation("DiscountCampaignProducts");
 
                     b.Navigation("ProductImages");
 
-                    b.Navigation("Products");
+                    b.Navigation("ProductVariants");
                 });
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.ProductInventoryIssue", b =>
@@ -5435,6 +5471,23 @@ namespace PrettyWoman.Infrastructure.Migrations
                     b.Navigation("ProductReceiptDetails");
                 });
 
+            modelBuilder.Entity("PrettyWoman.Domain.Entities.ProductVariant", b =>
+                {
+                    b.Navigation("DiscountCampaignProducts");
+
+                    b.Navigation("InventoryAdjustmentItems");
+
+                    b.Navigation("InventoryMovements");
+
+                    b.Navigation("ProductHolds");
+
+                    b.Navigation("ProductInventoryIssues");
+
+                    b.Navigation("ProductReceiptDetails");
+
+                    b.Navigation("PurchaseShortages");
+                });
+
             modelBuilder.Entity("PrettyWoman.Domain.Entities.Sale", b =>
                 {
                     b.Navigation("Deliveries");
@@ -5445,7 +5498,7 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     b.Navigation("ProductHolds");
 
-                    b.Navigation("Products");
+                    b.Navigation("ProductVariants");
 
                     b.Navigation("Returns");
                 });
@@ -5481,7 +5534,7 @@ namespace PrettyWoman.Infrastructure.Migrations
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.Subcategory", b =>
                 {
-                    b.Navigation("ProductDetails");
+                    b.Navigation("Products");
                 });
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.Supplier", b =>

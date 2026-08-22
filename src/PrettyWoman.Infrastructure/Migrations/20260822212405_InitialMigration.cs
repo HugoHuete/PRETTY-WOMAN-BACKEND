@@ -140,7 +140,7 @@ namespace PrettyWoman.Infrastructure.Migrations
                     name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     start_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     end_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    enabled = table.Column<bool>(type: "boolean", nullable: false),
+                    cancelled_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     created_by_id = table.Column<string>(type: "text", nullable: true),
@@ -221,6 +221,18 @@ namespace PrettyWoman.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "inventory_adjustment_reasons",
+                columns: table => new
+                {
+                    id = table.Column<int>(type: "integer", nullable: false),
+                    name = table.Column<string>(type: "character varying(60)", maxLength: 60, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_inventory_adjustment_reasons", x => x.id);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "inventory_movement_types",
                 columns: table => new
                 {
@@ -256,6 +268,26 @@ namespace PrettyWoman.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_loan_owners", x => x.id);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "media_assets",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    storage_key = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    original_bucket = table.Column<int>(type: "integer", nullable: false),
+                    visibility = table.Column<int>(type: "integer", nullable: false),
+                    original_content_type = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    original_size_bytes = table.Column<long>(type: "bigint", nullable: false),
+                    width = table.Column<int>(type: "integer", nullable: false),
+                    height = table.Column<int>(type: "integer", nullable: false),
+                    status = table.Column<int>(type: "integer", nullable: false),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_media_assets", x => x.id);
                 });
 
             migrationBuilder.CreateTable(
@@ -370,18 +402,6 @@ namespace PrettyWoman.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_sale_payment_statuses", x => x.id);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "sale_product_statuses",
-                columns: table => new
-                {
-                    id = table.Column<int>(type: "integer", nullable: false),
-                    name = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_sale_product_statuses", x => x.id);
                 });
 
             migrationBuilder.CreateTable(
@@ -619,6 +639,32 @@ namespace PrettyWoman.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "inventory_adjustments",
+                columns: table => new
+                {
+                    id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    inventory_adjustment_reason_id = table.Column<int>(type: "integer", nullable: false),
+                    adjustment_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    reference = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    comments = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    created_by_id = table.Column<string>(type: "text", nullable: true),
+                    updated_by_id = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_inventory_adjustments", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_inventory_adjustments_inventory_adjustment_reasons_inventor",
+                        column: x => x.inventory_adjustment_reason_id,
+                        principalTable: "inventory_adjustment_reasons",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "loans",
                 columns: table => new
                 {
@@ -648,6 +694,31 @@ namespace PrettyWoman.Infrastructure.Migrations
                         principalTable: "loan_owners",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "media_asset_variants",
+                columns: table => new
+                {
+                    id = table.Column<Guid>(type: "uuid", nullable: false),
+                    media_asset_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    type = table.Column<int>(type: "integer", nullable: false),
+                    bucket = table.Column<int>(type: "integer", nullable: false),
+                    storage_key = table.Column<string>(type: "character varying(600)", maxLength: 600, nullable: false),
+                    content_type = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    size_bytes = table.Column<long>(type: "bigint", nullable: false),
+                    width = table.Column<int>(type: "integer", nullable: false),
+                    height = table.Column<int>(type: "integer", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_media_asset_variants", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_media_asset_variants_media_assets_media_asset_id",
+                        column: x => x.media_asset_id,
+                        principalTable: "media_assets",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -743,6 +814,9 @@ namespace PrettyWoman.Infrastructure.Migrations
                     supplier_shipping_cost_usd = table.Column<decimal>(type: "numeric(14,2)", precision: 14, scale: 2, nullable: false),
                     warehouse_shipping_cost_usd = table.Column<decimal>(type: "numeric(14,2)", precision: 14, scale: 2, nullable: false),
                     total_cost_nio = table.Column<decimal>(type: "numeric(14,2)", precision: 14, scale: 2, nullable: false),
+                    supplier_refund_resolution = table.Column<int>(type: "integer", nullable: true),
+                    supplier_refund_declined_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    supplier_refund_decline_comments = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: true),
                     comments = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -757,6 +831,7 @@ namespace PrettyWoman.Infrastructure.Migrations
                     table.CheckConstraint("ck_orders_merchandise_total_nio_non_negative", "merchandise_total_nio >= 0");
                     table.CheckConstraint("ck_orders_purchase_currency_valid", "purchase_currency_id IN (1, 2)");
                     table.CheckConstraint("ck_orders_received_amount_nio_non_negative", "received_amount_nio >= 0");
+                    table.CheckConstraint("ck_orders_supplier_refund_resolution_valid", "supplier_refund_resolution IS NULL OR supplier_refund_resolution IN (1, 2)");
                     table.CheckConstraint("ck_orders_supplier_shipping_cost_usd_non_negative", "supplier_shipping_cost_usd >= 0");
                     table.CheckConstraint("ck_orders_total_cost_nio_non_negative", "total_cost_nio >= 0");
                     table.CheckConstraint("ck_orders_warehouse_shipping_cost_usd_non_negative", "warehouse_shipping_cost_usd >= 0");
@@ -775,7 +850,7 @@ namespace PrettyWoman.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "product_details",
+                name: "products",
                 columns: table => new
                 {
                     id = table.Column<int>(type: "integer", nullable: false)
@@ -787,9 +862,9 @@ namespace PrettyWoman.Infrastructure.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("pk_product_details", x => x.id);
+                    table.PrimaryKey("pk_products", x => x.id);
                     table.ForeignKey(
-                        name: "fk_product_details_subcategories_subcategory_id",
+                        name: "fk_products_subcategories_subcategory_id",
                         column: x => x.subcategory_id,
                         principalTable: "subcategories",
                         principalColumn: "id",
@@ -995,6 +1070,8 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     order_id = table.Column<int>(type: "integer", nullable: false),
                     received_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    warehouse_shipping_cost_usd = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false),
+                    warehouse_shipping_cost_nio = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     created_by_id = table.Column<string>(type: "text", nullable: true),
@@ -1003,45 +1080,12 @@ namespace PrettyWoman.Infrastructure.Migrations
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_product_receipts", x => x.id);
+                    table.CheckConstraint("ck_product_receipt_warehouse_shipping_cost_nio_non_negative", "warehouse_shipping_cost_nio >= 0");
+                    table.CheckConstraint("ck_product_receipt_warehouse_shipping_cost_usd_non_negative", "warehouse_shipping_cost_usd >= 0");
                     table.ForeignKey(
                         name: "fk_product_receipts_orders_order_id",
                         column: x => x.order_id,
                         principalTable: "orders",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Restrict);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "discount_campaign_products",
-                columns: table => new
-                {
-                    id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    product_detail_id = table.Column<int>(type: "integer", nullable: false),
-                    discount_campaign_id = table.Column<int>(type: "integer", nullable: false),
-                    discount_type_id = table.Column<int>(type: "integer", nullable: false),
-                    discount_value = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("pk_discount_campaign_products", x => x.id);
-                    table.CheckConstraint("ck_discount_campaign_product_value_non_negative", "discount_value > 0");
-                    table.ForeignKey(
-                        name: "fk_discount_campaign_products_discount_campaigns_discount_camp",
-                        column: x => x.discount_campaign_id,
-                        principalTable: "discount_campaigns",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "fk_discount_campaign_products_discount_types_discount_type_id",
-                        column: x => x.discount_type_id,
-                        principalTable: "discount_types",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "fk_discount_campaign_products_product_details_product_detail_id",
-                        column: x => x.product_detail_id,
-                        principalTable: "product_details",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                 });
@@ -1052,8 +1096,8 @@ namespace PrettyWoman.Infrastructure.Migrations
                 {
                     id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    product_detail_id = table.Column<int>(type: "integer", nullable: false),
-                    image_url = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: false),
+                    product_id = table.Column<int>(type: "integer", nullable: false),
+                    media_asset_id = table.Column<Guid>(type: "uuid", nullable: true),
                     is_primary = table.Column<bool>(type: "boolean", nullable: false),
                     sort_order = table.Column<int>(type: "integer", nullable: false)
                 },
@@ -1062,23 +1106,29 @@ namespace PrettyWoman.Infrastructure.Migrations
                     table.PrimaryKey("pk_product_images", x => x.id);
                     table.CheckConstraint("ck_product_images_sort_order_non_negative", "sort_order >= 0");
                     table.ForeignKey(
-                        name: "fk_product_images_product_details_product_detail_id",
-                        column: x => x.product_detail_id,
-                        principalTable: "product_details",
+                        name: "fk_product_images_media_assets_media_asset_id",
+                        column: x => x.media_asset_id,
+                        principalTable: "media_assets",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_product_images_products_product_id",
+                        column: x => x.product_id,
+                        principalTable: "products",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
-                name: "products",
+                name: "product_variants",
                 columns: table => new
                 {
                     id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     order_id = table.Column<int>(type: "integer", nullable: false),
-                    product_detail_id = table.Column<int>(type: "integer", nullable: false),
+                    product_id = table.Column<int>(type: "integer", nullable: false),
                     size_id = table.Column<int>(type: "integer", nullable: false),
-                    color = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
+                    variant = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
                     quantity = table.Column<int>(type: "integer", nullable: false),
                     received_quantity = table.Column<int>(type: "integer", nullable: false),
                     available_quantity = table.Column<int>(type: "integer", nullable: false),
@@ -1093,13 +1143,12 @@ namespace PrettyWoman.Infrastructure.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("pk_products", x => x.id);
+                    table.PrimaryKey("pk_product_variants", x => x.id);
                     table.CheckConstraint("ck_products_allocated_shipping_cost_nio_non_negative", "allocated_shipping_cost_nio >= 0");
                     table.CheckConstraint("ck_products_available_quantity_non_negative", "available_quantity >= 0");
                     table.CheckConstraint("ck_products_merchandise_total_cost_nio_non_negative", "merchandise_total_cost_nio >= 0");
-                    table.CheckConstraint("ck_products_quantity_positive", "quantity > 0");
+                    table.CheckConstraint("ck_products_quantity_non_negative", "quantity >= 0");
                     table.CheckConstraint("ck_products_received_quantity_non_negative", "received_quantity >= 0");
-                    table.CheckConstraint("ck_products_received_quantity_not_greater_than_quantity", "received_quantity <= quantity");
                     table.CheckConstraint("ck_products_reserved_quantity_non_negative", "reserved_quantity >= 0");
                     table.CheckConstraint("ck_products_sale_price_positive", "sale_price >= 0");
                     table.CheckConstraint("ck_products_stock_not_greater_than_received", "available_quantity + reserved_quantity + unavailable_quantity <= received_quantity");
@@ -1108,19 +1157,19 @@ namespace PrettyWoman.Infrastructure.Migrations
                     table.CheckConstraint("ck_products_unit_cost_nio_non_negative", "unit_cost_nio >= 0");
                     table.CheckConstraint("ck_products_unit_cost_usd_non_negative", "unit_cost_usd >= 0");
                     table.ForeignKey(
-                        name: "fk_products_orders_order_id",
+                        name: "fk_product_variants_orders_order_id",
                         column: x => x.order_id,
                         principalTable: "orders",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "fk_products_product_details_product_detail_id",
-                        column: x => x.product_detail_id,
-                        principalTable: "product_details",
+                        name: "fk_product_variants_products_product_id",
+                        column: x => x.product_id,
+                        principalTable: "products",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "fk_products_sizes_size_id",
+                        name: "fk_product_variants_sizes_size_id",
                         column: x => x.size_id,
                         principalTable: "sizes",
                         principalColumn: "id",
@@ -1149,6 +1198,11 @@ namespace PrettyWoman.Infrastructure.Migrations
                     income_tax_percentage = table.Column<decimal>(type: "numeric(5,2)", precision: 5, scale: 2, nullable: false),
                     income_tax_amount = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false),
                     net_received_amount = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false),
+                    amount_received_nio = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false),
+                    amount_received_usd = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false),
+                    change_given_nio = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false),
+                    exchange_rate = table.Column<decimal>(type: "numeric(10,4)", precision: 10, scale: 4, nullable: true),
+                    exchange_difference_nio = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false),
                     user_id = table.Column<string>(type: "text", nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
@@ -1159,11 +1213,15 @@ namespace PrettyWoman.Infrastructure.Migrations
                 {
                     table.PrimaryKey("pk_sale_payment_movements", x => x.id);
                     table.CheckConstraint("ck_sale_payment_movements_amount_matches_allocations", "gross_amount = product_amount + shipping_amount");
+                    table.CheckConstraint("ck_sale_payment_movements_amount_received_nio_non_negative", "amount_received_nio >= 0");
+                    table.CheckConstraint("ck_sale_payment_movements_amount_received_usd_non_negative", "amount_received_usd >= 0");
                     table.CheckConstraint("ck_sale_payment_movements_card_refund_reverses_original", "movement_direction_id <> 2 OR payment_method_id <> 3 OR reversed_sale_payment_movement_id IS NOT NULL");
                     table.CheckConstraint("ck_sale_payment_movements_card_requires_terminal", "payment_method_id <> 3 OR payment_terminal_id IS NOT NULL");
+                    table.CheckConstraint("ck_sale_payment_movements_change_given_nio_non_negative", "change_given_nio >= 0");
                     table.CheckConstraint("ck_sale_payment_movements_commission_amount_non_negative", "commission_amount >= 0");
                     table.CheckConstraint("ck_sale_payment_movements_commission_not_greater_than_amount", "commission_amount + income_tax_amount <= gross_amount");
                     table.CheckConstraint("ck_sale_payment_movements_commission_percentage_non_negative", "commission_percentage >= 0");
+                    table.CheckConstraint("ck_sale_payment_movements_exchange_rate_required_for_usd", "(amount_received_usd = 0 AND exchange_rate IS NULL) OR (amount_received_usd > 0 AND exchange_rate > 0)");
                     table.CheckConstraint("ck_sale_payment_movements_gross_amount_positive", "gross_amount > 0");
                     table.CheckConstraint("ck_sale_payment_movements_in_does_not_reverse", "movement_direction_id <> 1 OR reversed_sale_payment_movement_id IS NULL");
                     table.CheckConstraint("ck_sale_payment_movements_income_tax_amount_non_negative", "income_tax_amount >= 0");
@@ -1174,6 +1232,7 @@ namespace PrettyWoman.Infrastructure.Migrations
                     table.CheckConstraint("ck_sale_payment_movements_product_amount_non_negative", "product_amount >= 0");
                     table.CheckConstraint("ck_sale_payment_movements_shipping_amount_non_negative", "shipping_amount >= 0");
                     table.CheckConstraint("ck_sale_payment_movements_shipping_requires_delivery", "(shipping_amount = 0 AND sale_delivery_id IS NULL) OR (shipping_amount > 0 AND sale_delivery_id IS NOT NULL)");
+                    table.CheckConstraint("ck_sale_payment_movements_single_received_currency", "(amount_received_nio > 0 AND amount_received_usd = 0) OR (amount_received_nio = 0 AND amount_received_usd > 0) OR ((delivery_agency_reconciliation_id IS NOT NULL OR reversed_sale_payment_movement_id IS NOT NULL) AND amount_received_nio > 0 AND amount_received_usd > 0)");
                     table.ForeignKey(
                         name: "fk_sale_payment_movements_delivery_agency_reconciliations_deli",
                         column: x => x.delivery_agency_reconciliation_id,
@@ -1259,6 +1318,49 @@ namespace PrettyWoman.Infrastructure.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "discount_campaign_products",
+                columns: table => new
+                {
+                    id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    product_id = table.Column<int>(type: "integer", nullable: true),
+                    product_variant_id = table.Column<int>(type: "integer", nullable: true),
+                    discount_campaign_id = table.Column<int>(type: "integer", nullable: false),
+                    discount_type_id = table.Column<int>(type: "integer", nullable: false),
+                    discount_value = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_discount_campaign_products", x => x.id);
+                    table.CheckConstraint("ck_discount_campaign_product_exactly_one_target", "(product_id IS NOT NULL) <> (product_variant_id IS NOT NULL)");
+                    table.CheckConstraint("ck_discount_campaign_product_value_non_negative", "discount_value > 0");
+                    table.ForeignKey(
+                        name: "fk_discount_campaign_products_discount_campaigns_discount_camp",
+                        column: x => x.discount_campaign_id,
+                        principalTable: "discount_campaigns",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_discount_campaign_products_discount_types_discount_type_id",
+                        column: x => x.discount_type_id,
+                        principalTable: "discount_types",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_discount_campaign_products_product_variants_product_variant",
+                        column: x => x.product_variant_id,
+                        principalTable: "product_variants",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_discount_campaign_products_products_product_id",
+                        column: x => x.product_id,
+                        principalTable: "products",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "exchange_outbound_items",
                 columns: table => new
                 {
@@ -1285,9 +1387,9 @@ namespace PrettyWoman.Infrastructure.Migrations
                     table.PrimaryKey("pk_exchange_outbound_items", x => x.id);
                     table.CheckConstraint("ck_exchange_outbound_items_quantity_positive", "quantity > 0");
                     table.ForeignKey(
-                        name: "fk_exchange_outbound_items_products_product_id",
+                        name: "fk_exchange_outbound_items_product_variants_product_id",
                         column: x => x.product_id,
-                        principalTable: "products",
+                        principalTable: "product_variants",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
@@ -1296,6 +1398,50 @@ namespace PrettyWoman.Infrastructure.Migrations
                         principalTable: "sale_exchanges",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "inventory_adjustment_items",
+                columns: table => new
+                {
+                    id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    inventory_adjustment_id = table.Column<int>(type: "integer", nullable: false),
+                    product_id = table.Column<int>(type: "integer", nullable: false),
+                    from_stock_bucket_id = table.Column<int>(type: "integer", nullable: false),
+                    to_stock_bucket_id = table.Column<int>(type: "integer", nullable: false),
+                    quantity = table.Column<int>(type: "integer", nullable: false),
+                    comments = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_inventory_adjustment_items", x => x.id);
+                    table.CheckConstraint("ck_inventory_adjustment_items_different_buckets", "from_stock_bucket_id <> to_stock_bucket_id");
+                    table.CheckConstraint("ck_inventory_adjustment_items_quantity_positive", "quantity > 0");
+                    table.ForeignKey(
+                        name: "fk_inventory_adjustment_items_inventory_adjustments_inventory_",
+                        column: x => x.inventory_adjustment_id,
+                        principalTable: "inventory_adjustments",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "fk_inventory_adjustment_items_inventory_stock_buckets_from_sto",
+                        column: x => x.from_stock_bucket_id,
+                        principalTable: "inventory_stock_buckets",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_inventory_adjustment_items_inventory_stock_buckets_to_stock",
+                        column: x => x.to_stock_bucket_id,
+                        principalTable: "inventory_stock_buckets",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_inventory_adjustment_items_product_variants_product_id",
+                        column: x => x.product_id,
+                        principalTable: "product_variants",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -1328,9 +1474,9 @@ namespace PrettyWoman.Infrastructure.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "fk_product_holds_products_product_id",
+                        name: "fk_product_holds_product_variants_product_id",
                         column: x => x.product_id,
-                        principalTable: "products",
+                        principalTable: "product_variants",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
@@ -1376,9 +1522,9 @@ namespace PrettyWoman.Infrastructure.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "fk_product_inventory_issues_products_product_id",
+                        name: "fk_product_inventory_issues_product_variants_product_id",
                         column: x => x.product_id,
-                        principalTable: "products",
+                        principalTable: "product_variants",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                 });
@@ -1391,12 +1537,16 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     product_receipt_id = table.Column<int>(type: "integer", nullable: false),
                     product_id = table.Column<int>(type: "integer", nullable: false),
-                    quantity = table.Column<decimal>(type: "numeric", nullable: false)
+                    quantity = table.Column<decimal>(type: "numeric", nullable: false),
+                    weight = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false),
+                    allocated_warehouse_shipping_cost_nio = table.Column<decimal>(type: "numeric(12,2)", precision: 12, scale: 2, nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("pk_product_receipt_details", x => x.id);
+                    table.CheckConstraint("ck_product_receipt_detail_allocated_warehouse_shipping_cost_ni~", "allocated_warehouse_shipping_cost_nio >= 0");
                     table.CheckConstraint("ck_product_receipt_detail_quantity_non_negative", "quantity >= 0");
+                    table.CheckConstraint("ck_product_receipt_detail_weight_positive", "weight > 0");
                     table.ForeignKey(
                         name: "fk_product_receipt_details_product_receipts_product_receipt_id",
                         column: x => x.product_receipt_id,
@@ -1404,9 +1554,44 @@ namespace PrettyWoman.Infrastructure.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "fk_product_receipt_details_products_product_id",
+                        name: "fk_product_receipt_details_product_variants_product_id",
                         column: x => x.product_id,
-                        principalTable: "products",
+                        principalTable: "product_variants",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "purchase_shortages",
+                columns: table => new
+                {
+                    id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    order_id = table.Column<int>(type: "integer", nullable: false),
+                    product_id = table.Column<int>(type: "integer", nullable: false),
+                    quantity = table.Column<int>(type: "integer", nullable: false),
+                    loss_amount_nio = table.Column<decimal>(type: "numeric(14,2)", precision: 14, scale: 2, nullable: false),
+                    shortage_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    created_by_id = table.Column<string>(type: "text", nullable: true),
+                    updated_by_id = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_purchase_shortages", x => x.id);
+                    table.CheckConstraint("ck_purchase_shortages_loss_amount_non_negative", "loss_amount_nio >= 0");
+                    table.CheckConstraint("ck_purchase_shortages_quantity_positive", "quantity > 0");
+                    table.ForeignKey(
+                        name: "fk_purchase_shortages_orders_order_id",
+                        column: x => x.order_id,
+                        principalTable: "orders",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_purchase_shortages_product_variants_product_id",
+                        column: x => x.product_id,
+                        principalTable: "product_variants",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                 });
@@ -1428,8 +1613,7 @@ namespace PrettyWoman.Infrastructure.Migrations
                     final_unit_price = table.Column<decimal>(type: "numeric(14,2)", precision: 14, scale: 2, nullable: false),
                     line_total = table.Column<decimal>(type: "numeric(14,2)", precision: 14, scale: 2, nullable: false),
                     total_cost_at_sale = table.Column<decimal>(type: "numeric(18,6)", precision: 18, scale: 6, nullable: false),
-                    gross_profit = table.Column<decimal>(type: "numeric(18,6)", precision: 18, scale: 6, nullable: false),
-                    sale_product_status_id = table.Column<int>(type: "integer", nullable: false)
+                    gross_profit = table.Column<decimal>(type: "numeric(18,6)", precision: 18, scale: 6, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -1456,15 +1640,9 @@ namespace PrettyWoman.Infrastructure.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "fk_sale_products_products_product_id",
+                        name: "fk_sale_products_product_variants_product_id",
                         column: x => x.product_id,
-                        principalTable: "products",
-                        principalColumn: "id",
-                        onDelete: ReferentialAction.Restrict);
-                    table.ForeignKey(
-                        name: "fk_sale_products_sale_product_statuses_sale_product_status_id",
-                        column: x => x.sale_product_status_id,
-                        principalTable: "sale_product_statuses",
+                        principalTable: "product_variants",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
@@ -1594,9 +1772,9 @@ namespace PrettyWoman.Infrastructure.Migrations
                     table.PrimaryKey("pk_exchange_return_items", x => x.id);
                     table.CheckConstraint("ck_exchange_return_items_quantity_positive", "quantity > 0");
                     table.ForeignKey(
-                        name: "fk_exchange_return_items_products_product_id",
+                        name: "fk_exchange_return_items_product_variants_product_id",
                         column: x => x.product_id,
-                        principalTable: "products",
+                        principalTable: "product_variants",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
@@ -1644,9 +1822,9 @@ namespace PrettyWoman.Infrastructure.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "fk_sale_return_items_products_product_id",
+                        name: "fk_sale_return_items_product_variants_product_id",
                         column: x => x.product_id,
-                        principalTable: "products",
+                        principalTable: "product_variants",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
@@ -1661,6 +1839,41 @@ namespace PrettyWoman.Infrastructure.Migrations
                         principalTable: "sale_returns",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "supplier_refunds",
+                columns: table => new
+                {
+                    id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    order_id = table.Column<int>(type: "integer", nullable: false),
+                    financial_movement_id = table.Column<int>(type: "integer", nullable: false),
+                    amount_nio = table.Column<decimal>(type: "numeric(14,2)", precision: 14, scale: 2, nullable: false),
+                    refunded_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    reference = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
+                    comments = table.Column<string>(type: "character varying(300)", maxLength: 300, nullable: true),
+                    created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    updated_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
+                    created_by_id = table.Column<string>(type: "text", nullable: true),
+                    updated_by_id = table.Column<string>(type: "text", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_supplier_refunds", x => x.id);
+                    table.CheckConstraint("ck_supplier_refunds_amount_positive", "amount_nio > 0");
+                    table.ForeignKey(
+                        name: "fk_supplier_refunds_financial_movements_financial_movement_id",
+                        column: x => x.financial_movement_id,
+                        principalTable: "financial_movements",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_supplier_refunds_orders_order_id",
+                        column: x => x.order_id,
+                        principalTable: "orders",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -1681,6 +1894,7 @@ namespace PrettyWoman.Infrastructure.Migrations
                     exchange_return_item_id = table.Column<int>(type: "integer", nullable: true),
                     exchange_outbound_item_id = table.Column<int>(type: "integer", nullable: true),
                     sale_return_item_id = table.Column<int>(type: "integer", nullable: true),
+                    inventory_adjustment_item_id = table.Column<int>(type: "integer", nullable: true),
                     comments = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     movement_date = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -1702,6 +1916,12 @@ namespace PrettyWoman.Infrastructure.Migrations
                         name: "fk_inventory_movements_exchange_return_items_exchange_return_i",
                         column: x => x.exchange_return_item_id,
                         principalTable: "exchange_return_items",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "fk_inventory_movements_inventory_adjustment_items_inventory_ad",
+                        column: x => x.inventory_adjustment_item_id,
+                        principalTable: "inventory_adjustment_items",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
@@ -1741,9 +1961,9 @@ namespace PrettyWoman.Infrastructure.Migrations
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "fk_inventory_movements_products_product_id",
+                        name: "fk_inventory_movements_product_variants_product_id",
                         column: x => x.product_id,
-                        principalTable: "products",
+                        principalTable: "product_variants",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
@@ -1814,6 +2034,21 @@ namespace PrettyWoman.Infrastructure.Migrations
                 });
 
             migrationBuilder.InsertData(
+                table: "inventory_adjustment_reasons",
+                columns: new[] { "id", "name" },
+                values: new object[,]
+                {
+                    { 1, "ManualCorrection" },
+                    { 2, "ProductCodeMixUp" },
+                    { 3, "PurchaseSurplus" },
+                    { 4, "PurchaseShortage" },
+                    { 5, "LostItem" },
+                    { 6, "FoundItem" },
+                    { 7, "Donation" },
+                    { 8, "Other" }
+                });
+
+            migrationBuilder.InsertData(
                 table: "inventory_movement_types",
                 columns: new[] { "id", "name" },
                 values: new object[,]
@@ -1822,24 +2057,21 @@ namespace PrettyWoman.Infrastructure.Migrations
                     { 2, "Sale" },
                     { 3, "SaleCancelled" },
                     { 4, "CustomerReturn" },
-                    { 5, "ExchangeReturn" },
-                    { 6, "IssueOpened" },
-                    { 7, "IssueReturnedToAvailable" },
-                    { 8, "IssueRemovedFromInventory" },
-                    { 9, "ReservationCreated" },
-                    { 10, "ReservationReleased" },
-                    { 11, "ReservationConvertedToSale" },
-                    { 12, "Donation" },
-                    { 13, "AdjustmentIncrease" },
-                    { 14, "AdjustmentDecrease" },
-                    { 15, "SelectionSent" },
-                    { 16, "SelectionConvertedToSale" },
-                    { 17, "SelectionReturned" },
-                    { 18, "ExchangeReplacementReserved" },
-                    { 19, "ExchangeReplacementDelivered" },
-                    { 20, "ExchangeReplacementReservationReleased" },
-                    { 21, "ExchangeReturnReceivedByAgency" },
-                    { 22, "ExchangeReturnMissing" }
+                    { 5, "IssueOpened" },
+                    { 6, "IssueReturnedToAvailable" },
+                    { 7, "IssueRemovedFromInventory" },
+                    { 8, "ReservationCreated" },
+                    { 9, "ReservationReleased" },
+                    { 10, "ReservationConvertedToSale" },
+                    { 11, "SelectionSent" },
+                    { 12, "SelectionConvertedToSale" },
+                    { 13, "SelectionReturned" },
+                    { 14, "ExchangeReplacementReserved" },
+                    { 15, "ExchangeReplacementDelivered" },
+                    { 16, "ExchangeReplacementReservationReleased" },
+                    { 17, "ExchangeReturnReceivedByAgency" },
+                    { 18, "ExchangeReturnMissing" },
+                    { 19, "AdjustmentTransfer" }
                 });
 
             migrationBuilder.InsertData(
@@ -1871,7 +2103,8 @@ namespace PrettyWoman.Infrastructure.Migrations
                     { 1, "Pending" },
                     { 2, "PartiallyReceived" },
                     { 3, "Received" },
-                    { 4, "Cancelled" }
+                    { 4, "Cancelled" },
+                    { 5, "PendingRefund" }
                 });
 
             migrationBuilder.InsertData(
@@ -1940,18 +2173,6 @@ namespace PrettyWoman.Infrastructure.Migrations
                     { 2, "PartiallyPaid" },
                     { 3, "Paid" },
                     { 4, "RefundPending" }
-                });
-
-            migrationBuilder.InsertData(
-                table: "sale_product_statuses",
-                columns: new[] { "id", "name" },
-                values: new object[,]
-                {
-                    { 1, "Pending" },
-                    { 2, "Completed" },
-                    { 3, "Refunded" },
-                    { 4, "Changed" },
-                    { 5, "Cancelled" }
                 });
 
             migrationBuilder.InsertData(
@@ -2062,10 +2283,18 @@ namespace PrettyWoman.Infrastructure.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "ix_discount_campaign_products_discount_campaign_id_product_det",
+                name: "ix_discount_campaign_products_discount_campaign_id_product_id",
                 table: "discount_campaign_products",
-                columns: new[] { "discount_campaign_id", "product_detail_id" },
-                unique: true);
+                columns: new[] { "discount_campaign_id", "product_id" },
+                unique: true,
+                filter: "product_id IS NOT NULL");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_discount_campaign_products_discount_campaign_id_product_var",
+                table: "discount_campaign_products",
+                columns: new[] { "discount_campaign_id", "product_variant_id" },
+                unique: true,
+                filter: "product_variant_id IS NOT NULL");
 
             migrationBuilder.CreateIndex(
                 name: "ix_discount_campaign_products_discount_type_id",
@@ -2073,14 +2302,19 @@ namespace PrettyWoman.Infrastructure.Migrations
                 column: "discount_type_id");
 
             migrationBuilder.CreateIndex(
-                name: "ix_discount_campaign_products_product_detail_id",
+                name: "ix_discount_campaign_products_product_id",
                 table: "discount_campaign_products",
-                column: "product_detail_id");
+                column: "product_id");
 
             migrationBuilder.CreateIndex(
-                name: "ix_discount_campaigns_enabled_start_date_end_date",
+                name: "ix_discount_campaign_products_product_variant_id",
+                table: "discount_campaign_products",
+                column: "product_variant_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_discount_campaigns_cancelled_at_start_date_end_date",
                 table: "discount_campaigns",
-                columns: new[] { "enabled", "start_date", "end_date" });
+                columns: new[] { "cancelled_at", "start_date", "end_date" });
 
             migrationBuilder.CreateIndex(
                 name: "ix_discount_sources_name",
@@ -2217,6 +2451,47 @@ namespace PrettyWoman.Infrastructure.Migrations
                 filter: "sale_return_id IS NOT NULL");
 
             migrationBuilder.CreateIndex(
+                name: "ix_inventory_adjustment_items_from_stock_bucket_id",
+                table: "inventory_adjustment_items",
+                column: "from_stock_bucket_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_inventory_adjustment_items_inventory_adjustment_id",
+                table: "inventory_adjustment_items",
+                column: "inventory_adjustment_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_inventory_adjustment_items_product_id",
+                table: "inventory_adjustment_items",
+                column: "product_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_inventory_adjustment_items_to_stock_bucket_id",
+                table: "inventory_adjustment_items",
+                column: "to_stock_bucket_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_inventory_adjustment_reasons_name",
+                table: "inventory_adjustment_reasons",
+                column: "name",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_inventory_adjustments_adjustment_date",
+                table: "inventory_adjustments",
+                column: "adjustment_date");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_inventory_adjustments_created_at",
+                table: "inventory_adjustments",
+                column: "created_at");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_inventory_adjustments_inventory_adjustment_reason_id",
+                table: "inventory_adjustments",
+                column: "inventory_adjustment_reason_id");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_inventory_movement_types_name",
                 table: "inventory_movement_types",
                 column: "name",
@@ -2241,6 +2516,13 @@ namespace PrettyWoman.Infrastructure.Migrations
                 name: "ix_inventory_movements_from_stock_bucket_id",
                 table: "inventory_movements",
                 column: "from_stock_bucket_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_inventory_movements_inventory_adjustment_item_id",
+                table: "inventory_movements",
+                column: "inventory_adjustment_item_id",
+                unique: true,
+                filter: "inventory_adjustment_item_id IS NOT NULL");
 
             migrationBuilder.CreateIndex(
                 name: "ix_inventory_movements_inventory_movement_type_id",
@@ -2350,6 +2632,24 @@ namespace PrettyWoman.Infrastructure.Migrations
                 columns: new[] { "loan_owner_id", "loan_date" });
 
             migrationBuilder.CreateIndex(
+                name: "ix_media_asset_variants_bucket_storage_key",
+                table: "media_asset_variants",
+                columns: new[] { "bucket", "storage_key" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_media_asset_variants_media_asset_id_type",
+                table: "media_asset_variants",
+                columns: new[] { "media_asset_id", "type" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_media_assets_storage_key",
+                table: "media_assets",
+                column: "storage_key",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "ix_movement_directions_name",
                 table: "movement_directions",
                 column: "name",
@@ -2426,17 +2726,6 @@ namespace PrettyWoman.Infrastructure.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "ix_product_details_code",
-                table: "product_details",
-                column: "code",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
-                name: "ix_product_details_subcategory_id",
-                table: "product_details",
-                column: "subcategory_id");
-
-            migrationBuilder.CreateIndex(
                 name: "ix_product_hold_statuses_name",
                 table: "product_hold_statuses",
                 column: "name",
@@ -2458,21 +2747,28 @@ namespace PrettyWoman.Infrastructure.Migrations
                 column: "sale_id");
 
             migrationBuilder.CreateIndex(
-                name: "ix_product_images_product_detail_id",
+                name: "ix_product_images_media_asset_id",
                 table: "product_images",
-                column: "product_detail_id");
+                column: "media_asset_id",
+                unique: true,
+                filter: "media_asset_id is not null");
 
             migrationBuilder.CreateIndex(
-                name: "ix_product_images_product_detail_id_is_primary",
+                name: "ix_product_images_product_id",
                 table: "product_images",
-                columns: new[] { "product_detail_id", "is_primary" },
+                column: "product_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_product_images_product_id_is_primary",
+                table: "product_images",
+                columns: new[] { "product_id", "is_primary" },
                 unique: true,
                 filter: "is_primary = true");
 
             migrationBuilder.CreateIndex(
-                name: "ix_product_images_product_detail_id_sort_order",
+                name: "ix_product_images_product_id_sort_order",
                 table: "product_images",
-                columns: new[] { "product_detail_id", "sort_order" });
+                columns: new[] { "product_id", "sort_order" });
 
             migrationBuilder.CreateIndex(
                 name: "ix_product_inventory_issue_statuses_name",
@@ -2542,19 +2838,46 @@ namespace PrettyWoman.Infrastructure.Migrations
                 column: "received_date");
 
             migrationBuilder.CreateIndex(
-                name: "ix_products_order_id",
-                table: "products",
+                name: "ix_product_variants_order_id",
+                table: "product_variants",
                 column: "order_id");
 
             migrationBuilder.CreateIndex(
-                name: "ix_products_product_detail_id_size_id_color",
-                table: "products",
-                columns: new[] { "product_detail_id", "size_id", "color" });
+                name: "ix_product_variants_product_id_size_id_variant",
+                table: "product_variants",
+                columns: new[] { "product_id", "size_id", "variant" });
 
             migrationBuilder.CreateIndex(
-                name: "ix_products_size_id",
-                table: "products",
+                name: "ix_product_variants_size_id",
+                table: "product_variants",
                 column: "size_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_products_code",
+                table: "products",
+                column: "code",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_products_subcategory_id",
+                table: "products",
+                column: "subcategory_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_purchase_shortages_order_id",
+                table: "purchase_shortages",
+                column: "order_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_purchase_shortages_product_id",
+                table: "purchase_shortages",
+                column: "product_id",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_purchase_shortages_shortage_date",
+                table: "purchase_shortages",
+                column: "shortage_date");
 
             migrationBuilder.CreateIndex(
                 name: "ix_sale_channels_name",
@@ -2592,6 +2915,11 @@ namespace PrettyWoman.Infrastructure.Migrations
                 name: "ix_sale_deliveries_municipality_id",
                 table: "sale_deliveries",
                 column: "municipality_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_sale_deliveries_sale_id_created_at_id",
+                table: "sale_deliveries",
+                columns: new[] { "sale_id", "created_at", "id" });
 
             migrationBuilder.CreateIndex(
                 name: "ix_sale_deliveries_user_id_created_at",
@@ -2674,12 +3002,6 @@ namespace PrettyWoman.Infrastructure.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "ix_sale_product_statuses_name",
-                table: "sale_product_statuses",
-                column: "name",
-                unique: true);
-
-            migrationBuilder.CreateIndex(
                 name: "ix_sale_products_discount_campaign_id",
                 table: "sale_products",
                 column: "discount_campaign_id");
@@ -2703,16 +3025,6 @@ namespace PrettyWoman.Infrastructure.Migrations
                 name: "ix_sale_products_sale_id_product_id",
                 table: "sale_products",
                 columns: new[] { "sale_id", "product_id" });
-
-            migrationBuilder.CreateIndex(
-                name: "ix_sale_products_sale_id_sale_product_status_id",
-                table: "sale_products",
-                columns: new[] { "sale_id", "sale_product_status_id" });
-
-            migrationBuilder.CreateIndex(
-                name: "ix_sale_products_sale_product_status_id",
-                table: "sale_products",
-                column: "sale_product_status_id");
 
             migrationBuilder.CreateIndex(
                 name: "ix_sale_return_items_original_sale_product_id",
@@ -2830,6 +3142,18 @@ namespace PrettyWoman.Infrastructure.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
+                name: "ix_supplier_refunds_financial_movement_id",
+                table: "supplier_refunds",
+                column: "financial_movement_id",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_supplier_refunds_order_id",
+                table: "supplier_refunds",
+                column: "order_id",
+                unique: true);
+
+            migrationBuilder.CreateIndex(
                 name: "ix_suppliers_name",
                 table: "suppliers",
                 column: "name",
@@ -2861,10 +3185,10 @@ namespace PrettyWoman.Infrastructure.Migrations
                 name: "dollar_exchange_rates");
 
             migrationBuilder.DropTable(
-                name: "financial_movements");
+                name: "inventory_movements");
 
             migrationBuilder.DropTable(
-                name: "inventory_movements");
+                name: "media_asset_variants");
 
             migrationBuilder.DropTable(
                 name: "order_tracking_numbers");
@@ -2876,6 +3200,12 @@ namespace PrettyWoman.Infrastructure.Migrations
                 name: "product_receipt_details");
 
             migrationBuilder.DropTable(
+                name: "purchase_shortages");
+
+            migrationBuilder.DropTable(
+                name: "supplier_refunds");
+
+            migrationBuilder.DropTable(
                 name: "AspNetRoles");
 
             migrationBuilder.DropTable(
@@ -2885,28 +3215,16 @@ namespace PrettyWoman.Infrastructure.Migrations
                 name: "discount_types");
 
             migrationBuilder.DropTable(
-                name: "expense_categories");
-
-            migrationBuilder.DropTable(
-                name: "financial_movement_types");
-
-            migrationBuilder.DropTable(
-                name: "loan_payments");
-
-            migrationBuilder.DropTable(
-                name: "sale_payment_movements");
-
-            migrationBuilder.DropTable(
                 name: "exchange_outbound_items");
 
             migrationBuilder.DropTable(
                 name: "exchange_return_items");
 
             migrationBuilder.DropTable(
-                name: "inventory_movement_types");
+                name: "inventory_adjustment_items");
 
             migrationBuilder.DropTable(
-                name: "inventory_stock_buckets");
+                name: "inventory_movement_types");
 
             migrationBuilder.DropTable(
                 name: "product_holds");
@@ -2918,22 +3236,19 @@ namespace PrettyWoman.Infrastructure.Migrations
                 name: "shipping_companies");
 
             migrationBuilder.DropTable(
-                name: "product_receipts");
+                name: "media_assets");
 
             migrationBuilder.DropTable(
-                name: "loans");
-
-            migrationBuilder.DropTable(
-                name: "movement_directions");
-
-            migrationBuilder.DropTable(
-                name: "payment_terminals");
-
-            migrationBuilder.DropTable(
-                name: "sale_deliveries");
+                name: "financial_movements");
 
             migrationBuilder.DropTable(
                 name: "sale_exchanges");
+
+            migrationBuilder.DropTable(
+                name: "inventory_adjustments");
+
+            migrationBuilder.DropTable(
+                name: "inventory_stock_buckets");
 
             migrationBuilder.DropTable(
                 name: "product_hold_statuses");
@@ -2945,16 +3260,25 @@ namespace PrettyWoman.Infrastructure.Migrations
                 name: "sale_products");
 
             migrationBuilder.DropTable(
+                name: "expense_categories");
+
+            migrationBuilder.DropTable(
+                name: "financial_movement_types");
+
+            migrationBuilder.DropTable(
+                name: "loan_payments");
+
+            migrationBuilder.DropTable(
+                name: "product_receipts");
+
+            migrationBuilder.DropTable(
+                name: "sale_payment_movements");
+
+            migrationBuilder.DropTable(
                 name: "sale_returns");
 
             migrationBuilder.DropTable(
-                name: "loan_owners");
-
-            migrationBuilder.DropTable(
-                name: "delivery_statuses");
-
-            migrationBuilder.DropTable(
-                name: "municipalities");
+                name: "inventory_adjustment_reasons");
 
             migrationBuilder.DropTable(
                 name: "product_inventory_issue_statuses");
@@ -2969,46 +3293,46 @@ namespace PrettyWoman.Infrastructure.Migrations
                 name: "discount_sources");
 
             migrationBuilder.DropTable(
-                name: "products");
+                name: "product_variants");
 
             migrationBuilder.DropTable(
-                name: "sale_product_statuses");
+                name: "loans");
 
             migrationBuilder.DropTable(
-                name: "delivery_agency_reconciliations");
+                name: "movement_directions");
+
+            migrationBuilder.DropTable(
+                name: "payment_terminals");
+
+            migrationBuilder.DropTable(
+                name: "sale_deliveries");
 
             migrationBuilder.DropTable(
                 name: "payment_methods");
 
             migrationBuilder.DropTable(
-                name: "sales");
-
-            migrationBuilder.DropTable(
-                name: "departments");
-
-            migrationBuilder.DropTable(
                 name: "orders");
 
             migrationBuilder.DropTable(
-                name: "product_details");
+                name: "products");
 
             migrationBuilder.DropTable(
                 name: "sizes");
 
             migrationBuilder.DropTable(
-                name: "delivery_agencies");
+                name: "loan_owners");
 
             migrationBuilder.DropTable(
-                name: "clients");
+                name: "delivery_agency_reconciliations");
 
             migrationBuilder.DropTable(
-                name: "sale_channels");
+                name: "delivery_statuses");
 
             migrationBuilder.DropTable(
-                name: "sale_payment_statuses");
+                name: "municipalities");
 
             migrationBuilder.DropTable(
-                name: "sale_statuses");
+                name: "sales");
 
             migrationBuilder.DropTable(
                 name: "order_statuses");
@@ -3021,6 +3345,24 @@ namespace PrettyWoman.Infrastructure.Migrations
 
             migrationBuilder.DropTable(
                 name: "size_groups");
+
+            migrationBuilder.DropTable(
+                name: "delivery_agencies");
+
+            migrationBuilder.DropTable(
+                name: "departments");
+
+            migrationBuilder.DropTable(
+                name: "clients");
+
+            migrationBuilder.DropTable(
+                name: "sale_channels");
+
+            migrationBuilder.DropTable(
+                name: "sale_payment_statuses");
+
+            migrationBuilder.DropTable(
+                name: "sale_statuses");
 
             migrationBuilder.DropTable(
                 name: "categories");
