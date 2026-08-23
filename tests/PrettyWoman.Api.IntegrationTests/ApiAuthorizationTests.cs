@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Mvc.Testing;
 using PrettyWoman.Api.IntegrationTests.Infrastructure;
 using PrettyWoman.Application.DTOs.Auth;
 using PrettyWoman.Application.DTOs.Clients;
@@ -150,6 +151,67 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
     }
 
     [Fact]
+    public async Task Login_WhenGlobalLimitIsExceeded_ReturnsTooManyRequests()
+    {
+        var (rateLimitFactory, client) = CreateRateLimitClient("RateLimiting__LoginPermitLimit", "5");
+        using (rateLimitFactory)
+        using (client)
+        {
+            for (var attempt = 0; attempt < 5; attempt++)
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/login")
+                {
+                    Content = JsonContent.Create(new LoginRequestDTO
+                    {
+                        Username = PrettyWomanApiFactory.AdminUsername,
+                        Password = PrettyWomanApiFactory.AdminPassword
+                    })
+                };
+                request.Headers.Add("X-Forwarded-For", $"198.51.100.{attempt + 1}");
+                var response = await client.SendAsync(request);
+
+                Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+            }
+
+            using var limitedRequest = new HttpRequestMessage(HttpMethod.Post, "/api/v1/auth/login/")
+            {
+                Content = JsonContent.Create(new LoginRequestDTO
+                {
+                    Username = PrettyWomanApiFactory.AdminUsername,
+                    Password = PrettyWomanApiFactory.AdminPassword
+                })
+            };
+            limitedRequest.Headers.Add("X-Forwarded-For", "198.51.100.6");
+            var limitedResponse = await client.SendAsync(limitedRequest);
+
+            Assert.Equal(HttpStatusCode.TooManyRequests, limitedResponse.StatusCode);
+        }
+    }
+
+    [Fact]
+    public async Task ProtectedRead_WhenGlobalLimitIsExceededWithoutJwt_ReturnsTooManyRequests()
+    {
+        var (rateLimitFactory, client) = CreateRateLimitClient("RateLimiting__ReadPermitLimit", "2");
+        using (rateLimitFactory)
+        using (client)
+        {
+            for (var attempt = 0; attempt < 2; attempt++)
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, "/api/v1/clients");
+                request.Headers.Add("X-Forwarded-For", $"198.51.100.{attempt + 1}");
+                var response = await client.SendAsync(request);
+                Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
+            }
+
+            using var limitedRequest = new HttpRequestMessage(HttpMethod.Get, "/api/v1/clients");
+            limitedRequest.Headers.Add("X-Forwarded-For", "198.51.100.3");
+            var limitedResponse = await client.SendAsync(limitedRequest);
+
+            Assert.Equal(HttpStatusCode.TooManyRequests, limitedResponse.StatusCode);
+        }
+    }
+
+    [Fact]
     public async Task AuthenticatedClient_RequestingMissingClient_ReturnsNotFoundMiddlewareResponse()
     {
         using var client = await CreateEmployeeClientAsync();
@@ -181,6 +243,22 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
         return client;
+    }
+
+    private (WebApplicationFactory<Program> Factory, HttpClient Client) CreateRateLimitClient(string variableName, string value)
+    {
+        var originalValue = Environment.GetEnvironmentVariable(variableName);
+        Environment.SetEnvironmentVariable(variableName, value);
+
+        try
+        {
+            var factory = _factory.WithWebHostBuilder(_ => { });
+            return (factory, factory.CreateClient());
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variableName, originalValue);
+        }
     }
 
     private sealed class ApiErrorResponse

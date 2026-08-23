@@ -18,7 +18,7 @@ Configura estas variables en el servicio de API. Los nombres con `__` se convier
 | Variable | Valor |
 | --- | --- |
 | `ASPNETCORE_ENVIRONMENT` | `Production` |
-| `ConnectionStrings__DefaultConnection` | Referencia a la URL de conexión interna del servicio PostgreSQL de Railway. |
+| `ConnectionStrings__DefaultConnection` | `Host=${{Postgres.PGHOST}};Port=${{Postgres.PGPORT}};Database=${{Postgres.PGDATABASE}};Username=${{Postgres.PGUSER}};Password=${{Postgres.PGPASSWORD}};SSL Mode=Require;Trust Server Certificate=true` (sustituye `Postgres` por el nombre exacto del servicio). |
 | `Jwt__Key` | Secreto aleatorio de al menos 32 caracteres. |
 | `Jwt__Issuer` | Identificador del emisor de tokens, por ejemplo `PrettyWoman.Api`. |
 | `Jwt__Audience` | Identificador del cliente que consume los tokens. |
@@ -37,7 +37,23 @@ Configura estas variables en el servicio de API. Los nombres con `__` se convier
 
 Railway proporciona `PORT` automáticamente. La aplicación lo usa para escuchar en `0.0.0.0`; no configures un valor fijo. `ASPNETCORE_URLS` es opcional porque el contenedor usa `http://+:8080` fuera de Railway y `PORT` tiene precedencia en Railway.
 
-Para `ConnectionStrings__DefaultConnection`, usa una referencia de variable al servicio PostgreSQL, no una URL pública ni una credencial escrita en el repositorio. En el panel de Railway, selecciona la variable de conexión que proporciona el servicio PostgreSQL para que Railway la inyecte en la API.
+Para `ConnectionStrings__DefaultConnection`, usa referencias de variables al servicio PostgreSQL, no una URL pública ni una credencial escrita en el repositorio. `DATABASE_URL` usa el formato `postgresql://...`, que no es el formato de cadena de conexión que espera Npgsql.
+
+## Rate limiting
+
+La API limita solicitudes globalmente por tipo de operación, con una ventana deslizante de un minuto. Solo existen cuatro buckets de límite, por lo que no se acumula estado por cada IP que contacte la API. Los valores predeterminados son:
+
+| Tipo de solicitud | Límite por IP |
+| --- | ---: |
+| `POST /api/v1/auth/login` | 30 por minuto |
+| Lecturas `GET` y `HEAD` | 300 por minuto |
+| Escrituras | 100 por minuto |
+| Creación o modificación de imágenes | 10 por minuto |
+| Health checks | Sin límite |
+
+Puedes ajustar los valores mediante variables opcionales de Railway, por ejemplo `RateLimiting__ReadPermitLimit=180` o `RateLimiting__ImagePermitLimit=5`. También están disponibles `RateLimiting__LoginPermitLimit`, `RateLimiting__WritePermitLimit`, `RateLimiting__WindowSeconds` y `RateLimiting__SegmentsPerWindow`.
+
+El contador vive en memoria de cada instancia. Con una sola réplica de Railway funciona como se describe; si escalas a varias réplicas y necesitas un límite global, se deberá usar un almacén compartido como Redis.
 
 ## Migraciones
 
@@ -58,7 +74,7 @@ make migrate
 - `GET /health/ready` verifica la conexión con PostgreSQL.
 - `GET /health` es el endpoint de Railway y también verifica PostgreSQL.
 
-Railway termina TLS antes de reenviar la solicitud a la API. La aplicación procesa los encabezados `X-Forwarded-For` y `X-Forwarded-Proto` en Production antes de redirigir HTTP a HTTPS.
+Railway termina TLS antes de reenviar la solicitud a la API. La aplicación procesa `X-Forwarded-Proto` únicamente desde el rango de proxy recomendado por Railway (`100.0.0.0/8`) para redirigir HTTP a HTTPS. El rate limiting no usa encabezados ni direcciones IP del cliente.
 
 ## Archivos e imágenes
 

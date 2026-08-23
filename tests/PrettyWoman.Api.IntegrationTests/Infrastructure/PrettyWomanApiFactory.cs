@@ -39,6 +39,10 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
         SetEnvironmentVariable("SeedAdmin__Name", "Admin");
         SetEnvironmentVariable("SeedAdmin__Lastname", "Integration");
         SetEnvironmentVariable("Cors__AdminOrigins__0", "http://localhost:5173");
+        SetEnvironmentVariable("RateLimiting__LoginPermitLimit", "1000");
+        SetEnvironmentVariable("RateLimiting__ReadPermitLimit", "1000");
+        SetEnvironmentVariable("RateLimiting__WritePermitLimit", "1000");
+        SetEnvironmentVariable("RateLimiting__ImagePermitLimit", "1000");
     }
 
     public async Task InitializeAsync()

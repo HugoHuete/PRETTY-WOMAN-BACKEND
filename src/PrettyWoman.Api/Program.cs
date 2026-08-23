@@ -1,12 +1,18 @@
 using System.Text;
+using System.Globalization;
+using System.Net;
+using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi;
 using PrettyWoman.Api.Middlewares;
 using PrettyWoman.Api.Health;
+using PrettyWoman.Api.RateLimiting;
 using PrettyWoman.Application;
 using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Infrastructure;
@@ -31,12 +37,15 @@ if (adminOrigins.Length == 0 || adminOrigins.Any(string.IsNullOrWhiteSpace))
     throw new InvalidOperationException("Debe configurar al menos un origen en Cors:AdminOrigins.");
 }
 
+var rateLimitOptions = builder.Configuration.GetSection(ApiRateLimitOptions.SectionName).Get<ApiRateLimitOptions>()
+    ?? new ApiRateLimitOptions();
+rateLimitOptions.Validate();
+
 builder.Services.AddDataProtection();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
-    options.KnownIPNetworks.Clear();
-    options.KnownProxies.Clear();
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("100.0.0.0"), 8));
 });
 builder.Services.AddControllers();
 builder.Services.AddHttpContextAccessor();
@@ -134,6 +143,50 @@ builder.Services.AddAuthorization(options =>
     options.FallbackPolicy = options.GetPolicy(AppPolicies.RequireEmployeeRole);
 });
 
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
+    {
+        if (httpContext.Request.Path.StartsWithSegments("/health"))
+        {
+            return RateLimitPartition.GetNoLimiter("health");
+        }
+
+        var (name, permitLimit) = GetRateLimit(httpContext, rateLimitOptions);
+
+        return RateLimitPartition.GetSlidingWindowLimiter(
+            name,
+            _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = permitLimit,
+                Window = TimeSpan.FromSeconds(rateLimitOptions.WindowSeconds),
+                SegmentsPerWindow = rateLimitOptions.SegmentsPerWindow,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var response = context.HttpContext.Response;
+        response.StatusCode = StatusCodes.Status429TooManyRequests;
+        response.ContentType = "application/problem+json";
+
+        if (context.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retryAfter))
+        {
+            response.Headers.RetryAfter = Math.Ceiling(retryAfter.TotalSeconds).ToString(CultureInfo.InvariantCulture);
+        }
+
+        await response.WriteAsJsonAsync(new ProblemDetails
+        {
+            Status = StatusCodes.Status429TooManyRequests,
+            Title = "Demasiadas solicitudes",
+            Detail = "Intenta nuevamente más tarde."
+        }, cancellationToken);
+    };
+});
+
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddApplication();
 builder.Services.AddHealthChecks()
@@ -144,6 +197,7 @@ var app = builder.Build();
 
 await IdentitySeeder.SeedAsync(app.Services, app.Configuration);
 
+app.UseForwardedHeaders();
 app.UseMiddleware<CorrelationIdMiddleware>();
 app.UseMiddleware<RequestLoggingMiddleware>();
 app.UseMiddleware<ExceptionHandlingMiddleware>();
@@ -156,11 +210,11 @@ if (app.Environment.IsDevelopment())
 }
 else
 {
-    app.UseForwardedHeaders();
     app.UseHttpsRedirection();
 }
 
 app.UseCors(AdminFrontendCorsPolicy);
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 
@@ -179,6 +233,27 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 }).AllowAnonymous();
 
 app.Run();
+
+static (string Name, int PermitLimit) GetRateLimit(HttpContext httpContext, ApiRateLimitOptions options)
+{
+    var request = httpContext.Request;
+    var normalizedPath = request.Path.Value?.TrimEnd('/') ?? string.Empty;
+    if (request.Method == HttpMethods.Post && string.Equals(normalizedPath, "/api/v1/auth/login", StringComparison.OrdinalIgnoreCase))
+    {
+        return ("login", options.LoginPermitLimit);
+    }
+
+    if (request.Path.Value?.Contains("/images", StringComparison.OrdinalIgnoreCase) == true
+        && !HttpMethods.IsGet(request.Method)
+        && !HttpMethods.IsHead(request.Method))
+    {
+        return ("images", options.ImagePermitLimit);
+    }
+
+    return HttpMethods.IsGet(request.Method) || HttpMethods.IsHead(request.Method)
+        ? ("read", options.ReadPermitLimit)
+        : ("write", options.WritePermitLimit);
+}
 
 public partial class Program
 {
