@@ -65,7 +65,7 @@ Puede trabajar con:
 
 | Modulo | Pantalla | Roles | Acciones principales | Datos necesarios | Endpoints relacionados |
 |---|---|---|---|---|---|
-| Autenticacion | Login | Admin, Vendedor | Iniciar sesion | Credenciales | `POST /api/v1/auth/login` |
+| Autenticacion | Login | Admin, Vendedor | Iniciar sesion, renovar y cerrar sesion | Credenciales y sesion | `POST /api/v1/auth/login`, `POST /api/v1/auth/refresh`, `POST /api/v1/auth/logout` |
 | Autenticacion | Usuarios | Admin | Listar, crear, actualizar, desbloquear, deshabilitar y habilitar usuario | Usuarios, roles/permisos | `GET /api/v1/auth/users`, `POST /api/v1/auth/users`, `PUT /api/v1/auth/users/{id}`, `POST /api/v1/auth/users/{id}/unlock`, `POST /api/v1/auth/users/{id}/disable`, `POST /api/v1/auth/users/{id}/enable` |
 | Dashboard | Resumen | Admin, Vendedor | Ver ventas, pagos, reservas, entregas e incidencias | Ventas, cobros, reservas, entregas e incidencias; el bloque financiero es exclusivo de Admin | `GET /api/v1/dashboard/summary` |
 | Productos | Lista de productos | Admin, Vendedor | Buscar, filtrar, paginar, abrir detalle | Productos, categoria, subcategoria, talla, stock | `GET /api/v1/products` |
@@ -105,6 +105,12 @@ Los endpoints siguientes ya están implementados y son la base de las pantallas 
   "password": "contraseña"
 }
 ```
+
+La respuesta de login incluye `accessToken`, `expiresAtUtc`, `user` y `csrfToken`. El access token vence en 15 minutos; usarlo en `Authorization: Bearer <accessToken>` para los endpoints protegidos. El navegador recibe además dos cookies con duración de un día: `refresh_token` (HttpOnly) y `csrf_token`. No almacenar el refresh token en JavaScript ni en `localStorage`.
+
+Cuando el access token esté por vencer o la API responda `401`, el frontend debe enviar `POST /api/v1/auth/refresh` con `credentials: "include"` y el encabezado `X-CSRF-Token` cuyo valor es el `csrfToken` de la última respuesta de login o refresh. La respuesta devuelve un nuevo access token, un nuevo `csrfToken` y reemplaza ambas cookies. Si refresh devuelve `401`, borrar el estado local y llevar al usuario a login. Para cerrar sesión, usar `POST /api/v1/auth/logout` con las mismas credenciales y encabezado CSRF.
+
+Cuando el frontend y la API están en orígenes distintos, las solicitudes de login, refresh y logout deben incluir `credentials: "include"`. La API acepta credenciales únicamente desde los orígenes configurados en `Cors:AdminOrigins`. En producción las cookies usan `SameSite=None; Secure`; en el perfil HTTP de desarrollo usan `SameSite=Lax` sin `Secure` para permitir pruebas locales en navegadores.
 
 El correo sigue siendo un dato del perfil. Al crear un usuario con `POST /api/v1/auth/users`, enviar también `username`, `email`, `password`, `name`, `lastname` y `role`. Las respuestas de usuario incluyen `username`, `email` y `enabled`.
 

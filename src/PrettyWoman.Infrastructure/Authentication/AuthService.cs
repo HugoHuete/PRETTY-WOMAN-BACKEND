@@ -16,15 +16,17 @@ namespace PrettyWoman.Infrastructure.Authentication;
 public class AuthService(
     UserManager<User> userManager,
     IOptions<JwtOptions> jwtOptions,
-    ApplicationDbContext context) : IAuthService
+    ApplicationDbContext context,
+    RefreshTokenService refreshTokenService) : IAuthService
 {
     private readonly UserManager<User> _userManager = userManager;
     private readonly JwtOptions _jwtOptions = jwtOptions.Value;
     private readonly ApplicationDbContext _context = context;
+    private readonly RefreshTokenService _refreshTokenService = refreshTokenService;
 
     public const string SecurityStampClaimType = "security_stamp";
 
-    public async Task<AuthResponseDTO> LoginAsync(LoginRequestDTO loginRequest)
+    public async Task<AuthSessionDTO> LoginAsync(LoginRequestDTO loginRequest)
     {
         var user = await _userManager.FindByNameAsync(loginRequest.Username)
             ?? throw new AppUnauthorizedException("Credenciales invalidas.");
@@ -53,8 +55,16 @@ public class AuthService(
             await _userManager.ResetAccessFailedCountAsync(user);
         }
 
-        return await CreateAuthResponseAsync(user);
+        return await CreateSessionAsync(user);
     }
+
+    public async Task<AuthSessionDTO> RefreshAsync(string refreshToken)
+    {
+        var (user, replacementRefreshToken) = await _refreshTokenService.RotateAsync(refreshToken);
+        return new AuthSessionDTO { Response = await CreateAuthResponseAsync(user), RefreshToken = replacementRefreshToken };
+    }
+
+    public Task LogoutAsync(string refreshToken) => _refreshTokenService.RevokeAsync(refreshToken);
 
     public async Task<UserDTO> CreateUserAsync(CreateUserDTO createUserRequest)
     {
@@ -135,6 +145,7 @@ public class AuthService(
             var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
             var passwordResult = await _userManager.ResetPasswordAsync(user, resetToken, updateUserRequest.Password);
             EnsureSucceeded(passwordResult);
+            await _refreshTokenService.RevokeAllForUserAsync(user.Id);
         }
 
         await transaction.CommitAsync();
@@ -191,6 +202,7 @@ public class AuthService(
         var claims = new List<Claim>
         {
             new(JwtRegisteredClaimNames.Sub, user.Id),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
             new(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
             new(ClaimTypes.NameIdentifier, user.Id),
             new(ClaimTypes.Email, user.Email ?? string.Empty),
@@ -216,6 +228,12 @@ public class AuthService(
             User = await CreateUserDtoAsync(user)
         };
     }
+
+    private async Task<AuthSessionDTO> CreateSessionAsync(User user) => new()
+    {
+        Response = await CreateAuthResponseAsync(user),
+        RefreshToken = await _refreshTokenService.CreateAsync(user)
+    };
 
     private async Task<UserDTO> CreateUserDtoAsync(User user)
     {
@@ -247,6 +265,7 @@ public class AuthService(
         var updateResult = await _userManager.UpdateAsync(user);
         EnsureSucceeded(updateResult);
         await UpdateSecurityStampAsync(user);
+        await _refreshTokenService.RevokeAllForUserAsync(user.Id);
 
         await transaction.CommitAsync();
     }

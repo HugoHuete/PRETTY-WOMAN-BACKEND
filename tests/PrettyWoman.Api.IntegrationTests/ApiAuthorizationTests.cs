@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using PrettyWoman.Api.IntegrationTests.Infrastructure;
 using PrettyWoman.Application.DTOs.Auth;
@@ -148,6 +149,70 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
         });
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Login_IssuesRefreshTokenCookie_AndRefreshRotatesIt()
+    {
+        using var loginClient = _factory.CreateClient();
+        var loginResponse = await loginClient.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
+        {
+            Username = PrettyWomanApiFactory.AdminUsername,
+            Password = PrettyWomanApiFactory.AdminPassword
+        });
+        var initialAuth = await loginResponse.Content.ReadFromJsonAsync<AuthResponseDTO>();
+        var cookies = loginResponse.Headers.GetValues("Set-Cookie").ToArray();
+        var refreshCookie = GetCookie(cookies, "refresh_token");
+        var csrfCookie = GetCookie(cookies, "csrf_token");
+
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+        Assert.NotNull(initialAuth);
+        Assert.Equal(csrfCookie, initialAuth.CsrfToken);
+        Assert.Contains(cookies, value => value.Contains("refresh_token=") && value.Contains("httponly", StringComparison.OrdinalIgnoreCase)
+            && value.Contains("samesite=none", StringComparison.OrdinalIgnoreCase)
+            && value.Contains("secure", StringComparison.OrdinalIgnoreCase));
+
+        using var refreshClient = _factory.CreateClient();
+        refreshClient.DefaultRequestHeaders.Add("Cookie", $"refresh_token={refreshCookie}; csrf_token={csrfCookie}");
+        refreshClient.DefaultRequestHeaders.Add("X-CSRF-Token", initialAuth.CsrfToken);
+        var refreshResponse = await refreshClient.PostAsync("/api/v1/auth/refresh", null);
+
+        Assert.True(refreshResponse.StatusCode == HttpStatusCode.OK, await refreshResponse.Content.ReadAsStringAsync());
+        var refreshedAuth = await refreshResponse.Content.ReadFromJsonAsync<AuthResponseDTO>();
+        Assert.NotNull(refreshedAuth);
+        Assert.NotEqual(initialAuth.AccessToken, refreshedAuth.AccessToken);
+
+        using var reusedClient = _factory.CreateClient();
+        reusedClient.DefaultRequestHeaders.Add("Cookie", $"refresh_token={refreshCookie}; csrf_token={csrfCookie}");
+        reusedClient.DefaultRequestHeaders.Add("X-CSRF-Token", initialAuth.CsrfToken);
+        var reusedResponse = await reusedClient.PostAsync("/api/v1/auth/refresh", null);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, reusedResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task Login_InDevelopmentOverHttp_IssuesCookiesWithoutSecureAttribute()
+    {
+        using var developmentFactory = _factory.WithWebHostBuilder(builder => builder.UseEnvironment("Development"));
+        using var client = developmentFactory.CreateClient();
+
+        var response = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
+        {
+            Username = PrettyWomanApiFactory.AdminUsername,
+            Password = PrettyWomanApiFactory.AdminPassword
+        });
+
+        var cookies = response.Headers.GetValues("Set-Cookie").ToArray();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.DoesNotContain(cookies, value => value.StartsWith("refresh_token=", StringComparison.OrdinalIgnoreCase)
+            && value.Contains("secure", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(cookies, value => value.StartsWith("csrf_token=", StringComparison.OrdinalIgnoreCase)
+            && value.Contains("secure", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(cookies, value => value.StartsWith("refresh_token=", StringComparison.OrdinalIgnoreCase)
+            && value.Contains("samesite=lax", StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(cookies, value => value.StartsWith("csrf_token=", StringComparison.OrdinalIgnoreCase)
+            && value.Contains("samesite=lax", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
@@ -415,6 +480,12 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
 
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
         return client;
+    }
+
+    private static string GetCookie(IEnumerable<string> cookies, string name)
+    {
+        var cookie = Assert.Single(cookies, value => value.StartsWith($"{name}=", StringComparison.OrdinalIgnoreCase));
+        return cookie.Split(';', 2)[0][(name.Length + 1)..];
     }
 
     private async Task<HttpClient> CreateAdminClientAsync()

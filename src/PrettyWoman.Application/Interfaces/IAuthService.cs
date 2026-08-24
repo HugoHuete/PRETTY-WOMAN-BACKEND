@@ -4,7 +4,9 @@ namespace PrettyWoman.Application.Interfaces;
 
 public interface IAuthService
 {
-    Task<AuthResponseDTO> LoginAsync(LoginRequestDTO loginRequest);
+    Task<AuthSessionDTO> LoginAsync(LoginRequestDTO loginRequest);
+    Task<AuthSessionDTO> RefreshAsync(string refreshToken);
+    Task LogoutAsync(string refreshToken);
     Task<UserDTO> GetUserByIdAsync(string id);
     Task<IReadOnlyCollection<UserDTO>> GetUsersAsync();
     Task<UserDTO> CreateUserAsync(CreateUserDTO createUserRequest);

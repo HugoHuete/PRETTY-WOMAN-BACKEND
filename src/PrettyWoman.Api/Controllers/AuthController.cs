@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Cryptography;
 using System.Security.Claims;
 using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Application.DTOs.Auth;
@@ -9,17 +10,49 @@ namespace PrettyWoman.Api.Controllers;
 
 [ApiController]
 [Route("api/v1/[controller]")]
-public class AuthController(IAuthService authService, ILogger<AuthController> logger) : ControllerBase
+public class AuthController(
+    IAuthService authService,
+    ILogger<AuthController> logger,
+    IWebHostEnvironment environment) : ControllerBase
 {
     private readonly IAuthService _authService = authService;
     private readonly ILogger<AuthController> _logger = logger;
+    private readonly IWebHostEnvironment _environment = environment;
 
     [AllowAnonymous]
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponseDTO>> Login([FromBody] LoginRequestDTO loginRequest)
     {
-        var response = await _authService.LoginAsync(loginRequest);
-        return Ok(response);
+        var session = await _authService.LoginAsync(loginRequest);
+        session.Response.CsrfToken = SetSessionCookies(session.RefreshToken);
+        return Ok(session.Response);
+    }
+
+    [AllowAnonymous]
+    [HttpPost("refresh")]
+    public async Task<ActionResult<AuthResponseDTO>> Refresh()
+    {
+        ValidateCsrfToken();
+        var refreshToken = Request.Cookies["refresh_token"]
+            ?? throw new PrettyWoman.Application.Exceptions.AppUnauthorizedException("Credenciales invalidas.");
+        var session = await _authService.RefreshAsync(refreshToken);
+        session.Response.CsrfToken = SetSessionCookies(session.RefreshToken);
+        return Ok(session.Response);
+    }
+
+    [AllowAnonymous]
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout()
+    {
+        ValidateCsrfToken();
+        if (Request.Cookies.TryGetValue("refresh_token", out var refreshToken))
+        {
+            await _authService.LogoutAsync(refreshToken);
+        }
+
+        Response.Cookies.Delete("refresh_token", CookieOptions());
+        Response.Cookies.Delete("csrf_token", CookieOptions(httpOnly: false));
+        return NoContent();
     }
 
     [Authorize(Policy = AppPolicies.RequireAdminRole)]
@@ -89,4 +122,38 @@ public class AuthController(IAuthService authService, ILogger<AuthController> lo
 
     private string GetUserId()
         => User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "unknown";
+
+    private string SetSessionCookies(string refreshToken)
+    {
+        Response.Cookies.Append("refresh_token", refreshToken, CookieOptions());
+        var csrfToken = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .TrimEnd('=')
+            .Replace('+', '-')
+            .Replace('/', '_');
+        Response.Cookies.Append("csrf_token", csrfToken, CookieOptions(httpOnly: false));
+        return csrfToken;
+    }
+
+    private void ValidateCsrfToken()
+    {
+        if (!Request.Cookies.TryGetValue("csrf_token", out var csrfCookie) ||
+            !Request.Headers.TryGetValue("X-CSRF-Token", out var csrfHeader) ||
+            csrfHeader.Count != 1 || csrfCookie != csrfHeader[0])
+        {
+            throw new PrettyWoman.Application.Exceptions.AppUnauthorizedException("Credenciales invalidas.");
+        }
+    }
+
+    private CookieOptions CookieOptions(bool httpOnly = true)
+    {
+        var secure = Request.IsHttps || !_environment.IsDevelopment();
+        return new CookieOptions
+        {
+            HttpOnly = httpOnly,
+            Secure = secure,
+            SameSite = secure ? SameSiteMode.None : SameSiteMode.Lax,
+            Path = "/api/v1/auth",
+            Expires = DateTimeOffset.UtcNow.AddDays(1)
+        };
+    }
 }

@@ -57,6 +57,13 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
             .Property(user => user.Enabled)
             .HasDefaultValue(true);
 
+        builder.Entity<RefreshToken>(entity =>
+        {
+            entity.HasIndex(token => token.TokenHash).IsUnique();
+            entity.HasIndex(token => token.UserId);
+            entity.HasOne(token => token.User).WithMany().HasForeignKey(token => token.UserId);
+        });
+
         builder.ApplyConfigurationsFromAssembly(
         typeof(ApplicationDbContext).Assembly);
 
@@ -64,6 +71,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
 
 
     // Orders
+    public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<MediaAsset> MediaAssets { get; set; }
     public DbSet<MediaAssetVariant> MediaAssetVariants { get; set; }
 

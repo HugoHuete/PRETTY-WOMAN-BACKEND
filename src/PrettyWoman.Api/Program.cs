@@ -82,7 +82,8 @@ builder.Services.AddCors(options =>
     options.AddPolicy(AdminFrontendCorsPolicy, policy =>
         policy.WithOrigins(adminOrigins)
             .AllowAnyHeader()
-            .AllowAnyMethod());
+            .AllowAnyMethod()
+            .AllowCredentials());
 });
 
 builder.Services.Configure<JwtOptions>(
@@ -275,4 +276,3 @@ static (string Name, int PermitLimit) GetRateLimit(HttpContext httpContext, ApiR
 public partial class Program
 {
 }
-
