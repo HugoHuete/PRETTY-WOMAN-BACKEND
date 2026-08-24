@@ -31,6 +31,14 @@ public class AuthController(IAuthService authService, ILogger<AuthController> lo
     }
 
     [Authorize(Policy = AppPolicies.RequireAdminRole)]
+    [HttpGet("users")]
+    public async Task<ActionResult<IReadOnlyCollection<UserDTO>>> GetUsers()
+    {
+        var users = await _authService.GetUsersAsync();
+        return Ok(users);
+    }
+
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("users")]
     public async Task<ActionResult<UserDTO>> CreateUser([FromBody] CreateUserDTO createUserRequest)
     {
@@ -44,11 +52,38 @@ public class AuthController(IAuthService authService, ILogger<AuthController> lo
     }
 
     [Authorize(Policy = AppPolicies.RequireAdminRole)]
+    [HttpPut("users/{id}")]
+    public async Task<ActionResult<UserDTO>> UpdateUser(string id, [FromBody] UpdateUserDTO updateUserRequest)
+    {
+        var user = await _authService.UpdateUserAsync(id, updateUserRequest);
+        _logger.LogInformation("Usuario {TargetUserId} actualizado por usuario {UserId}", id, GetUserId());
+        return Ok(user);
+    }
+
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("users/{id}/unlock")]
     public async Task<ActionResult<UserDTO>> UnlockUser(string id)
     {
         var user = await _authService.UnlockUserAsync(id);
         _logger.LogInformation("Usuario {TargetUserId} desbloqueado por usuario {UserId}", id, GetUserId());
+        return Ok(user);
+    }
+
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
+    [HttpPost("users/{id}/disable")]
+    public async Task<ActionResult<UserDTO>> DisableUser(string id)
+    {
+        var user = await _authService.DisableUserAsync(id);
+        _logger.LogInformation("Usuario {TargetUserId} deshabilitado por usuario {UserId}", id, GetUserId());
+        return Ok(user);
+    }
+
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
+    [HttpPost("users/{id}/enable")]
+    public async Task<ActionResult<UserDTO>> EnableUser(string id)
+    {
+        var user = await _authService.EnableUserAsync(id);
+        _logger.LogInformation("Usuario {TargetUserId} habilitado por usuario {UserId}", id, GetUserId());
         return Ok(user);
     }
 

@@ -53,6 +53,10 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     {
         base.OnModelCreating(builder);
 
+        builder.Entity<User>()
+            .Property(user => user.Enabled)
+            .HasDefaultValue(true);
+
         builder.ApplyConfigurationsFromAssembly(
         typeof(ApplicationDbContext).Assembly);
 

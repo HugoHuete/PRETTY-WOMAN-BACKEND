@@ -151,6 +151,178 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
     }
 
     [Fact]
+    public async Task DisabledUser_CannotLoginOrUsePreviouslyIssuedToken_AndCanLoginAfterBeingEnabled()
+    {
+        await _factory.EnsureEmployeeAsync();
+        using var employeeClient = _factory.CreateClient();
+        var initialLogin = await employeeClient.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
+        {
+            Username = PrettyWomanApiFactory.EmployeeEmail,
+            Password = PrettyWomanApiFactory.EmployeePassword
+        });
+        var employeeAuth = await initialLogin.Content.ReadFromJsonAsync<AuthResponseDTO>();
+
+        Assert.Equal(HttpStatusCode.OK, initialLogin.StatusCode);
+        Assert.NotNull(employeeAuth);
+
+        employeeClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", employeeAuth.AccessToken);
+
+        using var adminClient = await CreateAdminClientAsync();
+        var disableResponse = await adminClient.PostAsync($"/api/v1/auth/users/{employeeAuth.User.Id}/disable", null);
+        var existingSessionResponse = await employeeClient.GetAsync("/api/v1/clients");
+
+        Assert.Equal(HttpStatusCode.OK, disableResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, existingSessionResponse.StatusCode);
+
+        var disabledLogin = await _factory.CreateClient().PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
+        {
+            Username = PrettyWomanApiFactory.EmployeeEmail,
+            Password = PrettyWomanApiFactory.EmployeePassword
+        });
+
+        Assert.Equal(HttpStatusCode.Unauthorized, disabledLogin.StatusCode);
+
+        var enableResponse = await adminClient.PostAsync($"/api/v1/auth/users/{employeeAuth.User.Id}/enable", null);
+
+        Assert.Equal(HttpStatusCode.OK, enableResponse.StatusCode);
+
+        var enabledLogin = await _factory.CreateClient().PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
+        {
+            Username = PrettyWomanApiFactory.EmployeeEmail,
+            Password = PrettyWomanApiFactory.EmployeePassword
+        });
+
+        Assert.Equal(HttpStatusCode.OK, enabledLogin.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_CanListUsers()
+    {
+        await _factory.EnsureEmployeeAsync();
+        using var adminClient = await CreateAdminClientAsync();
+
+        var response = await adminClient.GetAsync("/api/v1/auth/users");
+
+        Assert.True(response.IsSuccessStatusCode, await response.Content.ReadAsStringAsync());
+        var users = await response.Content.ReadFromJsonAsync<UserDTO[]>();
+        Assert.NotNull(users);
+        Assert.Contains(users, user => user.Email == PrettyWomanApiFactory.EmployeeEmail && user.Enabled);
+    }
+
+    [Fact]
+    public async Task Admin_CanUpdateUserProfileAndPassword_WhichInvalidatesPreviousToken()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var username = $"user.update.{suffix}";
+        var password = "ClaveInicial123!";
+        using var adminClient = await CreateAdminClientAsync();
+        var createResponse = await adminClient.PostAsJsonAsync("/api/v1/auth/users", new CreateUserDTO
+        {
+            Username = username,
+            Email = $"user.update.{suffix}@prettywoman.test",
+            Password = password,
+            Name = "Usuario",
+            Lastname = "Actualizable",
+            Role = "Employee"
+        });
+        var createdUser = await createResponse.Content.ReadFromJsonAsync<UserDTO>();
+
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        Assert.NotNull(createdUser);
+
+        using var userClient = _factory.CreateClient();
+        var initialLogin = await userClient.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
+        {
+            Username = username,
+            Password = password
+        });
+        var userAuth = await initialLogin.Content.ReadFromJsonAsync<AuthResponseDTO>();
+
+        Assert.Equal(HttpStatusCode.OK, initialLogin.StatusCode);
+        Assert.NotNull(userAuth);
+
+        userClient.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", userAuth.AccessToken);
+
+        var updateResponse = await adminClient.PutAsJsonAsync($"/api/v1/auth/users/{createdUser.Id}", new
+        {
+            name = "Empleado actualizado",
+            lastname = "Integracion actualizado",
+            email = "empleado.actualizado@prettywoman.test",
+            password = "NuevaClave123!"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, updateResponse.StatusCode);
+        var updatedUser = await updateResponse.Content.ReadFromJsonAsync<UserDTO>();
+        var previousTokenResponse = await userClient.GetAsync("/api/v1/clients");
+        Assert.NotNull(updatedUser);
+        Assert.Equal("Empleado actualizado", updatedUser.Name);
+        Assert.Equal("Integracion actualizado", updatedUser.Lastname);
+        Assert.Equal("empleado.actualizado@prettywoman.test", updatedUser.Email);
+        Assert.Equal(HttpStatusCode.Unauthorized, previousTokenResponse.StatusCode);
+
+        var newLogin = await _factory.CreateClient().PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
+        {
+            Username = username,
+            Password = "NuevaClave123!"
+        });
+
+        Assert.Equal(HttpStatusCode.OK, newLogin.StatusCode);
+    }
+
+    [Fact]
+    public async Task Admin_UpdateWithInvalidPassword_DoesNotPersistProfileChanges()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var username = $"user.atomic.{suffix}";
+        var originalEmail = $"user.atomic.{suffix}@prettywoman.test";
+        var password = "ClaveInicial123!";
+        using var adminClient = await CreateAdminClientAsync();
+        var createResponse = await adminClient.PostAsJsonAsync("/api/v1/auth/users", new CreateUserDTO
+        {
+            Username = username,
+            Email = originalEmail,
+            Password = password,
+            Name = "Nombre original",
+            Lastname = "Apellido original",
+            Role = "Employee"
+        });
+        var createdUser = await createResponse.Content.ReadFromJsonAsync<UserDTO>();
+
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+        Assert.NotNull(createdUser);
+
+        var updateResponse = await adminClient.PutAsJsonAsync($"/api/v1/auth/users/{createdUser.Id}", new
+        {
+            name = "Nombre rechazado",
+            lastname = "Apellido rechazado",
+            email = "rechazado@prettywoman.test",
+            password = "corta"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, updateResponse.StatusCode);
+
+        var usersResponse = await adminClient.GetAsync("/api/v1/auth/users");
+        var users = await usersResponse.Content.ReadFromJsonAsync<UserDTO[]>();
+
+        Assert.Equal(HttpStatusCode.OK, usersResponse.StatusCode);
+        Assert.NotNull(users);
+        var userAfterFailedUpdate = Assert.Single(users, user => user.Id == createdUser.Id);
+        Assert.Equal("Nombre original", userAfterFailedUpdate.Name);
+        Assert.Equal("Apellido original", userAfterFailedUpdate.Lastname);
+        Assert.Equal(originalEmail, userAfterFailedUpdate.Email);
+
+        var loginResponse = await _factory.CreateClient().PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
+        {
+            Username = username,
+            Password = password
+        });
+
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+    }
+
+    [Fact]
     public async Task Login_WhenGlobalLimitIsExceeded_ReturnsTooManyRequests()
     {
         var (rateLimitFactory, client) = CreateRateLimitClient("RateLimiting__LoginPermitLimit", "5");
@@ -235,6 +407,23 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
         {
             Username = PrettyWomanApiFactory.EmployeeEmail,
             Password = PrettyWomanApiFactory.EmployeePassword
+        });
+        var auth = await loginResponse.Content.ReadFromJsonAsync<AuthResponseDTO>();
+
+        Assert.Equal(HttpStatusCode.OK, loginResponse.StatusCode);
+        Assert.NotNull(auth);
+
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
+        return client;
+    }
+
+    private async Task<HttpClient> CreateAdminClientAsync()
+    {
+        var client = _factory.CreateClient();
+        var loginResponse = await client.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
+        {
+            Username = PrettyWomanApiFactory.AdminUsername,
+            Password = PrettyWomanApiFactory.AdminPassword
         });
         var auth = await loginResponse.Content.ReadFromJsonAsync<AuthResponseDTO>();
 

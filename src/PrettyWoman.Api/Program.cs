@@ -130,6 +130,23 @@ builder.Services
             ValidAudience = jwtOptions.Audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtOptions.Key))
         };
+        // En cada llamada a una api se hace una consulta a la base de datos para obtener el usuario y verificar estos valores. 
+        // Esto es necesario para que cuando un usuario sea deshabilitado o se cambie su contraseña, los tokens existentes sean invalidados.
+        options.Events = new JwtBearerEvents
+        {
+            OnTokenValidated = async context =>
+            {
+                var userId = context.Principal?.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+                var securityStamp = context.Principal?.FindFirst(AuthService.SecurityStampClaimType)?.Value;
+                var userManager = context.HttpContext.RequestServices.GetRequiredService<UserManager<User>>();
+                var user = userId is null ? null : await userManager.FindByIdAsync(userId);
+
+                if (user is null || !user.Enabled || user.SecurityStamp != securityStamp)
+                {
+                    context.Fail("El token ya no es valido.");
+                }
+            }
+        };
     });
 
 builder.Services.AddAuthorization(options =>

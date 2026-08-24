@@ -66,7 +66,7 @@ Puede trabajar con:
 | Modulo | Pantalla | Roles | Acciones principales | Datos necesarios | Endpoints relacionados |
 |---|---|---|---|---|---|
 | Autenticacion | Login | Admin, Vendedor | Iniciar sesion | Credenciales | `POST /api/v1/auth/login` |
-| Autenticacion | Usuarios | Admin | Crear usuario, desbloquear usuario | Usuarios, roles/permisos | `POST /api/v1/auth/users`, `POST /api/v1/auth/users/{id}/unlock` |
+| Autenticacion | Usuarios | Admin | Listar, crear, actualizar, desbloquear, deshabilitar y habilitar usuario | Usuarios, roles/permisos | `GET /api/v1/auth/users`, `POST /api/v1/auth/users`, `PUT /api/v1/auth/users/{id}`, `POST /api/v1/auth/users/{id}/unlock`, `POST /api/v1/auth/users/{id}/disable`, `POST /api/v1/auth/users/{id}/enable` |
 | Dashboard | Resumen | Admin, Vendedor | Ver ventas, pagos, reservas, entregas e incidencias | Ventas, cobros, reservas, entregas e incidencias; el bloque financiero es exclusivo de Admin | `GET /api/v1/dashboard/summary` |
 | Productos | Lista de productos | Admin, Vendedor | Buscar, filtrar, paginar, abrir detalle | Productos, categoria, subcategoria, talla, stock | `GET /api/v1/products` |
 | Productos | Exportar productos | Admin, Vendedor | Descargar catálogo filtrado en Excel | Productos y variantes | `GET /api/v1/products/export` |
@@ -106,7 +106,11 @@ Los endpoints siguientes ya están implementados y son la base de las pantallas 
 }
 ```
 
-El correo sigue siendo un dato del perfil. Al crear un usuario con `POST /api/v1/auth/users`, enviar también `username`, `email`, `password`, `name`, `lastname` y `role`. Las respuestas de usuario incluyen `username` y `email`.
+El correo sigue siendo un dato del perfil. Al crear un usuario con `POST /api/v1/auth/users`, enviar también `username`, `email`, `password`, `name`, `lastname` y `role`. Las respuestas de usuario incluyen `username`, `email` y `enabled`.
+
+Un administrador puede deshabilitar y rehabilitar una cuenta con `POST /api/v1/auth/users/{id}/disable` y `POST /api/v1/auth/users/{id}/enable`. Una cuenta deshabilitada no puede iniciar sesión y sus tokens emitidos dejan de ser válidos de inmediato. La UI debe pedir confirmación antes de deshabilitarla.
+
+`GET /api/v1/auth/users` devuelve los usuarios para la pantalla administrativa. Con `PUT /api/v1/auth/users/{id}`, un administrador puede cambiar `name`, `lastname`, `email` y opcionalmente `password`; el `username` no cambia. Al cambiar la contraseña, los tokens existentes del usuario se invalidan y deberá iniciar sesión con la nueva contraseña.
 
 ### Compras: faltantes confirmados y reembolso de proveedor
 
@@ -618,7 +622,7 @@ No existe todavía una ruta específica para cancelar una sola línea de venta. 
 
 - La UI no debe calcular reglas criticas de negocio como totales finales, stock disponible, prorrateos de descuento, comisiones o estados finales. Debe mostrar lo que devuelve el backend.
 - El frontend puede hacer validaciones rapidas de formulario, pero el backend sigue siendo la fuente de verdad.
-- Las acciones destructivas o sensibles deben pedir confirmacion visual: cancelar venta, eliminar movimiento financiero, desbloquear usuario, bloquear cliente, descartar producto.
+- Las acciones destructivas o sensibles deben pedir confirmacion visual: cancelar venta, eliminar movimiento financiero, desbloquear o deshabilitar usuario, bloquear cliente, descartar producto.
 - El vendedor debe ver solo acciones operativas necesarias para vender, reservar, cobrar y entregar.
 - El admin debe poder ver y gestionar configuraciones, finanzas y catalogos.
 - Las pantallas de venta y reserva deben dejar claro el estado del producto: disponible, reservado, vendido, no disponible o pendiente de recepcion.

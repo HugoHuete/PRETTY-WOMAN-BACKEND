@@ -7,5 +7,6 @@ public class UserDTO
     public required string Email { get; set; }
     public required string Name { get; set; }
     public required string Lastname { get; set; }
+    public bool Enabled { get; set; }
     public required string[] Roles { get; set; }
 }

@@ -2,6 +2,7 @@
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using PrettyWoman.Application.Common.Security;
@@ -14,15 +15,24 @@ namespace PrettyWoman.Infrastructure.Authentication;
 
 public class AuthService(
     UserManager<User> userManager,
-    IOptions<JwtOptions> jwtOptions) : IAuthService
+    IOptions<JwtOptions> jwtOptions,
+    ApplicationDbContext context) : IAuthService
 {
     private readonly UserManager<User> _userManager = userManager;
     private readonly JwtOptions _jwtOptions = jwtOptions.Value;
+    private readonly ApplicationDbContext _context = context;
+
+    public const string SecurityStampClaimType = "security_stamp";
 
     public async Task<AuthResponseDTO> LoginAsync(LoginRequestDTO loginRequest)
     {
         var user = await _userManager.FindByNameAsync(loginRequest.Username)
             ?? throw new AppUnauthorizedException("Credenciales invalidas.");
+
+        if (!user.Enabled)
+        {
+            throw new AppUnauthorizedException("Credenciales invalidas.");
+        }
 
         await EnsureLockoutIsEnabledAsync(user);
 
@@ -90,6 +100,48 @@ public class AuthService(
         return await CreateUserDtoAsync(user);
     }
 
+    public async Task<IReadOnlyCollection<UserDTO>> GetUsersAsync()
+    {
+        var users = await _userManager.Users
+            .OrderBy(user => user.Name)
+            .ThenBy(user => user.Lastname)
+            .ThenBy(user => user.UserName)
+            .ToListAsync();
+
+        var userDtos = new List<UserDTO>(users.Count);
+        foreach (var user in users)
+        {
+            userDtos.Add(await CreateUserDtoAsync(user));
+        }
+
+        return userDtos;
+    }
+
+    public async Task<UserDTO> UpdateUserAsync(string id, UpdateUserDTO updateUserRequest)
+    {
+        var user = await _userManager.FindByIdAsync(id)
+            ?? throw new AppNotFoundException($"El usuario con id '{id}' no existe.");
+
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        user.Name = updateUserRequest.Name;
+        user.Lastname = updateUserRequest.Lastname;
+        user.Email = updateUserRequest.Email;
+        var updateResult = await _userManager.UpdateAsync(user);
+        EnsureSucceeded(updateResult);
+
+        if (!string.IsNullOrWhiteSpace(updateUserRequest.Password))
+        {
+            var resetToken = await _userManager.GeneratePasswordResetTokenAsync(user);
+            var passwordResult = await _userManager.ResetPasswordAsync(user, resetToken, updateUserRequest.Password);
+            EnsureSucceeded(passwordResult);
+        }
+
+        await transaction.CommitAsync();
+
+        return await CreateUserDtoAsync(user);
+    }
+
     public async Task<UserDTO> UnlockUserAsync(string id)
     {
         var user = await _userManager.FindByIdAsync(id)
@@ -98,6 +150,26 @@ public class AuthService(
         await EnsureLockoutIsEnabledAsync(user);
         await _userManager.SetLockoutEndDateAsync(user, null);
         await _userManager.ResetAccessFailedCountAsync(user);
+
+        return await CreateUserDtoAsync(user);
+    }
+
+    public async Task<UserDTO> DisableUserAsync(string id)
+    {
+        var user = await _userManager.FindByIdAsync(id)
+            ?? throw new AppNotFoundException($"El usuario con id '{id}' no existe.");
+
+        await SetUserEnabledAsync(user, false);
+
+        return await CreateUserDtoAsync(user);
+    }
+
+    public async Task<UserDTO> EnableUserAsync(string id)
+    {
+        var user = await _userManager.FindByIdAsync(id)
+            ?? throw new AppNotFoundException($"El usuario con id '{id}' no existe.");
+
+        await SetUserEnabledAsync(user, true);
 
         return await CreateUserDtoAsync(user);
     }
@@ -122,7 +194,8 @@ public class AuthService(
             new(JwtRegisteredClaimNames.Email, user.Email ?? string.Empty),
             new(ClaimTypes.NameIdentifier, user.Id),
             new(ClaimTypes.Email, user.Email ?? string.Empty),
-            new(ClaimTypes.Name, user.Name)
+            new(ClaimTypes.Name, user.Name),
+            new(SecurityStampClaimType, user.SecurityStamp ?? string.Empty)
         };
 
         claims.AddRange(roles.Select(role => new Claim(ClaimTypes.Role, role)));
@@ -155,7 +228,35 @@ public class AuthService(
             Email = user.Email ?? string.Empty,
             Name = user.Name,
             Lastname = user.Lastname,
+            Enabled = user.Enabled,
             Roles = roles.ToArray()
         };
+    }
+
+    private async Task UpdateSecurityStampAsync(User user)
+    {
+        var result = await _userManager.UpdateSecurityStampAsync(user);
+        EnsureSucceeded(result);
+    }
+
+    private async Task SetUserEnabledAsync(User user, bool enabled)
+    {
+        await using var transaction = await _context.Database.BeginTransactionAsync();
+
+        user.Enabled = enabled;
+        var updateResult = await _userManager.UpdateAsync(user);
+        EnsureSucceeded(updateResult);
+        await UpdateSecurityStampAsync(user);
+
+        await transaction.CommitAsync();
+    }
+
+    private static void EnsureSucceeded(IdentityResult result)
+    {
+        if (!result.Succeeded)
+        {
+            throw new AppBadRequestException(
+                string.Join(", ", result.Errors.Select(error => error.Description)));
+        }
     }
 }
