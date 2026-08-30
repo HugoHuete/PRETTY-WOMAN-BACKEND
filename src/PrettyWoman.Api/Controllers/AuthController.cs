@@ -5,6 +5,7 @@ using System.Security.Claims;
 using PrettyWoman.Application.Common.Security;
 using PrettyWoman.Application.DTOs.Auth;
 using PrettyWoman.Application.Interfaces;
+using PrettyWoman.Application.Exceptions;
 
 namespace PrettyWoman.Api.Controllers;
 
@@ -29,14 +30,30 @@ public class AuthController(
     }
 
     [AllowAnonymous]
+    [HttpGet("csrf")]
+    public ActionResult<object> GetCsrfToken()
+    {
+        if (!Request.Cookies.TryGetValue("refresh_token", out _) ||
+            !Request.Cookies.TryGetValue("csrf_token", out var csrfToken) ||
+            string.IsNullOrWhiteSpace(csrfToken))
+        {
+            throw new AppUnauthorizedException("Credenciales invalidas.");
+        }
+
+        Response.Headers.CacheControl = "no-store";
+        return Ok(new { csrfToken });
+    }
+
+    [AllowAnonymous]
     [HttpPost("refresh")]
     public async Task<ActionResult<AuthResponseDTO>> Refresh()
     {
         ValidateCsrfToken();
         var refreshToken = Request.Cookies["refresh_token"]
-            ?? throw new PrettyWoman.Application.Exceptions.AppUnauthorizedException("Credenciales invalidas.");
+            ?? throw new AppUnauthorizedException("Credenciales invalidas.");
         var session = await _authService.RefreshAsync(refreshToken);
-        session.Response.CsrfToken = SetSessionCookies(session.RefreshToken);
+        Response.Cookies.Append("refresh_token", session.RefreshToken, CookieOptions());
+        session.Response.CsrfToken = Request.Cookies["csrf_token"];
         return Ok(session.Response);
     }
 
@@ -151,7 +168,7 @@ public class AuthController(
         {
             HttpOnly = httpOnly,
             Secure = secure,
-            SameSite = secure ? SameSiteMode.None : SameSiteMode.Lax,
+            SameSite = SameSiteMode.Lax,
             Path = "/api/v1/auth",
             Expires = DateTimeOffset.UtcNow.AddDays(1)
         };
