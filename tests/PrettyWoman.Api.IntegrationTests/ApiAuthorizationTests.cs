@@ -1,6 +1,11 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Security.Cryptography;
+using System.Text;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using PrettyWoman.Infrastructure.Persistence;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
@@ -152,7 +157,7 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
     }
 
     [Fact]
-    public async Task Login_IssuesRefreshTokenCookie_AndRefreshRotatesIt()
+    public async Task Login_IssuesRefreshTokenCookie_AndRefreshAllowsAnImmediateDuplicate()
     {
         using var loginClient = _factory.CreateClient();
         var loginResponse = await loginClient.PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
@@ -192,6 +197,17 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
         Assert.NotEqual(refreshCookie, rotatedRefreshToken);
         Assert.DoesNotContain(refreshedCookies, value => value.StartsWith("csrf_token=", StringComparison.OrdinalIgnoreCase));
 
+        // Dos pestañas pueden enviar el refresh anterior antes de recibir la cookie
+        // nueva. Durante una ventana muy corta ambas deben converger al mismo token.
+        using var duplicateClient = _factory.CreateClient();
+        duplicateClient.DefaultRequestHeaders.Add("Cookie", $"refresh_token={refreshCookie}; csrf_token={csrfCookie}");
+        duplicateClient.DefaultRequestHeaders.Add("X-CSRF-Token", initialAuth.CsrfToken);
+        var duplicateResponse = await duplicateClient.PostAsync("/api/v1/auth/refresh", null);
+
+        Assert.Equal(HttpStatusCode.OK, duplicateResponse.StatusCode);
+        var duplicateCookies = duplicateResponse.Headers.GetValues("Set-Cookie").ToArray();
+        Assert.Equal(rotatedRefreshToken, GetCookie(duplicateCookies, "refresh_token"));
+
         using var secondRefreshClient = _factory.CreateClient();
         secondRefreshClient.DefaultRequestHeaders.Add("Cookie", $"refresh_token={rotatedRefreshToken}; csrf_token={csrfCookie}");
         secondRefreshClient.DefaultRequestHeaders.Add("X-CSRF-Token", csrfCookie);
@@ -201,13 +217,53 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
         Assert.Equal(HttpStatusCode.OK, secondRefreshResponse.StatusCode);
         Assert.NotNull(secondRefreshedAuth);
         Assert.Equal(csrfCookie, secondRefreshedAuth.CsrfToken);
+    }
 
-        using var reusedClient = _factory.CreateClient();
-        reusedClient.DefaultRequestHeaders.Add("Cookie", $"refresh_token={refreshCookie}; csrf_token={csrfCookie}");
-        reusedClient.DefaultRequestHeaders.Add("X-CSRF-Token", initialAuth.CsrfToken);
-        var reusedResponse = await reusedClient.PostAsync("/api/v1/auth/refresh", null);
+    [Fact]
+    public async Task RefreshReuseOutsideTheReplayWindow_RevokesOnlyItsFamily()
+    {
+        var firstLogin = await _factory.CreateClient().PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
+        {
+            Username = PrettyWomanApiFactory.AdminUsername,
+            Password = PrettyWomanApiFactory.AdminPassword
+        });
+        var firstCookies = firstLogin.Headers.GetValues("Set-Cookie").ToArray();
+        var firstRefreshToken = GetCookie(firstCookies, "refresh_token");
+        var csrfToken = GetCookie(firstCookies, "csrf_token");
 
-        Assert.Equal(HttpStatusCode.Unauthorized, reusedResponse.StatusCode);
+        var secondLogin = await _factory.CreateClient().PostAsJsonAsync("/api/v1/auth/login", new LoginRequestDTO
+        {
+            Username = PrettyWomanApiFactory.AdminUsername,
+            Password = PrettyWomanApiFactory.AdminPassword
+        });
+        var secondCookies = secondLogin.Headers.GetValues("Set-Cookie").ToArray();
+        var secondRefreshToken = GetCookie(secondCookies, "refresh_token");
+        var secondCsrfToken = GetCookie(secondCookies, "csrf_token");
+
+        using var firstRefreshClient = _factory.CreateClient();
+        firstRefreshClient.DefaultRequestHeaders.Add("Cookie", $"refresh_token={firstRefreshToken}; csrf_token={csrfToken}");
+        firstRefreshClient.DefaultRequestHeaders.Add("X-CSRF-Token", csrfToken);
+        Assert.Equal(HttpStatusCode.OK, (await firstRefreshClient.PostAsync("/api/v1/auth/refresh", null)).StatusCode);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var originalToken = await context.RefreshTokens.SingleAsync(token =>
+                token.TokenHash == Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(firstRefreshToken))));
+            originalToken.ReplayUntilUtc = DateTime.UtcNow.AddSeconds(-1);
+            await context.SaveChangesAsync();
+        }
+
+        using var replayClient = _factory.CreateClient();
+        replayClient.DefaultRequestHeaders.Add("Cookie", $"refresh_token={firstRefreshToken}; csrf_token={csrfToken}");
+        replayClient.DefaultRequestHeaders.Add("X-CSRF-Token", csrfToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await replayClient.PostAsync("/api/v1/auth/refresh", null)).StatusCode);
+
+        // Esta cookie pertenece a otro inicio de sesión del mismo usuario; no debe cerrarse.
+        using var secondRefreshClient = _factory.CreateClient();
+        secondRefreshClient.DefaultRequestHeaders.Add("Cookie", $"refresh_token={secondRefreshToken}; csrf_token={secondCsrfToken}");
+        secondRefreshClient.DefaultRequestHeaders.Add("X-CSRF-Token", secondCsrfToken);
+        Assert.Equal(HttpStatusCode.OK, (await secondRefreshClient.PostAsync("/api/v1/auth/refresh", null)).StatusCode);
     }
 
     [Fact]

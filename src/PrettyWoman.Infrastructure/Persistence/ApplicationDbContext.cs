@@ -61,6 +61,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
         {
             entity.HasIndex(token => token.TokenHash).IsUnique();
             entity.HasIndex(token => token.UserId);
+            entity.HasIndex(token => token.FamilyId);
             entity.HasOne(token => token.User).WithMany().HasForeignKey(token => token.UserId);
         });
 
