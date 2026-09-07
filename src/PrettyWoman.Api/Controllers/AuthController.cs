@@ -30,6 +30,8 @@ public class AuthController(
     }
 
     [AllowAnonymous]
+    // Las pestañas nuevas usan este endpoint para recuperar el CSRF de la sesión existente
+    // antes de solicitar un access token. No genera ni rota credenciales.
     [HttpGet("csrf")]
     public ActionResult<object> GetCsrfToken()
     {
@@ -157,7 +159,7 @@ public class AuthController(
             !Request.Headers.TryGetValue("X-CSRF-Token", out var csrfHeader) ||
             csrfHeader.Count != 1 || csrfCookie != csrfHeader[0])
         {
-            throw new PrettyWoman.Application.Exceptions.AppUnauthorizedException("Credenciales invalidas.");
+            throw new AppUnauthorizedException("Credenciales invalidas.");
         }
     }
 

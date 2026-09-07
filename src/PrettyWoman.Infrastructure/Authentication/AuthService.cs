@@ -36,8 +36,6 @@ public class AuthService(
             throw new AppUnauthorizedException("Credenciales invalidas.");
         }
 
-        await EnsureLockoutIsEnabledAsync(user);
-
         if (await _userManager.IsLockedOutAsync(user))
         {
             throw new AppUnauthorizedException("Credenciales invalidas.");
@@ -158,7 +156,6 @@ public class AuthService(
         var user = await _userManager.FindByIdAsync(id)
             ?? throw new AppNotFoundException($"El usuario con id '{id}' no existe.");
 
-        await EnsureLockoutIsEnabledAsync(user);
         await _userManager.SetLockoutEndDateAsync(user, null);
         await _userManager.ResetAccessFailedCountAsync(user);
 
@@ -183,16 +180,6 @@ public class AuthService(
         await SetUserEnabledAsync(user, true);
 
         return await CreateUserDtoAsync(user);
-    }
-
-    private async Task EnsureLockoutIsEnabledAsync(User user)
-    {
-        if (user.LockoutEnabled)
-        {
-            return;
-        }
-
-        await _userManager.SetLockoutEnabledAsync(user, true);
     }
 
     private async Task<AuthResponseDTO> CreateAuthResponseAsync(User user)

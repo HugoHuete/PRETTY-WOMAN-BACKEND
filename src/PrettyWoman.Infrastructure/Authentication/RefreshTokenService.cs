@@ -34,6 +34,8 @@ public class RefreshTokenService(
 
         if (!IsUsable(token, now))
         {
+            // El token ya era inválido cuando se leyó. Puede ser una repetición inmediata
+            // de una rotación anterior; si es así, devolvemos el mismo reemplazo.
             var replay = await TryReplayAsync(token, now);
             if (replay is not null)
             {
@@ -41,6 +43,7 @@ public class RefreshTokenService(
                 return replay.Value;
             }
 
+            // No fue una repetición permitida: invalidamos todos los tokens de esta sesión.
             await RevokeFamilyAsync(token.FamilyId);
             await transaction.CommitAsync();
             throw new AppUnauthorizedException("Credenciales invalidas.");
