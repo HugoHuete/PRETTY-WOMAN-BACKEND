@@ -108,18 +108,55 @@ public class AuthService(
         return await CreateUserDtoAsync(user);
     }
 
-    public async Task<IReadOnlyCollection<UserDTO>> GetUsersAsync()
+    public async Task<IReadOnlyCollection<UserDTO>> GetUsersAsync(
+        string? user = null,
+        string? role = null,
+        bool? enabled = null)
     {
-        var users = await _userManager.Users
-            .OrderBy(user => user.Name)
-            .ThenBy(user => user.Lastname)
-            .ThenBy(user => user.UserName)
+        var usersQuery = _userManager.Users.AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(user))
+        {
+            var normalizedUser = user.Trim().ToUpperInvariant();
+            usersQuery = usersQuery.Where(item =>
+                (item.NormalizedUserName != null && item.NormalizedUserName.Contains(normalizedUser)) ||
+                (item.NormalizedEmail != null && item.NormalizedEmail.Contains(normalizedUser)) ||
+                item.Name.ToUpper().Contains(normalizedUser) ||
+                item.Lastname.ToUpper().Contains(normalizedUser));
+        }
+
+        if (enabled.HasValue)
+        {
+            usersQuery = usersQuery.Where(item => item.Enabled == enabled.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(role))
+        {
+            var normalizedRole = role.Trim().ToUpperInvariant();
+            var roleId = await _context.Roles
+                .Where(item => item.NormalizedName == normalizedRole)
+                .Select(item => item.Id)
+                .SingleOrDefaultAsync();
+
+            if (roleId is null)
+            {
+                return Array.Empty<UserDTO>();
+            }
+
+            usersQuery = usersQuery.Where(item =>
+                _context.UserRoles.Any(userRole => userRole.UserId == item.Id && userRole.RoleId == roleId));
+        }
+
+        var users = await usersQuery
+            .OrderBy(account => account.Name)
+            .ThenBy(account => account.Lastname)
+            .ThenBy(account => account.UserName)
             .ToListAsync();
 
         var userDtos = new List<UserDTO>(users.Count);
-        foreach (var user in users)
+        foreach (var account in users)
         {
-            userDtos.Add(await CreateUserDtoAsync(user));
+            userDtos.Add(await CreateUserDtoAsync(account));
         }
 
         return userDtos;

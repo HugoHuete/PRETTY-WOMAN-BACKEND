@@ -66,7 +66,7 @@ Puede trabajar con:
 | Modulo | Pantalla | Roles | Acciones principales | Datos necesarios | Endpoints relacionados |
 |---|---|---|---|---|---|
 | Autenticacion | Login | Admin, Vendedor | Iniciar sesion, renovar y cerrar sesion | Credenciales y sesion | `POST /api/v1/auth/login`, `POST /api/v1/auth/refresh`, `POST /api/v1/auth/logout` |
-| Autenticacion | Usuarios | Admin | Listar, crear, actualizar, desbloquear, deshabilitar y habilitar usuario | Usuarios, roles/permisos | `GET /api/v1/auth/users`, `POST /api/v1/auth/users`, `PUT /api/v1/auth/users/{id}`, `POST /api/v1/auth/users/{id}/unlock`, `POST /api/v1/auth/users/{id}/disable`, `POST /api/v1/auth/users/{id}/enable` |
+| Autenticacion | Usuarios | Admin | Listar, filtrar, crear, actualizar, desbloquear, deshabilitar y habilitar usuario | Usuarios, roles/permisos y estado | `GET /api/v1/auth/users`, `POST /api/v1/auth/users`, `PUT /api/v1/auth/users/{id}`, `POST /api/v1/auth/users/{id}/unlock`, `POST /api/v1/auth/users/{id}/disable`, `POST /api/v1/auth/users/{id}/enable` |
 | Dashboard | Resumen | Admin, Vendedor | Ver ventas, pagos, reservas, entregas e incidencias | Ventas, cobros, reservas, entregas e incidencias; el bloque financiero es exclusivo de Admin | `GET /api/v1/dashboard/summary` |
 | Productos | Lista de productos | Admin, Vendedor | Buscar, filtrar, paginar, abrir detalle | Productos, categoria, subcategoria, talla, stock | `GET /api/v1/products` |
 | Productos | Exportar productos | Admin, Vendedor | Descargar catálogo filtrado en Excel | Productos y variantes | `GET /api/v1/products/export` |
@@ -116,7 +116,15 @@ El correo sigue siendo un dato del perfil. Al crear un usuario con `POST /api/v1
 
 Un administrador puede deshabilitar y rehabilitar una cuenta con `POST /api/v1/auth/users/{id}/disable` y `POST /api/v1/auth/users/{id}/enable`. Una cuenta deshabilitada no puede iniciar sesión y sus tokens emitidos dejan de ser válidos de inmediato. La UI debe pedir confirmación antes de deshabilitarla.
 
-`GET /api/v1/auth/users` devuelve los usuarios para la pantalla administrativa. Con `PUT /api/v1/auth/users/{id}`, un administrador puede cambiar `name`, `lastname`, `email` y opcionalmente `password`; el `username` no cambia. Al cambiar la contraseña, los tokens existentes del usuario se invalidan y deberá iniciar sesión con la nueva contraseña.
+`GET /api/v1/auth/users` devuelve los usuarios para la pantalla administrativa y acepta filtros opcionales combinables:
+
+| Parámetro | Tipo | Comportamiento |
+|---|---|---|
+| `user` | texto | Búsqueda parcial, sin distinguir mayúsculas, por `username`, nombre, apellido o correo. |
+| `role` | texto | Devuelve solo usuarios con ese rol (`Admin` o `Employee`). |
+| `enabled` | booleano | `true` devuelve habilitados, `false` deshabilitados; si se omite devuelve ambos estados. |
+
+Ejemplos: `GET /api/v1/auth/users?user=maria`, `GET /api/v1/auth/users?role=Employee&enabled=true`. Con `PUT /api/v1/auth/users/{id}`, un administrador puede cambiar `name`, `lastname`, `email` y opcionalmente `password`; el `username` no cambia. Al cambiar la contraseña, los tokens existentes del usuario se invalidan y deberá iniciar sesión con la nueva contraseña.
 
 ### Compras: faltantes confirmados y reembolso de proveedor
 
