@@ -8,7 +8,7 @@ public interface IAuthService
     Task<AuthSessionDTO> RefreshAsync(string refreshToken);
     Task LogoutAsync(string refreshToken);
     Task<UserDTO> GetUserByIdAsync(string id);
-    Task<IReadOnlyCollection<UserDTO>> GetUsersAsync();
+    Task<IReadOnlyCollection<UserDTO>> GetUsersAsync(string? user = null, string? role = null, bool? enabled = null);
     Task<UserDTO> CreateUserAsync(CreateUserDTO createUserRequest);
     Task<UserDTO> UpdateUserAsync(string id, UpdateUserDTO updateUserRequest);
     Task<UserDTO> UnlockUserAsync(string id);

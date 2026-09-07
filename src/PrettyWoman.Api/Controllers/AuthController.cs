@@ -65,9 +65,12 @@ public class AuthController(
 
     [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpGet("users")]
-    public async Task<ActionResult<IReadOnlyCollection<UserDTO>>> GetUsers()
+    public async Task<ActionResult<IReadOnlyCollection<UserDTO>>> GetUsers(
+        string? user = null,
+        string? role = null,
+        bool? enabled = null)
     {
-        var users = await _authService.GetUsersAsync();
+        var users = await _authService.GetUsersAsync(user, role, enabled);
         return Ok(users);
     }
 

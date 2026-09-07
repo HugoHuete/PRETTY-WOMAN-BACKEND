@@ -276,6 +276,64 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
     }
 
     [Fact]
+    public async Task Admin_CanFilterUsersBySearchRoleAndEnabledStatus()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        using var adminClient = await CreateAdminClientAsync();
+
+        var enabledEmployee = await CreateUserAsync(
+            adminClient,
+            $"maria.enabled.{suffix}",
+            $"maria.enabled.{suffix}@prettywoman.test",
+            "María",
+            "Habilitada",
+            "Employee");
+        var disabledEmployee = await CreateUserAsync(
+            adminClient,
+            $"maria.disabled.{suffix}",
+            $"maria.disabled.{suffix}@prettywoman.test",
+            "María",
+            "Deshabilitada",
+            "Employee");
+        var enabledAdmin = await CreateUserAsync(
+            adminClient,
+            $"maria.admin.{suffix}",
+            $"maria.admin.{suffix}@prettywoman.test",
+            "María",
+            "Administradora",
+            "Admin");
+
+        var disableResponse = await adminClient.PostAsync($"/api/v1/auth/users/{disabledEmployee.Id}/disable", null);
+        Assert.Equal(HttpStatusCode.OK, disableResponse.StatusCode);
+
+        var searchResponse = await adminClient.GetAsync($"/api/v1/auth/users?user=maria.disabled.{suffix}");
+        var roleResponse = await adminClient.GetAsync("/api/v1/auth/users?role=Employee");
+        var statusResponse = await adminClient.GetAsync("/api/v1/auth/users?enabled=false");
+        var combinedResponse = await adminClient.GetAsync($"/api/v1/auth/users?user=maría&role=Employee&enabled=true");
+
+        var searchedUsers = await searchResponse.Content.ReadFromJsonAsync<UserDTO[]>();
+        var employeeUsers = await roleResponse.Content.ReadFromJsonAsync<UserDTO[]>();
+        var disabledUsers = await statusResponse.Content.ReadFromJsonAsync<UserDTO[]>();
+        var combinedUsers = await combinedResponse.Content.ReadFromJsonAsync<UserDTO[]>();
+
+        Assert.Equal(HttpStatusCode.OK, searchResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, roleResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, statusResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, combinedResponse.StatusCode);
+        Assert.NotNull(searchedUsers);
+        Assert.NotNull(employeeUsers);
+        Assert.NotNull(disabledUsers);
+        Assert.NotNull(combinedUsers);
+        Assert.Single(searchedUsers, user => user.Id == disabledEmployee.Id);
+        Assert.Contains(employeeUsers, user => user.Id == enabledEmployee.Id);
+        Assert.Contains(employeeUsers, user => user.Id == disabledEmployee.Id);
+        Assert.DoesNotContain(employeeUsers, user => user.Id == enabledAdmin.Id);
+        Assert.Contains(disabledUsers, user => user.Id == disabledEmployee.Id);
+        Assert.DoesNotContain(disabledUsers, user => user.Id == enabledEmployee.Id);
+        Assert.Single(combinedUsers, user => user.Id == enabledEmployee.Id);
+    }
+
+    [Fact]
     public async Task Admin_CanUpdateUserProfileAndPassword_WhichInvalidatesPreviousToken()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
@@ -461,6 +519,29 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
         Assert.Equal(404, error.Status);
         Assert.Equal("Recurso no encontrado", error.Title);
         Assert.NotNull(error.Detail);
+    }
+
+    private static async Task<UserDTO> CreateUserAsync(
+        HttpClient adminClient,
+        string username,
+        string email,
+        string name,
+        string lastname,
+        string role)
+    {
+        var response = await adminClient.PostAsJsonAsync("/api/v1/auth/users", new CreateUserDTO
+        {
+            Username = username,
+            Email = email,
+            Password = "ClavePrueba123!",
+            Name = name,
+            Lastname = lastname,
+            Role = role
+        });
+        var user = await response.Content.ReadFromJsonAsync<UserDTO>();
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        return Assert.IsType<UserDTO>(user);
     }
 
     private async Task<HttpClient> CreateEmployeeClientAsync()
