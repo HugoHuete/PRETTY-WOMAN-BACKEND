@@ -15,6 +15,19 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
     private readonly IApplicationDbContext _context = context;
     private readonly IMapper _mapper = mapper;
 
+    public async Task<IEnumerable<OrderStatusDTO>> GetStatusesAsync()
+    {
+        return await _context.OrderStatuses
+            .AsNoTracking()
+            .OrderBy(status => status.Id)
+            .Select(status => new OrderStatusDTO
+            {
+                Id = status.Id,
+                Name = status.Name
+            })
+            .ToListAsync();
+    }
+
     public async Task<int> CreateAsync(CreateOrderDTO createOrderDTO)
     {
         NormalizeOrderFields(createOrderDTO);

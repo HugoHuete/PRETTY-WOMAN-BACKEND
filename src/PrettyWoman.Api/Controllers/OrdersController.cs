@@ -21,6 +21,13 @@ public class OrdersController(IOrderService orderService) : ControllerBase
         return Ok(orders);
     }
 
+    [HttpGet("statuses")]
+    public async Task<ActionResult<IEnumerable<OrderStatusDTO>>> GetStatuses()
+    {
+        var statuses = await _orderService.GetStatusesAsync();
+        return Ok(statuses);
+    }
+
     [HttpGet("{id:int}")]
     public async Task<ActionResult<OrderDTO>> GetById(int id)
     {

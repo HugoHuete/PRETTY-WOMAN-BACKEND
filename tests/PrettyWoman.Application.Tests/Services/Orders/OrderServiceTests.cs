@@ -78,6 +78,32 @@ public class OrderServiceTests
     }
 
     [Fact]
+    public async Task GetStatusesAsync_ReturnsOrderStatusesOrderedById()
+    {
+        await using var context = CreateContext();
+        context.OrderStatuses.AddRange(
+            new OrderStatus { Id = 2, Name = "PartiallyReceived" },
+            new OrderStatus { Id = 1, Name = "Pending" });
+        await context.SaveChangesAsync();
+        var service = CreateService(context);
+
+        var statuses = await service.GetStatusesAsync();
+
+        Assert.Collection(
+            statuses,
+            status =>
+            {
+                Assert.Equal(1, status.Id);
+                Assert.Equal("Pending", status.Name);
+            },
+            status =>
+            {
+                Assert.Equal(2, status.Id);
+                Assert.Equal("PartiallyReceived", status.Name);
+            });
+    }
+
+    [Fact]
     public async Task CloseShortagesAsync_ClosesOrderAndRegistersSupplierRefund()
     {
         await using var context = CreateContext();
