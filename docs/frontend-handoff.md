@@ -112,7 +112,7 @@ Cuando el access token esté por vencer o la API responda `401`, el frontend deb
 
 Una pestaña nueva puede recuperar el CSRF de la sesión mediante `GET /api/v1/auth/csrf` con `credentials: "include"`; el endpoint devuelve el valor existente y no emite cookies. El frontend y la API se despliegan como subdominios del mismo dominio. Las solicitudes de login, refresh, logout y CSRF deben incluir `credentials: "include"`. La API acepta credenciales únicamente desde los orígenes explícitos configurados en `Cors:AdminOrigins`. En producción las cookies host-only usan `SameSite=Lax; Secure`; en desarrollo HTTP usan `SameSite=Lax` sin `Secure`.
 
-El correo sigue siendo un dato del perfil. Al crear un usuario con `POST /api/v1/auth/users`, enviar también `username`, `email`, `password`, `name`, `lastname` y `role`. Las respuestas de usuario incluyen `username`, `email` y `enabled`.
+El correo sigue siendo un dato del perfil. Al crear un usuario con `POST /api/v1/auth/users`, enviar también `username`, `email`, `password`, `name`, `lastname` y `role`. Las respuestas de usuario incluyen `username`, `email`, `enabled` y `locked`. `locked` indica si la cuenta tiene un bloqueo vigente por intentos fallidos de inicio de sesión; la UI puede ofrecer la acción de desbloquearla con `POST /api/v1/auth/users/{id}/unlock`.
 
 Un administrador puede deshabilitar y rehabilitar una cuenta con `POST /api/v1/auth/users/{id}/disable` y `POST /api/v1/auth/users/{id}/enable`. Una cuenta deshabilitada no puede iniciar sesión y sus tokens emitidos dejan de ser válidos de inmediato. La UI debe pedir confirmación antes de deshabilitarla.
 

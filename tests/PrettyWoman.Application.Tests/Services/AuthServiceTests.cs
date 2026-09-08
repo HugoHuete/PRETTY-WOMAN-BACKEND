@@ -37,6 +37,30 @@ public class AuthServiceTests
         Assert.Equal(enabledEmployee.Id, user.Id);
     }
 
+    [Fact]
+    public async Task GetUsersAsync_ReturnsWhetherUserIsLocked()
+    {
+        await using var serviceProvider = CreateServiceProvider();
+        await using var scope = serviceProvider.CreateAsyncScope();
+        var userManager = scope.ServiceProvider.GetRequiredService<UserManager<User>>();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+
+        await roleManager.CreateAsync(new IdentityRole(AppRoles.Employee));
+        var lockedUser = await CreateUserAsync(userManager, "usuario.bloqueado", "Usuario", "Bloqueado", true, AppRoles.Employee);
+        await userManager.SetLockoutEndDateAsync(lockedUser, DateTimeOffset.UtcNow.AddMinutes(5));
+        var authService = new AuthService(userManager, Options.Create(new JwtOptions
+        {
+            Key = "test-key-that-is-longer-than-thirty-two-characters",
+            Issuer = "PrettyWoman.Tests",
+            Audience = "PrettyWoman.Tests"
+        }), context, null!);
+
+        var users = await authService.GetUsersAsync(user: "usuario.bloqueado");
+
+        Assert.True(Assert.Single(users).Locked);
+    }
+
     private static ServiceProvider CreateServiceProvider()
     {
         var services = new ServiceCollection();

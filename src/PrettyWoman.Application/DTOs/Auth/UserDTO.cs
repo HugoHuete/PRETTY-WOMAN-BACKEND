@@ -8,5 +8,6 @@ public class UserDTO
     public required string Name { get; set; }
     public required string Lastname { get; set; }
     public bool Enabled { get; set; }
+    public bool Locked { get; set; }
     public required string[] Roles { get; set; }
 }

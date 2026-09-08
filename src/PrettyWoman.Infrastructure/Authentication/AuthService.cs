@@ -271,6 +271,7 @@ public class AuthService(
             Name = user.Name,
             Lastname = user.Lastname,
             Enabled = user.Enabled,
+            Locked = await _userManager.IsLockedOutAsync(user),
             Roles = roles.ToArray()
         };
     }
