@@ -15,6 +15,6 @@ public class CreateOrderProductDTO
     [Range(1, int.MaxValue, ErrorMessage = "Subcategoría es obligatoria.")]
     public int SubcategoryId { get; set; }
 
-    [MinLength(1, ErrorMessage = "Debe enviar al menos una variante del producto.")]
-    public ICollection<CreateOrderProductVariantDTO> Variants { get; set; } = [];
+    [MinLength(1, ErrorMessage = "Debe enviar al menos una presentación del producto.")]
+    public ICollection<CreateOrderProductPresentationDTO> Presentations { get; set; } = [];
 }

@@ -154,6 +154,7 @@ public class InventoryAdjustmentServiceTests
                 }
             ]
         });
+        context.ChangeTracker.Clear();
 
         var result = await service.GetAllAsync(new InventoryAdjustmentQueryDTO
         {
@@ -163,7 +164,9 @@ public class InventoryAdjustmentServiceTests
 
         var adjustment = Assert.Single(result.Items);
         Assert.Equal((int)InventoryAdjustmentReasonOption.FoundItem, adjustment.InventoryAdjustmentReasonId);
-        Assert.Equal(3, Assert.Single(adjustment.Items).ProductVariantId);
+        var item = Assert.Single(adjustment.Items);
+        Assert.Equal(3, item.ProductVariantId);
+        Assert.Equal("Azul", item.Variant);
     }
 
     private static InventoryAdjustmentService CreateService(ApplicationDbContext context)
@@ -192,6 +195,16 @@ public class InventoryAdjustmentServiceTests
                 new ProductVariant { Id = 3, SizeId = 1, Size = smallSize, Quantity = 1, ReceivedQuantity = 1, AvailableQuantity = 0, SalePrice = 800m }
             ]
         };
+        var presentation = new ProductPresentation
+        {
+            Product = product,
+            Name = "Azul",
+            NormalizedName = "AZUL"
+        };
+        foreach (var productVariant in product.ProductVariants)
+        {
+            productVariant.ProductPresentation = presentation;
+        }
         context.Products.Add(product);
 
         context.InventoryAdjustmentReasons.AddRange(

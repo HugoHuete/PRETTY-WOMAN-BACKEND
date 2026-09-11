@@ -27,6 +27,7 @@ public interface IApplicationDbContext
     DbSet<Size> Sizes { get; }
     DbSet<SizeGroup> SizeGroups { get; }
     DbSet<Product> Products { get; }
+    DbSet<ProductPresentation> ProductPresentations { get; }
     DbSet<ProductImage> ProductImages { get; }
     DbSet<ProductVariant> ProductVariants { get; }
     DbSet<ProductHold> ProductHolds { get; }

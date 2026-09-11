@@ -37,6 +37,18 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             .Include(product => product.ProductVariants)
                 .ThenInclude(productVariant => productVariant.Size)
                     .ThenInclude(size => size!.SizeGroup)
+            .Include(product => product.ProductPresentations)
+                .ThenInclude(presentation => presentation.ProductImages)
+                    .ThenInclude(image => image.MediaAsset)
+                        .ThenInclude(asset => asset!.Variants)
+            .Include(product => product.ProductPresentations)
+                .ThenInclude(presentation => presentation.ProductVariants)
+                    .ThenInclude(productVariant => productVariant.Size)
+                        .ThenInclude(size => size!.SizeGroup)
+            .Include(product => product.ProductPresentations)
+                .ThenInclude(presentation => presentation.ProductVariants)
+                    .ThenInclude(productVariant => productVariant.DiscountCampaignProducts)
+                        .ThenInclude(discount => discount.DiscountCampaign)
             .Include(product => product.ProductVariants)
                 .ThenInclude(productVariant => productVariant.DiscountCampaignProducts)
                     .ThenInclude(discount => discount.DiscountCampaign)
@@ -67,6 +79,14 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
                 .ThenInclude(discount => discount.DiscountCampaign)
             .Include(product => product.ProductVariants)
                 .ThenInclude(productVariant => productVariant.Size)
+            .Include(product => product.ProductPresentations)
+                .ThenInclude(presentation => presentation.ProductImages)
+                    .ThenInclude(image => image.MediaAsset)
+                        .ThenInclude(asset => asset!.Variants)
+            .Include(product => product.ProductPresentations)
+                .ThenInclude(presentation => presentation.ProductVariants)
+                    .ThenInclude(productVariant => productVariant.Size)
+                        .ThenInclude(size => size!.SizeGroup)
             .Include(product => product.ProductVariants)
                 .ThenInclude(productVariant => productVariant.DiscountCampaignProducts)
                     .ThenInclude(discount => discount.DiscountCampaign)
@@ -107,17 +127,24 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
         var now = DateTime.UtcNow;
         foreach (var product in products)
         {
-            foreach (var productVariant in product.ProductVariants
+            foreach (var productVariant in product.ProductPresentations
+                .SelectMany(presentation => presentation.ProductVariants)
                 .Where(productVariant => MatchesVariantFilters(productVariant, query))
                 .OrderBy(productVariant => productVariant.Size?.DisplayOrder ?? 0)
-                .ThenBy(productVariant => productVariant.Variant))
+                .ThenBy(productVariant => product.ProductPresentations
+                    .Where(presentation => presentation.ProductVariants.Any(variant => variant.Id == productVariant.Id))
+                    .Select(presentation => presentation.Name)
+                    .FirstOrDefault()))
             {
                 var discount = GetBestActiveDiscount(product, productVariant, now);
                 worksheet.Cell(row, 1).Value = product.Name;
                 worksheet.Cell(row, 2).Value = product.Code;
                 worksheet.Cell(row, 3).Value = product.SupplierProductCode;
                 worksheet.Cell(row, 4).Value = productVariant.Size?.Name ?? string.Empty;
-                worksheet.Cell(row, 5).Value = productVariant.Variant ?? string.Empty;
+                worksheet.Cell(row, 5).Value = product.ProductPresentations
+                    .Where(presentation => presentation.ProductVariants.Any(variant => variant.Id == productVariant.Id))
+                    .Select(presentation => presentation.Name)
+                    .FirstOrDefault() ?? string.Empty;
                 worksheet.Cell(row, 6).Value = productVariant.Quantity;
                 worksheet.Cell(row, 7).Value = productVariant.ReceivedQuantity;
                 worksheet.Cell(row, 8).Value = productVariant.AvailableQuantity;
@@ -155,6 +182,18 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             .Include(product => product.ProductVariants)
                 .ThenInclude(productVariant => productVariant.Size)
                     .ThenInclude(size => size!.SizeGroup)
+            .Include(product => product.ProductPresentations)
+                .ThenInclude(presentation => presentation.ProductImages)
+                    .ThenInclude(image => image.MediaAsset)
+                        .ThenInclude(asset => asset!.Variants)
+            .Include(product => product.ProductPresentations)
+                .ThenInclude(presentation => presentation.ProductVariants)
+                    .ThenInclude(productVariant => productVariant.Size)
+                        .ThenInclude(size => size!.SizeGroup)
+            .Include(product => product.ProductPresentations)
+                .ThenInclude(presentation => presentation.ProductVariants)
+                    .ThenInclude(productVariant => productVariant.DiscountCampaignProducts)
+                        .ThenInclude(discount => discount.DiscountCampaign)
             .Include(product => product.ProductVariants)
                 .ThenInclude(productVariant => productVariant.DiscountCampaignProducts)
                     .ThenInclude(discount => discount.DiscountCampaign)
@@ -219,7 +258,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
                 ProductCode = movement.ProductVariant.Product != null ? movement.ProductVariant.Product.Code : null,
                 SizeId = movement.ProductVariant.SizeId,
                 SizeName = movement.ProductVariant.Size != null ? movement.ProductVariant.Size.Name : null,
-                Variant = movement.ProductVariant.Variant,
+                Variant = movement.ProductVariant.ProductPresentation != null ? movement.ProductVariant.ProductPresentation.Name : null,
                 MovementDate = movement.MovementDate,
                 InventoryMovementTypeId = movement.InventoryMovementTypeId,
                 InventoryMovementTypeName = movement.InventoryMovementType != null ? movement.InventoryMovementType.Name : null,
@@ -290,22 +329,59 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             SubcategoryName = product.Subcategory?.Name,
             CategoryId = product.Subcategory?.CategoryId,
             CategoryName = product.Subcategory?.Category?.Name,
-            PrimaryImageUrl = GetPrimaryImageUrl(product),
-            Variants = product.ProductVariants
-                .Where(productVariant => MatchesVariantFilters(productVariant, query))
-                .OrderBy(productVariant => productVariant.Size?.DisplayOrder ?? 0)
-                .ThenBy(productVariant => productVariant.Variant)
-                .Select(productVariant => MapProductVariant(product, productVariant, now))
+            PrimaryImageUrl = GetProductPrimaryImageUrl(product),
+            Presentations = product.ProductPresentations
+                .OrderBy(presentation => presentation.SortOrder)
+                .ThenBy(presentation => presentation.Name)
+                .Select(presentation => new ProductPresentationDTO
+                {
+                    Id = presentation.Id,
+                    Name = presentation.Name,
+                    SortOrder = presentation.SortOrder,
+                    PrimaryImageUrl = GetPresentationPrimaryImageUrl(product, presentation),
+                    Sizes = presentation.ProductVariants
+                        .Where(productVariant => MatchesVariantFilters(productVariant, query))
+                        .OrderBy(productVariant => productVariant.Size?.DisplayOrder ?? 0)
+                        .Select(productVariant => MapProductVariant(product, productVariant, now))
+                        .ToList()
+                })
+                .Where(presentation => presentation.Sizes.Count > 0)
                 .ToList()
         };
     }
 
-    private string? GetPrimaryImageUrl(Product product)
+    private string? GetProductPrimaryImageUrl(Product product)
     {
         var primaryImage = product.ProductImages
-            .OrderByDescending(image => image.IsPrimary)
-            .ThenBy(image => image.SortOrder)
+            .Where(image => image.IsPrimary && image.ProductPresentationId is null)
+            .OrderBy(image => image.SortOrder)
             .FirstOrDefault();
+
+        primaryImage ??= product.ProductPresentations
+            .OrderBy(presentation => presentation.SortOrder)
+            .SelectMany(presentation => presentation.ProductImages.Where(image => image.IsPrimary).OrderBy(image => image.SortOrder))
+            .FirstOrDefault();
+
+        return GetImageUrl(primaryImage);
+    }
+
+    private string? GetPresentationPrimaryImageUrl(Product product, ProductPresentation presentation)
+    {
+        var primaryImage = presentation.ProductImages
+            .Where(image => image.IsPrimary)
+            .OrderBy(image => image.SortOrder)
+            .FirstOrDefault();
+
+        primaryImage ??= product.ProductImages
+            .Where(image => image.IsPrimary && image.ProductPresentationId is null)
+            .OrderBy(image => image.SortOrder)
+            .FirstOrDefault();
+
+        return GetImageUrl(primaryImage);
+    }
+
+    private string? GetImageUrl(ProductImage? primaryImage)
+    {
 
         var storageKey = primaryImage?.MediaAsset?.Variants
             .FirstOrDefault(variant => variant.Type == MediaVariantType.Web)
@@ -332,7 +408,6 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             SizeName = productVariant.Size?.Name,
             SizeGroupId = productVariant.Size?.SizeGroupId,
             SizeGroupName = productVariant.Size?.SizeGroup?.Name,
-            Variant = productVariant.Variant,
             Quantity = productVariant.Quantity,
             ReceivedQuantity = productVariant.ReceivedQuantity,
             AvailableQuantity = productVariant.AvailableQuantity,

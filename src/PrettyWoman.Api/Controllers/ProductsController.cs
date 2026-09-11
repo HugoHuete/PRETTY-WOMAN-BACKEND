@@ -61,10 +61,14 @@ public class ProductsController(IProductService productService, IProductImageSer
     [HttpPost("{productId:int}/images")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(8 * 1024 * 1024)]
-    public async Task<ActionResult<ProductImageDTO>> UploadImage(int productId, IFormFile file, CancellationToken cancellationToken)
+    public async Task<ActionResult<ProductImageDTO>> UploadImage(
+        int productId,
+        [FromQuery] int? productPresentationId,
+        IFormFile file,
+        CancellationToken cancellationToken)
     {
         await using var content = file.OpenReadStream();
-        var image = await _productImageService.UploadAsync(productId, content, file.ContentType, cancellationToken);
+        var image = await _productImageService.UploadAsync(productId, productPresentationId, content, file.ContentType, cancellationToken);
         return CreatedAtAction(nameof(GetImageById), new { productId, imageId = image.Id }, image);
     }
 

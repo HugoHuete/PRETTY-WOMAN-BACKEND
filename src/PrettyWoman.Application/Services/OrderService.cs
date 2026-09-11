@@ -87,9 +87,29 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             .ToList();
 
         var oldProducts = await _context.Products
+            .Include(product => product.ProductPresentations)
+                .ThenInclude(presentation => presentation.ProductImages)
             .Where(product => oldProductIds.Contains(product.Id))
             .OrderBy(product => product.Code)
             .ToListAsync();
+
+        var requestedProductIds = updateOrderDTO.Products
+            .Where(product => product.Id.HasValue)
+            .Select(product => product.Id!.Value)
+            .ToHashSet();
+        var invalidProductId = requestedProductIds.FirstOrDefault(productId => oldProducts.All(product => product.Id != productId));
+        if (invalidProductId != 0)
+        {
+            throw new AppBadRequestException($"El producto con id '{invalidProductId}' no pertenece a la orden.");
+        }
+
+        await using var transaction = await _context.BeginTransactionAsync();
+        _context.ProductVariants.RemoveRange(order.ProductVariants);
+        _context.ProductPresentations.RemoveRange(oldProducts
+            .SelectMany(product => product.ProductPresentations)
+            .Where(presentation => presentation.ProductImages.Count == 0));
+        _context.Products.RemoveRange(oldProducts.Where(product => !requestedProductIds.Contains(product.Id)));
+        await _context.SaveChangesAsync();
 
         var nextProductCode = await GetNextProductCodeAsync();
         var createdProducts = CreateProducts(updateOrderDTO, nextProductCode, oldProducts);
@@ -97,18 +117,6 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         var productVariants = products.SelectMany(detail => detail.ProductVariants).ToList();
         var exchangeRate = await GetOrderExchangeRateAsync();
         var totals = CalculateCosts(createdProducts.ProductCosts, updateOrderDTO.PurchaseCurrencyId, exchangeRate, updateOrderDTO.SupplierShippingCostUsd);
-        _context.ProductVariants.RemoveRange(order.ProductVariants);
-
-        var reusedProductIds = products
-            .Where(product => product.Id != 0)
-            .Select(product => product.Id)
-            .ToHashSet();
-
-        var removedProducts = oldProducts
-            .Where(product => !reusedProductIds.Contains(product.Id))
-            .ToList();
-
-        _context.Products.RemoveRange(removedProducts);
 
         order.PurchaseDate = updateOrderDTO.PurchaseDate.NormalizeToUtc() ?? order.PurchaseDate;
         order.SupplierId = updateOrderDTO.SupplierId;
@@ -125,6 +133,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         await SyncSupplierPaymentMovementAsync(order);
 
         await _context.SaveChangesAsync();
+        await transaction.CommitAsync();
     }
 
     public async Task<OrderDTO> CloseShortagesAsync(int id, CloseOrderShortagesDTO closeShortagesDTO)
@@ -391,6 +400,8 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                     .ThenInclude(product => product!.Subcategory)
             .Include(order => order.ProductVariants)
                 .ThenInclude(productVariant => productVariant.Size)
+            .Include(order => order.ProductVariants)
+                .ThenInclude(productVariant => productVariant.ProductPresentation)
             .Include(order => order.PurchaseShortages)
             .Include(order => order.SupplierRefund)
             .OrderByDescending(order => order.PurchaseDate)
@@ -418,6 +429,8 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                     .ThenInclude(product => product!.Subcategory)
             .Include(order => order.ProductVariants)
                 .ThenInclude(productVariant => productVariant.Size)
+            .Include(order => order.ProductVariants)
+                .ThenInclude(productVariant => productVariant.ProductPresentation)
             .Include(order => order.PurchaseShortages)
             .Include(order => order.SupplierRefund)
             .FirstOrDefaultAsync(order => order.Id == id)
@@ -559,7 +572,8 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         }
 
         var sizeIds = orderDTO.Products
-            .SelectMany(product => product.Variants)
+            .SelectMany(product => product.Presentations)
+            .SelectMany(presentation => presentation.Sizes)
             .Select(variant => variant.SizeId)
             .Distinct()
             .ToList();
@@ -577,22 +591,31 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
 
         foreach (var product in orderDTO.Products)
         {
-            if (product.Variants.Count == 0)
+            if (product.Presentations.Count == 0)
             {
-                throw new AppBadRequestException("Cada producto debe tener al menos una variante.");
+                throw new AppBadRequestException("Cada producto debe tener al menos una presentación.");
             }
 
-            var duplicatedVariant = product.Variants
-                .GroupBy(variant => new
-                {
-                    variant.SizeId,
-                    Variant = variant.Variant.NormalizeOptional()?.ToLower()
-                })
-                .FirstOrDefault(group => group.Count() > 1);
-
-            if (duplicatedVariant != null)
+            if (product.Presentations.Count(presentation => presentation.Name is null) > 1)
             {
-                throw new AppBadRequestException("No puede enviar variantes duplicadas para el mismo producto.");
+                throw new AppBadRequestException("No puede enviar más de una presentación sin nombre para el mismo producto.");
+            }
+
+            foreach (var presentation in product.Presentations)
+            {
+                if (presentation.SortOrder < 0)
+                    throw new AppBadRequestException("El orden de las presentaciones no puede ser negativo.");
+
+                if (presentation.Sizes.Count == 0)
+                    throw new AppBadRequestException("Cada presentación debe tener al menos una talla.");
+                if (presentation.Sizes.GroupBy(size => size.SizeId).Any(group => group.Count() > 1))
+                    throw new AppBadRequestException("No puede enviar tallas duplicadas en la misma presentación.");
+            }
+
+            if (product.Presentations.Where(presentation => presentation.Name is not null)
+                .GroupBy(presentation => presentation.Name!, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
+            {
+                throw new AppBadRequestException("No puede enviar nombres de presentación duplicados para el mismo producto.");
             }
         }
     }
@@ -609,6 +632,10 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                 ? null
                 : TakeReusableProduct(productDTO, reusableDetails);
 
+            var existingPresentations = product?.ProductPresentations
+                .Where(presentation => presentation.ProductImages.Count > 0)
+                .ToList() ?? [];
+
             product ??= new Product
             {
                 Code = nextProductCode++,
@@ -620,23 +647,43 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             product.Name = productDTO.Name;
             product.SubcategoryId = productDTO.SubcategoryId;
             product.ProductVariants = [];
-
-            foreach (var variant in productDTO.Variants)
-            {
-                var productVariant = new ProductVariant
+            var requestedPresentations = productDTO.Presentations
+                .Select(presentationDTO =>
                 {
-                    Product = product,
-                    SizeId = variant.SizeId,
-                    Variant = variant.Variant.NormalizeOptional(),
-                    Quantity = variant.Quantity,
-                    ReceivedQuantity = 0,
-                    AvailableQuantity = 0,
-                    ReservedQuantity = 0,
-                    SalePrice = variant.SalePrice
-                };
+                    var normalizedName = presentationDTO.Name?.ToUpperInvariant();
+                    var presentation = existingPresentations
+                        .FirstOrDefault(item => item.NormalizedName == normalizedName);
 
-                product.ProductVariants.Add(productVariant);
-                productCosts.Add(new ProductPurchaseCost(productVariant, variant.UnitCost));
+                    if (presentation is null)
+                    {
+                        presentation = new ProductPresentation { Product = product };
+                    }
+
+                    presentation.Name = presentationDTO.Name;
+                    presentation.NormalizedName = normalizedName;
+                    presentation.SortOrder = presentationDTO.SortOrder;
+                    return presentation;
+                })
+                .ToList();
+            var requestedPresentationIds = requestedPresentations
+                .Where(presentation => presentation.Id != 0)
+                .Select(presentation => presentation.Id)
+                .ToHashSet();
+            product.ProductPresentations = requestedPresentations
+                .Concat(existingPresentations.Where(presentation => !requestedPresentationIds.Contains(presentation.Id)))
+                .ToList();
+
+            foreach (var presentationDTO in productDTO.Presentations)
+            {
+                var presentation = product.ProductPresentations.Single(item => item.NormalizedName == presentationDTO.Name?.ToUpperInvariant());
+                foreach (var size in presentationDTO.Sizes)
+                {
+                    var productVariant = new ProductVariant { Product = product, SizeId = size.SizeId,
+                        ProductPresentation = presentation, Quantity = size.Quantity, ReceivedQuantity = 0,
+                        AvailableQuantity = 0, ReservedQuantity = 0, SalePrice = size.SalePrice };
+                    product.ProductVariants.Add(productVariant);
+                    productCosts.Add(new ProductPurchaseCost(productVariant, size.UnitCost));
+                }
             }
 
             products.Add(product);
@@ -849,25 +896,19 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                 Name = group.Key.Name,
                 SubcategoryId = group.Key.SubcategoryId,
                 SubcategoryName = group.Key.Subcategory?.Name,
-                Variants = group
-                    .OrderBy(productVariant => productVariant.Size != null ? productVariant.Size.DisplayOrder : 0)
-                    .ThenBy(productVariant => productVariant.Variant)
-                    .Select(productVariant => new OrderProductVariantDTO
+                Presentations = group.GroupBy(productVariant => productVariant.ProductPresentation!)
+                    .OrderBy(presentation => presentation.Key.SortOrder)
+                    .Select(presentation => new OrderProductPresentationDTO
                     {
-                        Id = productVariant.Id,
-                        SizeId = productVariant.SizeId,
-                        SizeName = productVariant.Size?.Name,
-                        Variant = productVariant.Variant,
-                        Quantity = productVariant.Quantity,
-                        ReceivedQuantity = productVariant.ReceivedQuantity,
-                        AvailableQuantity = productVariant.AvailableQuantity,
-                        ReservedQuantity = productVariant.ReservedQuantity,
-                        UnitCostUsd = productVariant.UnitCostUsd,
-                        MerchandiseTotalCostNio = productVariant.MerchandiseTotalCostNio,
-                        AllocatedShippingCostNio = productVariant.AllocatedShippingCostNio,
-                        TotalCostNio = productVariant.TotalCostNio,
-                        UnitCostNio = productVariant.UnitCostNio,
-                        SalePrice = productVariant.SalePrice
+                        Id = presentation.Key.Id, Name = presentation.Key.Name, SortOrder = presentation.Key.SortOrder,
+                        Sizes = presentation.OrderBy(item => item.Size != null ? item.Size.DisplayOrder : 0)
+                            .Select(productVariant => new OrderProductVariantDTO { Id = productVariant.Id,
+                                SizeId = productVariant.SizeId, SizeName = productVariant.Size?.Name,
+                                Quantity = productVariant.Quantity, ReceivedQuantity = productVariant.ReceivedQuantity,
+                                AvailableQuantity = productVariant.AvailableQuantity, ReservedQuantity = productVariant.ReservedQuantity,
+                                UnitCostUsd = productVariant.UnitCostUsd, MerchandiseTotalCostNio = productVariant.MerchandiseTotalCostNio,
+                                AllocatedShippingCostNio = productVariant.AllocatedShippingCostNio, TotalCostNio = productVariant.TotalCostNio,
+                                UnitCostNio = productVariant.UnitCostNio, SalePrice = productVariant.SalePrice }).ToList()
                     })
                     .ToList()
             })
@@ -963,9 +1004,11 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             product.SupplierProductCode = product.SupplierProductCode.NormalizeRequired("Código de proveedor");
             product.Name = product.Name.NormalizeRequired("Nombre");
 
-            foreach (var variant in product.Variants)
+            product.Presentations ??= [];
+            foreach (var presentation in product.Presentations)
             {
-                variant.Variant = variant.Variant.NormalizeOptional();
+                presentation.Name = presentation.Name.NormalizeOptional();
+                presentation.Sizes ??= [];
             }
         }
     }

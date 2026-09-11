@@ -93,6 +93,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public DbSet<Size> Sizes { get; set; }
     public DbSet<SizeGroup> SizeGroups { get; set; }
     public DbSet<Product> Products { get; set; }
+    public DbSet<ProductPresentation> ProductPresentations { get; set; }
     public DbSet<ProductImage> ProductImages { get; set; }
     public DbSet<ProductVariant> ProductVariants { get; set; }
     public DbSet<ProductHold> ProductHolds { get; set; }

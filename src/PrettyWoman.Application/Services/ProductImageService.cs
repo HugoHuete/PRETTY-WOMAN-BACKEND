@@ -36,6 +36,7 @@ public class ProductImageService(
 
     public async Task<ProductImageDTO> UploadAsync(
         int productId,
+        int? productPresentationId,
         Stream content,
         string? declaredContentType,
         CancellationToken cancellationToken = default)
@@ -50,10 +51,12 @@ public class ProductImageService(
             throw new AppUnsupportedMediaTypeException("Solo se permiten imágenes JPEG, PNG o WebP.");
         }
 
-        if (!await context.Products.AnyAsync(productVariant => productVariant.Id == productId, cancellationToken))
+        if (!await context.Products.AnyAsync(product => product.Id == productId, cancellationToken))
         {
             throw new AppNotFoundException($"El producto con id '{productId}' no existe.");
         }
+
+        await EnsurePresentationBelongsToProductAsync(productId, productPresentationId, cancellationToken);
 
         await using var original = new MemoryStream();
         await content.CopyToAsync(original, cancellationToken);
@@ -109,11 +112,14 @@ public class ProductImageService(
                 uploaded.Add((MediaBucket.Public, webKey));
 
                 var nextSortOrder = await context.ProductImages
-                    .Where(productImage => productImage.ProductId == productId)
+                    .Where(productImage => productImage.ProductId == productId &&
+                        productImage.ProductPresentationId == productPresentationId)
                     .Select(productImage => (int?)productImage.SortOrder)
                     .MaxAsync(cancellationToken) ?? -1;
                 var hasPrimaryImage = await context.ProductImages
-                    .AnyAsync(productImage => productImage.ProductId == productId && productImage.IsPrimary, cancellationToken);
+                    .AnyAsync(productImage => productImage.ProductId == productId &&
+                        productImage.ProductPresentationId == productPresentationId &&
+                        productImage.IsPrimary, cancellationToken);
 
                 var asset = new MediaAsset
                 {
@@ -137,6 +143,7 @@ public class ProductImageService(
                 var productImage = new ProductImage
                 {
                     ProductId = productId,
+                    ProductPresentationId = productPresentationId,
                     MediaAsset = asset,
                     IsPrimary = !hasPrimaryImage,
                     SortOrder = nextSortOrder + 1
@@ -150,6 +157,7 @@ public class ProductImageService(
                     Id = productImage.Id,
                     ThumbnailUrl = thumbnailUrl,
                     WebUrl = webUrl,
+                    ProductPresentationId = productImage.ProductPresentationId,
                     IsPrimary = productImage.IsPrimary,
                     SortOrder = productImage.SortOrder
                 };
@@ -177,13 +185,16 @@ public class ProductImageService(
             throw new AppBadRequestException("Debe enviar la lista ordenada de imágenes.");
         }
 
-        if (!await context.Products.AnyAsync(productVariant => productVariant.Id == productId, cancellationToken))
+        if (!await context.Products.AnyAsync(product => product.Id == productId, cancellationToken))
         {
             throw new AppNotFoundException($"El producto con id '{productId}' no existe.");
         }
 
+        await EnsurePresentationBelongsToProductAsync(productId, request.ProductPresentationId, cancellationToken);
+
         var images = await context.ProductImages
-            .Where(image => image.ProductId == productId)
+            .Where(image => image.ProductId == productId &&
+                image.ProductPresentationId == request.ProductPresentationId)
             .Include(image => image.MediaAsset)
                 .ThenInclude(asset => asset!.Variants)
             .ToListAsync(cancellationToken);
@@ -248,7 +259,9 @@ public class ProductImageService(
             await context.SaveChangesAsync(cancellationToken);
 
             var nextImage = await context.ProductImages
-                .Where(item => item.ProductId == productId && item.Id != imageId)
+                .Where(item => item.ProductId == productId &&
+                    item.ProductPresentationId == image.ProductPresentationId &&
+                    item.Id != imageId)
                 .OrderBy(item => item.SortOrder)
                 .FirstOrDefaultAsync(cancellationToken);
             if (nextImage is not null)
@@ -281,7 +294,9 @@ public class ProductImageService(
         catch (DbUpdateException)
         {
             if (!productImage.IsPrimary || !await context.ProductImages.AnyAsync(image =>
-                    image.ProductId == productImage.ProductId && image.IsPrimary,
+                    image.ProductId == productImage.ProductId &&
+                    image.ProductPresentationId == productImage.ProductPresentationId &&
+                    image.IsPrimary,
                     cancellationToken))
             {
                 throw;
@@ -314,9 +329,23 @@ public class ProductImageService(
             Id = image.Id,
             ThumbnailUrl = mediaUrlResolver.GetPublicUrl(thumbnailKey),
             WebUrl = mediaUrlResolver.GetPublicUrl(webKey),
+            ProductPresentationId = image.ProductPresentationId,
             IsPrimary = image.IsPrimary,
             SortOrder = image.SortOrder
         };
+    }
+
+    private async Task EnsurePresentationBelongsToProductAsync(
+        int productId,
+        int? productPresentationId,
+        CancellationToken cancellationToken)
+    {
+        if (productPresentationId.HasValue && !await context.ProductPresentations.AnyAsync(
+                presentation => presentation.Id == productPresentationId.Value && presentation.ProductId == productId,
+                cancellationToken))
+        {
+            throw new AppNotFoundException($"La presentación con id '{productPresentationId.Value}' no existe para el producto con id '{productId}'.");
+        }
     }
 
     private static async Task<GeneratedVariant> CreateWebpAsync(Image image, int maxWidth, CancellationToken cancellationToken)

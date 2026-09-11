@@ -5,8 +5,8 @@ public class ProductVariant
     public int Id { get; set; }
     public int OrderId { get; set; }
     public int ProductId { get; set; }
+    public int ProductPresentationId { get; set; }
     public int SizeId { get; set; }
-    public string? Variant { get; set; }
     public int Quantity { get; set; }
     public int ReceivedQuantity { get; set; }
     public int AvailableQuantity { get; set; }
@@ -21,6 +21,7 @@ public class ProductVariant
 
     public Order? Order { get; set; }
     public Product? Product { get; set; }
+    public ProductPresentation? ProductPresentation { get; set; }
     public Size? Size { get; set; }
     public ICollection<InventoryMovement> InventoryMovements { get; set; } = [];
     public ICollection<ProductHold> ProductHolds { get; set; } = [];

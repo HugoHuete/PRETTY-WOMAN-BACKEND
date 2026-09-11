@@ -76,7 +76,7 @@ No representa una talla específica.
 
 ## products
 
-Representa una variante comprada/vendible de un producto.
+Representa la ficha agrupadora de un producto comercial. Sus tallas vendibles viven en `product_variants` y sus diferencias visuales en `product_presentations`.
 
 Ejemplo:
 
@@ -94,9 +94,13 @@ Campos importantes:
 - `reserved_quantity`: cantidad comprometida por ventas reservadas.
 * `unavailable_quantity`: cantidad existente, pero temporalmente no vendible por seleccion de talla, dano, suciedad, extravio pendiente o revision.
 
+## product_presentations
+
+Representa una presentación visual de un producto, por ejemplo un color. `name` puede ser `NULL` para productos sin diferencia visual. Agrupa las tallas mediante `product_variants` y ordena sus imágenes y aparición mediante `sort_order`.
+
 ## product_images
 
-Imágenes asociadas al producto general.
+Imágenes asociadas al producto general o a una presentación específica. `product_presentation_id = NULL` significa imagen general; `is_primary = true` identifica la portada dentro del ámbito correspondiente.
 
 Normalmente se relacionan con `products`, no con cada talla.
 

@@ -21,12 +21,12 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
         var productVariant = await _factory.SeedProductAsync(quantity: 2, receivedQuantity: 2, availableQuantity: 2);
         using var client = await CreateEmployeeClientAsync();
 
-        var saleId = await CreateSaleAsync(client, productVariant.ProductId, initialPayment: 400m);
+        var saleId = await CreateSaleAsync(client, productVariant.ProductVariantId, initialPayment: 400m);
         var partiallyPaidSale = await GetSaleAsync(client, saleId);
 
         Assert.Equal((int)SalePaymentStatusOption.PartiallyPaid, partiallyPaidSale.SalePaymentStatusId);
         Assert.Equal((int)SaleStatusOption.Pending, partiallyPaidSale.SaleStatusId);
-        Assert.Equal(2, (await _factory.GetProductStockAsync(productVariant.ProductId)).AvailableQuantity);
+        Assert.Equal(2, (await _factory.GetProductStockAsync(productVariant.ProductVariantId)).AvailableQuantity);
 
         var finalPayment = await client.PostAsJsonAsync($"/api/v1/sales/{saleId}/payment-movements", new CreateSalePaymentMovementDTO
         {
@@ -39,7 +39,7 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
         var completedSale = await GetSaleAsync(client, saleId);
         Assert.Equal((int)SalePaymentStatusOption.Paid, completedSale.SalePaymentStatusId);
         Assert.Equal((int)SaleStatusOption.Completed, completedSale.SaleStatusId);
-        Assert.Equal(1, (await _factory.GetProductStockAsync(productVariant.ProductId)).AvailableQuantity);
+        Assert.Equal(1, (await _factory.GetProductStockAsync(productVariant.ProductVariantId)).AvailableQuantity);
         Assert.Equal(2, completedSale.PaymentMovements.Count);
     }
 
@@ -49,7 +49,7 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
         var productVariant = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
         using var admin = await CreateAdminClientAsync();
 
-        var saleId = await CreateSaleAsync(admin, productVariant.ProductId, initialPayment: 500m);
+        var saleId = await CreateSaleAsync(admin, productVariant.ProductVariantId, initialPayment: 500m);
         var paymentId = (await GetSaleAsync(admin, saleId)).PaymentMovements.Single().Id;
 
         var refund = await admin.PostAsJsonAsync($"/api/v1/sales/{saleId}/payment-movements/{paymentId}/refunds", new RefundSalePaymentMovementDTO());
@@ -60,7 +60,7 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
         Assert.Equal((int)SalePaymentStatusOption.Unpaid, reopenedSale.SalePaymentStatusId);
         Assert.Equal((int)SaleStatusOption.Reserved, reopenedSale.SaleStatusId);
         Assert.Equal(2, reopenedSale.PaymentMovements.Count);
-        Assert.Equal(0, (await _factory.GetProductStockAsync(productVariant.ProductId)).AvailableQuantity);
+        Assert.Equal(0, (await _factory.GetProductStockAsync(productVariant.ProductVariantId)).AvailableQuantity);
     }
 
     [Fact]
@@ -69,15 +69,15 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
         var productVariant = await _factory.SeedProductAsync(quantity: 2, receivedQuantity: 0, availableQuantity: 0);
         using var admin = await CreateAdminClientAsync();
 
-        var firstReceipt = await ReceiveAsync(admin, productVariant.OrderId, productVariant.ProductId, 1);
+        var firstReceipt = await ReceiveAsync(admin, productVariant.OrderId, productVariant.ProductVariantId, 1);
         Assert.Equal(HttpStatusCode.OK, firstReceipt.StatusCode);
-        Assert.Equal(1, (await _factory.GetProductStockAsync(productVariant.ProductId)).ReceivedQuantity);
-        Assert.Equal(1, (await _factory.GetProductStockAsync(productVariant.ProductId)).AvailableQuantity);
+        Assert.Equal(1, (await _factory.GetProductStockAsync(productVariant.ProductVariantId)).ReceivedQuantity);
+        Assert.Equal(1, (await _factory.GetProductStockAsync(productVariant.ProductVariantId)).AvailableQuantity);
 
-        var secondReceipt = await ReceiveAsync(admin, productVariant.OrderId, productVariant.ProductId, 1);
+        var secondReceipt = await ReceiveAsync(admin, productVariant.OrderId, productVariant.ProductVariantId, 1);
         Assert.Equal(HttpStatusCode.OK, secondReceipt.StatusCode);
 
-        var stock = await _factory.GetProductStockAsync(productVariant.ProductId);
+        var stock = await _factory.GetProductStockAsync(productVariant.ProductVariantId);
         Assert.Equal(2, stock.ReceivedQuantity);
         Assert.Equal(2, stock.AvailableQuantity);
     }
@@ -95,7 +95,7 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
             [
                 new ReceiveOrderProductDTO
                 {
-                    ProductId = productVariant.ProductId,
+                    ProductId = productVariant.ProductVariantId,
                     Quantity = 3,
                     Weight = 1,
                     IsSurplus = true
@@ -105,7 +105,7 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
 
         Assert.Equal(HttpStatusCode.OK, receipt.StatusCode);
 
-        var stock = await _factory.GetProductStockAsync(productVariant.ProductId);
+        var stock = await _factory.GetProductStockAsync(productVariant.ProductVariantId);
         Assert.Equal(3, stock.ReceivedQuantity);
         Assert.Equal(3, stock.AvailableQuantity);
     }
@@ -115,7 +115,7 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
     {
         var productVariant = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
         using var admin = await CreateAdminClientAsync();
-        var saleId = await CreateSaleAsync(admin, productVariant.ProductId, initialPayment: 500m);
+        var saleId = await CreateSaleAsync(admin, productVariant.ProductVariantId, initialPayment: 500m);
         var originalSaleProductId = (await GetSaleAsync(admin, saleId)).ProductVariants.Single().Id;
 
         var createReturn = await admin.PostAsJsonAsync($"/api/v1/sales/{saleId}/returns", new CreateSaleReturnDTO
@@ -135,7 +135,7 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
         });
 
         Assert.Equal(HttpStatusCode.NoContent, receive.StatusCode);
-        Assert.Equal(1, (await _factory.GetProductStockAsync(productVariant.ProductId)).AvailableQuantity);
+        Assert.Equal(1, (await _factory.GetProductStockAsync(productVariant.ProductVariantId)).AvailableQuantity);
     }
 
     [Fact]
@@ -144,13 +144,13 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
         var original = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
         var replacement = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 700m);
         using var admin = await CreateAdminClientAsync();
-        var saleId = await CreateSaleAsync(admin, original.ProductId, initialPayment: 500m);
+        var saleId = await CreateSaleAsync(admin, original.ProductVariantId, initialPayment: 500m);
         var originalSaleProductId = (await GetSaleAsync(admin, saleId)).ProductVariants.Single().Id;
 
         var createExchange = await admin.PostAsJsonAsync($"/api/v1/sales/{saleId}/exchanges", new CreateSaleExchangeDTO
         {
             ReturnItems = [new CreateExchangeReturnItemDTO { OriginalSaleProductId = originalSaleProductId, Quantity = 1, RecognizedUnitAmount = 500m }],
-            OutboundItems = [new CreateExchangeOutboundItemDTO { ProductId = replacement.ProductId, Quantity = 1, ItemTypeId = (int)ExchangeOutboundItemTypeOption.Replacement }]
+            OutboundItems = [new CreateExchangeOutboundItemDTO { ProductId = replacement.ProductVariantId, Quantity = 1, ItemTypeId = (int)ExchangeOutboundItemTypeOption.Replacement }]
         });
         Assert.Equal(HttpStatusCode.Created, createExchange.StatusCode);
         var exchangeId = await createExchange.Content.ReadFromJsonAsync<int>();
@@ -161,8 +161,8 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
         var receive = await admin.PostAsync($"/api/v1/sales/{saleId}/exchanges/{exchangeId}/return-items/{returnItemId}/received", content: null);
 
         Assert.Equal(HttpStatusCode.NoContent, receive.StatusCode);
-        Assert.Equal(1, (await _factory.GetProductStockAsync(original.ProductId)).AvailableQuantity);
-        Assert.Equal(0, (await _factory.GetProductStockAsync(replacement.ProductId)).AvailableQuantity);
+        Assert.Equal(1, (await _factory.GetProductStockAsync(original.ProductVariantId)).AvailableQuantity);
+        Assert.Equal(0, (await _factory.GetProductStockAsync(replacement.ProductVariantId)).AvailableQuantity);
     }
 
     [Fact]
@@ -175,7 +175,7 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
         var sale = await admin.PostAsJsonAsync("/api/v1/sales", new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.ProductId, Quantity = 1 }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.ProductVariantId, Quantity = 1 }]
         });
         Assert.Equal(HttpStatusCode.Created, sale.StatusCode);
         var saleId = await sale.Content.ReadFromJsonAsync<int>();
@@ -214,7 +214,7 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
         var sale = await employee.PostAsJsonAsync("/api/v1/sales", new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.ProductId, Quantity = 1 }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.ProductVariantId, Quantity = 1 }]
         });
         var saleId = await sale.Content.ReadFromJsonAsync<int>();
         var delivery = await employee.PostAsJsonAsync($"/api/v1/sales/{saleId}/deliveries", new CreateSaleDeliveryDTO
@@ -243,7 +243,7 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
         var sale = await admin.PostAsJsonAsync("/api/v1/sales", new CreateSaleDTO
         {
             SaleChannelId = (int)SaleChannelOption.Whatsapp,
-            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.ProductId, Quantity = 1 }]
+            ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.ProductVariantId, Quantity = 1 }]
         });
         var saleId = await sale.Content.ReadFromJsonAsync<int>();
         var delivery = await admin.PostAsJsonAsync($"/api/v1/sales/{saleId}/deliveries", new CreateSaleDeliveryDTO

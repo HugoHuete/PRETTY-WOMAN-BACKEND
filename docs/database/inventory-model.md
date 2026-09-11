@@ -2,7 +2,7 @@
 
 ## Productos
 
-`products` representa variantes vendibles.
+`products` representa fichas de producto. Cada ficha puede tener una o más `product_presentations` (por ejemplo, colores) y cada presentación agrupa las tallas vendibles en `product_variants`.
 
 Ejemplo:
 

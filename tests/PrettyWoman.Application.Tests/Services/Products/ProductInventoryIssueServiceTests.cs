@@ -177,6 +177,7 @@ public class ProductInventoryIssueServiceTests
         {
             ProductInventoryIssueStatusId = (int)ProductInventoryIssueStatusOption.ResolvedToAvailable
         });
+        context.ChangeTracker.Clear();
 
         var result = await service.GetAllAsync(new ProductInventoryIssueQueryDTO
         {
@@ -188,6 +189,7 @@ public class ProductInventoryIssueServiceTests
         Assert.Equal(1, issue.ProductId);
         Assert.Equal(2, issue.ProductVariantId);
         Assert.Equal("M", issue.SizeName);
+        Assert.Equal("Azul", issue.Variant);
         Assert.Equal((int)ProductInventoryIssueStatusOption.Open, issue.ProductInventoryIssueStatusId);
     }
 
@@ -239,6 +241,16 @@ public class ProductInventoryIssueServiceTests
                 new ProductVariant { Id = 2, SizeId = 2, Size = mediumSize, Quantity = 2, ReceivedQuantity = 2, AvailableQuantity = 2, SalePrice = 800m }
             ]
         };
+        var presentation = new ProductPresentation
+        {
+            Product = product,
+            Name = "Azul",
+            NormalizedName = "AZUL"
+        };
+        foreach (var productVariant in product.ProductVariants)
+        {
+            productVariant.ProductPresentation = presentation;
+        }
 
         context.Products.Add(product);
         context.ProductInventoryIssueTypes.AddRange(

@@ -281,7 +281,33 @@ Para una orden con tracking, sustituir el costo directo por elementos como:
 - La respuesta `OrderReceiptDTO` incluye `id`, `orderId`, `receivedDate`, `warehouseShippingCostUsd`, `warehouseShippingCostNio`, `orderStatusId`, `trackingNumberIds` y, por producto, `productId`, `quantity`, `isSurplus` y `allocatedWarehouseShippingCostNio`.
 - Después de una recepción, recargar el detalle de la orden para mostrar cantidades y costos calculados. Si quedan pendientes que el proveedor ya confirmó que no llegarán, habilitar el flujo de faltantes descrito arriba.
 
-### Productos: imágenes e historial de inventario
+### Productos: listado, presentaciones e imágenes
+
+`GET /api/v1/products` y `GET /api/v1/products/{productId}` devuelven un producto por ficha, no una fila por talla. Las variantes vendibles se agrupan en `presentations`; cada presentación representa un color o cualquier otra diferencia visual y contiene sus tallas en `sizes`.
+
+```json
+{
+  "id": 15,
+  "name": "Vestido floral",
+  "primaryImageUrl": "https://images.example.com/general.webp",
+  "presentations": [
+    {
+      "id": 31,
+      "name": "Azul",
+      "sortOrder": 0,
+      "primaryImageUrl": "https://images.example.com/azul.webp",
+      "sizes": [
+        { "id": 101, "sizeName": "S", "availableQuantity": 2 },
+        { "id": 102, "sizeName": "M", "availableQuantity": 1 }
+      ]
+    }
+  ]
+}
+```
+
+Cada elemento de `sizes` conserva el `id` de `ProductVariant`, que se usa en precios, ventas, inventario y descuentos. `presentations` puede incluir una presentación sin nombre (`name: null`) cuando el producto no tiene una diferencia visual.
+
+Los filtros `availability`, `code`, `discountCampaignId`, `categoryId`, `subcategoryId` y `sizeId` se aplican a las tallas, pero la paginación continúa contando productos. Una presentación sin tallas después de aplicar filtros no se devuelve.
 
 ### Productos: exportación a Excel
 
@@ -293,15 +319,15 @@ Las acciones de imágenes e historial están disponibles para Admin y Vendedor d
 
 | Flujo | Endpoint | Request / resultado |
 |---|---|---|
-| Consultar imagen | `GET /api/v1/products/{productId}/images/{imageId}` | Devuelve `{ id, thumbnailUrl, webUrl, isPrimary, sortOrder }`. |
-| Subir imagen | `POST /api/v1/products/{productId}/images` | `multipart/form-data`, campo `file`; máximo 8 MB. Devuelve la imagen creada. |
-| Ordenar y seleccionar portada | `PUT /api/v1/products/{productId}/images` | `{ "primaryImageId": 10, "imageIdsInOrder": [10, 11, 12] }`; devuelve la colección ordenada. |
+| Consultar imagen | `GET /api/v1/products/{productId}/images/{imageId}` | Devuelve `{ id, productPresentationId, thumbnailUrl, webUrl, isPrimary, sortOrder }`; `productPresentationId: null` significa imagen general. |
+| Subir imagen | `POST /api/v1/products/{productId}/images?productPresentationId=31` | `multipart/form-data`, campo `file`; máximo 8 MB. Omitir el query param para una imagen general. Devuelve la imagen creada. |
+| Ordenar y seleccionar portada | `PUT /api/v1/products/{productId}/images` | `{ "productPresentationId": 31, "primaryImageId": 10, "imageIdsInOrder": [10, 11, 12] }`; el ámbito es general si el id es `null`. Devuelve la colección ordenada de ese ámbito. |
 | Eliminar imagen | `DELETE /api/v1/products/{productId}/images/{imageId}` | Devuelve `204`. Pedir confirmación. |
 | Historial del producto | `GET /api/v1/products/{productId}/inventory-movements` | Devuelve movimientos de todas las variantes del producto. |
 | Historial de variante | `GET /api/v1/products/{productId}/variants/{productVariantId}/inventory-movements` | Devuelve movimientos de una variante. |
 | Actualizar precio de variante | `PATCH /api/v1/products/{productId}/variants/{productVariantId}/price` | Recibe `{ "salePrice": 750 }`; `salePrice` debe ser mayor que cero. Actualiza solo el precio actual de la variante y devuelve `204 No Content`. Las ventas existentes conservan sus precios históricos. |
 
-Después de subir, ordenar o eliminar, actualizar la colección con la respuesta o recargar el detalle. Usar `thumbnailUrl` en listas y `webUrl` para vista ampliada.
+Después de subir, ordenar o eliminar, actualizar la colección con la respuesta o recargar el detalle. Usar `thumbnailUrl` en listas y `webUrl` para vista ampliada. La imagen principal de cada presentación se muestra en `presentations[].primaryImageUrl`; si no existe, la API usa la imagen principal general y luego la portada de la primera presentación como fallback del producto.
 
 ### Descuentos: campañas
 

@@ -14,18 +14,20 @@ public class ProductVariantConfiguration : IEntityTypeConfiguration<ProductVaria
         builder.Property(p => p.TotalCostNio).HasPrecision(14, 2);
         builder.Property(p => p.UnitCostNio).HasPrecision(18, 6);
         builder.Property(p => p.SalePrice).HasPrecision(12, 2);
-        builder.Property(x => x.Variant).HasMaxLength(50);
-
         builder.HasOne(x => x.Size).WithMany().HasForeignKey(x => x.SizeId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Order).WithMany(x => x.ProductVariants).HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Product).WithMany(x => x.ProductVariants).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.ProductPresentation)
+            .WithMany(x => x.ProductVariants)
+            .HasForeignKey(x => new { x.ProductPresentationId, x.ProductId })
+            .HasPrincipalKey(x => new { x.Id, x.ProductId })
+            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => new
         {
-            x.ProductId,
-            x.SizeId,
-            x.Variant
-        });
+            x.ProductPresentationId,
+            x.SizeId
+        }).IsUnique();
 
         builder.ToTable(t =>
         {

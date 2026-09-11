@@ -195,6 +195,9 @@ public class InventoryAdjustmentService(
                 .ThenInclude(item => item.ProductVariant)
                     .ThenInclude(productVariant => productVariant!.Size)
             .Include(adjustment => adjustment.Items)
+                .ThenInclude(item => item.ProductVariant)
+                    .ThenInclude(productVariant => productVariant!.ProductPresentation)
+            .Include(adjustment => adjustment.Items)
                 .ThenInclude(item => item.FromStockBucket)
             .Include(adjustment => adjustment.Items)
                 .ThenInclude(item => item.ToStockBucket)
@@ -266,7 +269,7 @@ public class InventoryAdjustmentService(
                 ProductCode = item.ProductVariant?.Product?.Code,
                 SizeId = item.ProductVariant?.SizeId ?? 0,
                 SizeName = item.ProductVariant?.Size?.Name,
-                Variant = item.ProductVariant?.Variant,
+                Variant = item.ProductVariant?.ProductPresentation?.Name,
                 FromStockBucketId = item.FromStockBucketId,
                 FromStockBucketName = item.FromStockBucket?.Name,
                 ToStockBucketId = item.ToStockBucketId,

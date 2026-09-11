@@ -43,6 +43,7 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
         SetEnvironmentVariable("RateLimiting__ReadPermitLimit", "1000");
         SetEnvironmentVariable("RateLimiting__WritePermitLimit", "1000");
         SetEnvironmentVariable("RateLimiting__ImagePermitLimit", "1000");
+        SetEnvironmentVariable("R2Media__PublicBaseUrl", "https://images.integration.test");
     }
 
     public async Task InitializeAsync()
@@ -148,10 +149,18 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
             Name = $"Producto integración {suffix}",
             Subcategory = subcategory
         };
+        var presentation = new ProductPresentation
+        {
+            Product = detail,
+            Name = "Base",
+            NormalizedName = "BASE",
+            SortOrder = 0
+        };
         var productVariant = new ProductVariant
         {
             Order = order,
             Product = detail,
+            ProductPresentation = presentation,
             Size = size,
             Quantity = quantity,
             ReceivedQuantity = receivedQuantity,
@@ -165,7 +174,44 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
         context.ProductVariants.Add(productVariant);
         await context.SaveChangesAsync();
 
-        return new SeededProduct(order.Id, detail.Id, productVariant.Id);
+        return new SeededProduct(order.Id, detail.Id, productVariant.Id, presentation.Id);
+    }
+
+    public async Task<int> SeedProductImageAsync(int productId, int? productPresentationId, bool isPrimary, int sortOrder)
+    {
+        using var scope = Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var assetId = Guid.NewGuid();
+        var baseKey = $"test-products/{assetId:N}";
+        var image = new ProductImage
+        {
+            ProductId = productId,
+            ProductPresentationId = productPresentationId,
+            IsPrimary = isPrimary,
+            SortOrder = sortOrder,
+            MediaAsset = new MediaAsset
+            {
+                Id = assetId,
+                StorageKey = baseKey,
+                OriginalBucket = MediaBucket.Private,
+                Visibility = MediaVisibility.Public,
+                OriginalContentType = "image/jpeg",
+                OriginalSizeBytes = 10,
+                Width = 10,
+                Height = 10,
+                Status = MediaAssetStatus.Ready,
+                CreatedAt = DateTime.UtcNow,
+                Variants =
+                [
+                    new MediaAssetVariant { Id = Guid.NewGuid(), Type = MediaVariantType.Thumbnail, Bucket = MediaBucket.Public, StorageKey = $"{baseKey}/thumb.webp", ContentType = "image/webp", SizeBytes = 10, Width = 10, Height = 10 },
+                    new MediaAssetVariant { Id = Guid.NewGuid(), Type = MediaVariantType.Web, Bucket = MediaBucket.Public, StorageKey = $"{baseKey}/web.webp", ContentType = "image/webp", SizeBytes = 10, Width = 10, Height = 10 }
+                ]
+            }
+        };
+
+        context.ProductImages.Add(image);
+        await context.SaveChangesAsync();
+        return image.Id;
     }
 
     public async Task<ProductStock> GetProductStockAsync(int productId)
@@ -207,7 +253,7 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
         Environment.SetEnvironmentVariable(name, value);
     }
 
-    public sealed record SeededProduct(int OrderId, int ProductId, int ProductVariantId);
+    public sealed record SeededProduct(int OrderId, int ProductId, int ProductVariantId, int ProductPresentationId);
     public sealed record ProductStock(int ReceivedQuantity, int AvailableQuantity, int ReservedQuantity, int UnavailableQuantity);
     public sealed record DeliveryLocation(int MunicipalityId, int DeliveryAgencyId);
 }
