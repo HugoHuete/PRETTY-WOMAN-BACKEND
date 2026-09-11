@@ -36,7 +36,7 @@ public class RefreshTokenService(
         {
             // El token ya era inválido cuando se leyó. Puede ser una repetición inmediata
             // de una rotación anterior; si es así, devolvemos el mismo reemplazo.
-            var replay = await TryReplayAsync(token, now);
+            var replay = await TryGetReplacementRefreshTokenForReplayAsync(token, now);
             if (replay is not null)
             {
                 await transaction.CommitAsync();
@@ -51,6 +51,7 @@ public class RefreshTokenService(
 
         var replacementRawToken = CreateRawToken();
         var replacement = CreateToken(token.User, replacementRawToken, token.FamilyId);
+
         var revokedCount = await _context.RefreshTokens
             .Where(current => current.Id == token.Id && current.RevokedAtUtc == null)
             .ExecuteUpdateAsync(setters => setters
@@ -61,6 +62,7 @@ public class RefreshTokenService(
                 .SetProperty(current => current.ReplacementTokenProtected,
                     _replayTokenProtector.Protect(replacementRawToken))
                 .SetProperty(current => current.ReplayUntilUtc, now.Add(ReplayWindow)));
+
         if (revokedCount == 0)
         {
             // Otra solicitud ganó la carrera. Leemos sin tracking para observar el estado
@@ -68,7 +70,8 @@ public class RefreshTokenService(
             var concurrentlyRotatedToken = await _context.RefreshTokens.AsNoTracking()
                 .Include(current => current.User)
                 .SingleAsync(current => current.TokenHash == Hash(rawToken));
-            var replay = await TryReplayAsync(concurrentlyRotatedToken, now);
+
+            var replay = await TryGetReplacementRefreshTokenForReplayAsync(concurrentlyRotatedToken, now);
             if (replay is not null)
             {
                 await transaction.CommitAsync();
@@ -100,12 +103,27 @@ public class RefreshTokenService(
         .Where(token => token.UserId == userId && token.RevokedAtUtc == null)
         .ExecuteUpdateAsync(setters => setters.SetProperty(token => token.RevokedAtUtc, DateTime.UtcNow));
 
-    private Task RevokeFamilyAsync(Guid familyId) => _context.RefreshTokens
+    private Task<int> RevokeFamilyAsync(Guid familyId)
+    {
+        return _context.RefreshTokens
         .Where(token => token.FamilyId == familyId && token.RevokedAtUtc == null)
         .ExecuteUpdateAsync(setters => setters.SetProperty(token => token.RevokedAtUtc, DateTime.UtcNow));
+    }
 
-    private async Task<(User User, string RefreshToken)?> TryReplayAsync(RefreshToken token, DateTime now)
+    /// <summary>
+    /// Intenta recuperar el refresh token sucesor cuando el token recibido ya fue rotado,
+    /// pero la solicitud es un replay permitido dentro de la ventana breve de tolerancia.
+    /// </summary>
+    /// <remarks>
+    /// Este método solo hace que un retry sea idempotente: no crea otra rotación ni extiende
+    /// la vida del token anterior. Devuelve <see langword="null"/> si cualquiera de las
+    /// condiciones de seguridad falla.
+    /// </remarks>
+    private async Task<(User User, string RefreshToken)?> TryGetReplacementRefreshTokenForReplayAsync(RefreshToken token, DateTime now)
     {
+        // El token original debe haber sido revocado por una rotación y conservar su sucesor
+        // protegido dentro de la ventana de replay. También se valida que el usuario y su
+        // SecurityStamp sigan vigentes, para no reactivar sesiones ya invalidadas.
         if (token.RevokedAtUtc is null || token.ReplayUntilUtc < now ||
             token.ReplacedByTokenId is null || string.IsNullOrWhiteSpace(token.ReplacementTokenProtected) ||
             token.ExpiresAtUtc <= now || !token.User.Enabled ||
@@ -119,10 +137,15 @@ public class RefreshTokenService(
                 current.FamilyId == token.FamilyId &&
                 current.RevokedAtUtc == null &&
                 current.ExpiresAtUtc > now);
+
+        // El sucesor debe seguir activo y pertenecer a la misma familia; de lo contrario,
+        // el token anterior no puede utilizarse para continuar la sesión.
         if (!replacementIsActive) return null;
 
         try
         {
+            // Se devuelve el mismo sucesor emitido por la primera solicitud, evitando crear
+            // un segundo token cuando dos refresh llegan de forma casi simultánea.
             return (token.User, _replayTokenProtector.Unprotect(token.ReplacementTokenProtected));
         }
         catch (CryptographicException)
