@@ -36,6 +36,7 @@ public static class DependencyInjection
         services.AddScoped<ILoanOwnerService, LoanOwnerService>();
         services.AddScoped<ILoanService, LoanService>();
         services.AddScoped<IFinancialService, FinancialService>();
+        services.AddScoped<IExchangeRateService, ExchangeRateService>();
 
         return services;
     }

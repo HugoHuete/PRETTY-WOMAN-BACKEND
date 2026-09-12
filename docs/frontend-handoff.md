@@ -68,6 +68,7 @@ Puede trabajar con:
 | Autenticacion | Login | Admin, Vendedor | Iniciar sesion, renovar y cerrar sesion | Credenciales y sesion | `POST /api/v1/auth/login`, `POST /api/v1/auth/refresh`, `POST /api/v1/auth/logout` |
 | Autenticacion | Usuarios | Admin | Listar, filtrar, crear, actualizar, desbloquear, deshabilitar y habilitar usuario | Usuarios, roles/permisos y estado | `GET /api/v1/auth/users`, `POST /api/v1/auth/users`, `PUT /api/v1/auth/users/{id}`, `POST /api/v1/auth/users/{id}/unlock`, `POST /api/v1/auth/users/{id}/disable`, `POST /api/v1/auth/users/{id}/enable` |
 | Dashboard | Resumen | Admin, Vendedor | Ver ventas, pagos, reservas, entregas e incidencias | Ventas, cobros, reservas, entregas e incidencias; el bloque financiero es exclusivo de Admin | `GET /api/v1/dashboard/summary` |
+| Finanzas | Tasa de cambio vigente | Admin, Vendedor | Consultar la tasa bancaria y de tienda activa | Tasa de cambio vigente | `GET /api/v1/exchange-rates/current` |
 | Productos | Lista de productos | Admin, Vendedor | Buscar, filtrar, paginar, abrir detalle | Productos, categoria, subcategoria, talla, stock | `GET /api/v1/products` |
 | Productos | Exportar productos | Admin, Vendedor | Descargar catálogo filtrado en Excel | Productos y variantes | `GET /api/v1/products/export` |
 | Productos | Detalle de producto | Admin, Vendedor | Ver informacion completa, disponibilidad, imágenes e historial | Producto, variantes, stock, imágenes, movimientos | `GET /api/v1/products/{productId}`, rutas de imágenes e inventario del producto |
@@ -92,6 +93,20 @@ Puede trabajar con:
 | Configuracion | Categorias de gasto | Admin | Listar, crear, editar | Categorias de gasto | `GET /api/v1/expensecategories`, `POST /api/v1/expensecategories`, `PUT /api/v1/expensecategories/{id}` |
 
 ## Contratos operativos confirmados
+
+### Tasa de cambio vigente
+
+`GET /api/v1/exchange-rates/current` requiere autenticación con rol `Admin` o `Employee` y devuelve la tasa habilitada con fecha de inicio más reciente:
+
+```json
+{
+  "storeRate": 37,
+  "bankRate": 36.5,
+  "startDate": "2026-09-12T00:00:00Z"
+}
+```
+
+Si no existe una tasa bancaria habilitada, la API responde `404` con `ProblemDetails`. El frontend debe mostrar el detalle del error y no asumir una tasa por defecto.
 
 Los endpoints siguientes ya están implementados y son la base de las pantallas críticas. Todos requieren JWT. `Employee` es el rol técnico de Vendedor.
 
