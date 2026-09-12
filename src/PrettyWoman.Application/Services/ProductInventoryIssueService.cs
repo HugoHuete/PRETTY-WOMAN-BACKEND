@@ -134,6 +134,8 @@ public class ProductInventoryIssueService(
                 .ThenInclude(productVariant => productVariant!.Product)
             .Include(issue => issue.ProductVariant)
                 .ThenInclude(productVariant => productVariant!.Size)
+            .Include(issue => issue.ProductVariant)
+                .ThenInclude(productVariant => productVariant!.ProductPresentation)
             .Include(issue => issue.ProductInventoryIssueType)
             .Include(issue => issue.ProductInventoryIssueStatus);
     }
@@ -206,7 +208,7 @@ public class ProductInventoryIssueService(
             ProductCode = issue.ProductVariant != null && issue.ProductVariant.Product != null ? issue.ProductVariant.Product.Code : null,
             SizeId = issue.ProductVariant != null ? issue.ProductVariant.SizeId : 0,
             SizeName = issue.ProductVariant != null && issue.ProductVariant.Size != null ? issue.ProductVariant.Size.Name : null,
-            Variant = issue.ProductVariant != null ? issue.ProductVariant.Variant : null,
+            Variant = issue.ProductVariant?.ProductPresentation?.Name,
             ProductInventoryIssueTypeId = issue.ProductInventoryIssueTypeId,
             ProductInventoryIssueTypeName = issue.ProductInventoryIssueType != null ? issue.ProductInventoryIssueType.Name : null,
             ProductInventoryIssueStatusId = issue.ProductInventoryIssueStatusId,

@@ -17,6 +17,7 @@ public class ProductServiceTests
     {
         await using var context = CreateContext();
         await SeedProductsAsync(context);
+        context.ChangeTracker.Clear();
         var service = CreateService(context);
 
         var result = await service.GetAllAsync(new ProductQueryDTO
@@ -28,12 +29,13 @@ public class ProductServiceTests
         });
 
         var product = Assert.Single(result.Items);
-        var productVariant = Assert.Single(product.Variants);
+        var presentation = Assert.Single(product.Presentations);
+        var productVariant = Assert.Single(presentation.Sizes);
 
         Assert.Equal("Pantalon cargo", product.Name);
         Assert.Equal("pantalon-primary.jpg", product.PrimaryImageUrl);
         Assert.Equal(2, productVariant.SizeId);
-        Assert.Equal("Negro", productVariant.Variant);
+        Assert.Equal("Negro", presentation.Name);
         Assert.Equal(1, productVariant.UnavailableQuantity);
     }
 
@@ -50,7 +52,7 @@ public class ProductServiceTests
         });
 
         var product = Assert.Single(result.Items);
-        var productVariant = Assert.Single(product.Variants);
+        var productVariant = Assert.Single(product.Presentations.Single().Sizes);
 
         Assert.Equal("Blusa satin", product.Name);
         Assert.Equal(1, productVariant.ReservedQuantity);
@@ -81,7 +83,7 @@ public class ProductServiceTests
 
         var product = Assert.Single(result.Items);
         Assert.Equal("Blusa satin", product.Name);
-        Assert.All(product.Variants, productVariant => Assert.Null(productVariant.DiscountedSalePrice));
+        Assert.All(product.Presentations.SelectMany(presentation => presentation.Sizes), productVariant => Assert.Null(productVariant.DiscountedSalePrice));
     }
 
     [Fact]
@@ -94,7 +96,7 @@ public class ProductServiceTests
         var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1001 });
 
         var product = Assert.Single(result.Items);
-        Assert.All(product.Variants, productVariant =>
+        Assert.All(product.Presentations.SelectMany(presentation => presentation.Sizes), productVariant =>
         {
             Assert.Equal(650m, productVariant.SalePrice);
             Assert.Equal(585m, productVariant.DiscountedSalePrice);
@@ -131,8 +133,8 @@ public class ProductServiceTests
 
         var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1001 });
 
-        var specificVariant = result.Items.Single().Variants.Single(productVariant => productVariant.Id == variant.Id);
-        var otherVariant = result.Items.Single().Variants.Single(productVariant => productVariant.Id != variant.Id);
+        var specificVariant = result.Items.Single().Presentations.SelectMany(presentation => presentation.Sizes).Single(productVariant => productVariant.Id == variant.Id);
+        var otherVariant = result.Items.Single().Presentations.SelectMany(presentation => presentation.Sizes).Single(productVariant => productVariant.Id != variant.Id);
         Assert.Equal(400m, specificVariant.DiscountedSalePrice);
         Assert.Equal(585m, otherVariant.DiscountedSalePrice);
         Assert.Equal(4, specificVariant.DiscountCampaignId);
@@ -143,6 +145,7 @@ public class ProductServiceTests
     {
         await using var context = CreateContext();
         await SeedProductsAsync(context);
+        context.ChangeTracker.Clear();
         var service = CreateService(context);
 
         var file = await service.ExportAsync(new ProductQueryDTO { Code = 1001 });
@@ -186,12 +189,12 @@ public class ProductServiceTests
         var activeProduct = Assert.Single((await service.GetAllAsync(new ProductQueryDTO { Code = 1001 })).Items);
         var futureProduct = Assert.Single((await service.GetAllAsync(new ProductQueryDTO { Code = 1002 })).Items);
 
-        Assert.All(activeProduct.Variants, productVariant =>
+        Assert.All(activeProduct.Presentations.SelectMany(presentation => presentation.Sizes), productVariant =>
         {
             Assert.Equal(585m, productVariant.DiscountedSalePrice);
             Assert.Equal(1, productVariant.DiscountCampaignId);
         });
-        Assert.All(futureProduct.Variants, productVariant =>
+        Assert.All(futureProduct.Presentations.SelectMany(presentation => presentation.Sizes), productVariant =>
         {
             Assert.Null(productVariant.DiscountedSalePrice);
             Assert.Null(productVariant.DiscountCampaignId);
@@ -203,11 +206,12 @@ public class ProductServiceTests
     {
         await using var context = CreateContext();
         await SeedProductsAsync(context);
-        var service = CreateService(context);
         var productId = await context.Products
             .Where(product => product.Name == "Pantalon cargo")
             .Select(product => product.Id)
             .SingleAsync();
+        context.ChangeTracker.Clear();
+        var service = CreateService(context);
 
         var result = await service.GetByIdAsync(productId);
 
@@ -215,8 +219,58 @@ public class ProductServiceTests
         Assert.Equal("Pantalones", result.SubcategoryName);
         Assert.Equal("Ropa", result.CategoryName);
         Assert.Equal("pantalon-primary.jpg", result.PrimaryImageUrl);
-        Assert.Equal(2, result.Variants.Count);
-        Assert.All(result.Variants, productVariant => Assert.Equal(585m, productVariant.DiscountedSalePrice));
+        var presentation = Assert.Single(result.Presentations);
+        Assert.Equal("Negro", presentation.Name);
+        Assert.Equal(2, presentation.Sizes.Count);
+        Assert.All(presentation.Sizes, productVariant => Assert.Equal(585m, productVariant.DiscountedSalePrice));
+    }
+
+    [Fact]
+    public async Task GetAllAsync_UsesGeneralImageWhenPresentationHasNoPrimaryImage()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var blackPresentation = new ProductPresentation
+        {
+            Name = "Negro",
+            NormalizedName = "NEGRO",
+            SortOrder = 0
+        };
+        var redPresentation = new ProductPresentation
+        {
+            Name = "Rojo",
+            NormalizedName = "ROJO",
+            SortOrder = 1
+        };
+        var product = new Product
+        {
+            Id = 4,
+            SupplierProductCode = "DRESS-004",
+            Code = 1004,
+            Name = "Vestido colores",
+            SubcategoryId = 1,
+            ProductImages =
+            [
+                new ProductImage { IsPrimary = true, SortOrder = 0, MediaAsset = CreateMediaAsset("vestido-general.jpg") },
+                new ProductImage { ProductPresentation = redPresentation, IsPrimary = true, SortOrder = 0, MediaAsset = CreateMediaAsset("rojo-primary.jpg") }
+            ],
+            ProductPresentations = [blackPresentation, redPresentation],
+            ProductVariants =
+            [
+                new ProductVariant { ProductPresentation = blackPresentation, SizeId = 1, Quantity = 1, ReceivedQuantity = 1, AvailableQuantity = 1, SalePrice = 650m },
+                new ProductVariant { ProductPresentation = redPresentation, SizeId = 1, Quantity = 1, ReceivedQuantity = 1, AvailableQuantity = 1, SalePrice = 650m }
+            ]
+        };
+        context.Products.Add(product);
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var result = await CreateService(context).GetAllAsync(new ProductQueryDTO { Code = 1004 });
+
+        var mappedProduct = Assert.Single(result.Items);
+        Assert.Equal("vestido-general.jpg", mappedProduct.PrimaryImageUrl);
+        Assert.Equal("vestido-general.jpg", mappedProduct.Presentations.Single(item => item.Name == "Negro").PrimaryImageUrl);
+        Assert.Equal("rojo-primary.jpg", mappedProduct.Presentations.Single(item => item.Name == "Rojo").PrimaryImageUrl);
     }
 
     [Fact]
@@ -394,6 +448,11 @@ public class ProductServiceTests
             new Size { Id = 1, Name = "S", SizeGroupId = 1, DisplayOrder = 1 },
             new Size { Id = 2, Name = "M", SizeGroupId = 1, DisplayOrder = 2 });
 
+
+        var blackPresentation = new ProductPresentation { Name = "Negro", NormalizedName = "NEGRO" };
+        var stripedPresentation = new ProductPresentation { Name = "Rayas", NormalizedName = "RAYAS" };
+        var heelPresentation = new ProductPresentation { Name = "Tacón", NormalizedName = "TACÓN" };
+
         var pants = new Product
         {
             Id = 1,
@@ -406,10 +465,11 @@ public class ProductServiceTests
                 new ProductImage { MediaAsset = CreateMediaAsset("pantalon-secondary.jpg"), SortOrder = 0, IsPrimary = false },
                 new ProductImage { MediaAsset = CreateMediaAsset("pantalon-primary.jpg"), SortOrder = 1, IsPrimary = true }
             ],
+            ProductPresentations = [blackPresentation],
             ProductVariants =
             [
-                new ProductVariant { SizeId = 1, Variant = "Negro", Quantity = 3, ReceivedQuantity = 3, AvailableQuantity = 2, SalePrice = 650m },
-                new ProductVariant { SizeId = 2, Variant = "Negro", Quantity = 1, ReceivedQuantity = 1, UnavailableQuantity = 1, SalePrice = 650m }
+                new ProductVariant { SizeId = 1, ProductPresentation = blackPresentation, Quantity = 3, ReceivedQuantity = 3, AvailableQuantity = 2, SalePrice = 650m },
+                new ProductVariant { SizeId = 2, ProductPresentation = blackPresentation, Quantity = 1, ReceivedQuantity = 1, UnavailableQuantity = 1, SalePrice = 650m }
             ]
         };
 
@@ -420,9 +480,10 @@ public class ProductServiceTests
             Code = 1002,
             Name = "Blusa satin",
             SubcategoryId = 2,
+            ProductPresentations = [stripedPresentation],
             ProductVariants =
             [
-                new ProductVariant { SizeId = 1, Variant = "Rayas", Quantity = 1, ReceivedQuantity = 1, ReservedQuantity = 1, SalePrice = 500m }
+                new ProductVariant { SizeId = 1, ProductPresentation = stripedPresentation, Quantity = 1, ReceivedQuantity = 1, ReservedQuantity = 1, SalePrice = 500m }
             ]
         };
 
@@ -433,9 +494,10 @@ public class ProductServiceTests
             Code = 1003,
             Name = "Tacones",
             SubcategoryId = 3,
+            ProductPresentations = [heelPresentation],
             ProductVariants =
             [
-                new ProductVariant { SizeId = 2, Variant = "Tacón", Quantity = 1, ReceivedQuantity = 1, UnavailableQuantity = 1, SalePrice = 900m }
+                new ProductVariant { SizeId = 2, ProductPresentation = heelPresentation, Quantity = 1, ReceivedQuantity = 1, UnavailableQuantity = 1, SalePrice = 900m }
             ]
         };
 

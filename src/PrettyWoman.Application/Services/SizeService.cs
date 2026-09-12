@@ -64,7 +64,8 @@ public class SizeService(IApplicationDbContext context, IMapper mapper) : ISizeS
     {
         var sizes = await _context.Sizes
             .Include(size => size.SizeGroup)
-            .OrderBy(size => new { size.SizeGroupId, size.DisplayOrder })
+            .OrderBy(size => size.SizeGroupId)
+            .ThenBy(size => size.DisplayOrder)
             .ToListAsync();
 
         return _mapper.Map<List<SizeDTO>>(sizes);

@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using PrettyWoman.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using PrettyWoman.Infrastructure.Persistence;
 namespace PrettyWoman.Infrastructure.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260910222107_AddProductPresentations")]
+    partial class AddProductPresentations
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1965,63 +1968,6 @@ namespace PrettyWoman.Infrastructure.Migrations
                     b.ToTable("media_asset_variants", (string)null);
                 });
 
-            modelBuilder.Entity("PrettyWoman.Domain.Entities.MediaCleanupItem", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<int>("Attempts")
-                        .HasColumnType("integer")
-                        .HasColumnName("attempts");
-
-                    b.Property<int>("Bucket")
-                        .HasColumnType("integer")
-                        .HasColumnName("bucket");
-
-                    b.Property<DateTime>("CreatedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at_utc");
-
-                    b.Property<string>("LastError")
-                        .HasMaxLength(2000)
-                        .HasColumnType("character varying(2000)")
-                        .HasColumnName("last_error");
-
-                    b.Property<Guid>("MediaAssetId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("media_asset_id");
-
-                    b.Property<DateTime?>("ProcessedAtUtc")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("processed_at_utc");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer")
-                        .HasColumnName("status");
-
-                    b.Property<string>("StorageKey")
-                        .IsRequired()
-                        .HasMaxLength(600)
-                        .HasColumnType("character varying(600)")
-                        .HasColumnName("storage_key");
-
-                    b.HasKey("Id")
-                        .HasName("pk_media_cleanup_items");
-
-                    b.HasIndex("Bucket", "StorageKey")
-                        .IsUnique()
-                        .HasDatabaseName("ix_media_cleanup_items_bucket_storage_key");
-
-                    b.HasIndex("Status", "CreatedAtUtc")
-                        .HasDatabaseName("ix_media_cleanup_items_status_created_at_utc");
-
-                    b.ToTable("media_cleanup_items", (string)null);
-                });
-
             modelBuilder.Entity("PrettyWoman.Domain.Entities.MovementDirection", b =>
                 {
                     b.Property<int>("Id")
@@ -2621,6 +2567,9 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .IsUnique()
                         .HasDatabaseName("ix_product_images_media_asset_id")
                         .HasFilter("media_asset_id is not null");
+
+                    b.HasIndex("ProductId")
+                        .HasDatabaseName("ix_product_images_product_id");
 
                     b.HasIndex("ProductId")
                         .IsUnique()

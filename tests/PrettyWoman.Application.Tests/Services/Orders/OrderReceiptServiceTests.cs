@@ -867,17 +867,11 @@ public class OrderReceiptServiceTests
                     SupplierProductCode = "SOHO25120",
                     Name = "Pantalon cargo",
                     SubcategoryId = 1,
-                    Variants =
-                    [
-                        new CreateOrderProductVariantDTO
-                        {
-                            SizeId = 1,
-                            Variant = "Azul",
+                    Presentations = [ new CreateOrderProductPresentationDTO { Name = "Azul", Sizes = [ new CreateOrderProductVariantDTO { SizeId = 1,
                             Quantity = quantity,
                             UnitCost = 8m,
                             SalePrice = 600m
-                        }
-                    ]
+                        } ] } ]
                 }
             ]
         };
@@ -898,34 +892,22 @@ public class OrderReceiptServiceTests
                     SupplierProductCode = "SOHO25120",
                     Name = "Camisa",
                     SubcategoryId = 1,
-                    Variants =
-                    [
-                        new CreateOrderProductVariantDTO
-                        {
-                            SizeId = 1,
-                            Variant = "Azul",
+                    Presentations = [ new CreateOrderProductPresentationDTO { Name = "Azul", Sizes = [ new CreateOrderProductVariantDTO { SizeId = 1,
                             Quantity = 1,
                             UnitCost = 10m,
                             SalePrice = 600m
-                        }
-                    ]
+                        } ] } ]
                 },
                 new CreateOrderProductDTO
                 {
                     SupplierProductCode = "SOHO25121",
                     Name = "Vestido",
                     SubcategoryId = 1,
-                    Variants =
-                    [
-                        new CreateOrderProductVariantDTO
-                        {
-                            SizeId = 1,
-                            Variant = "Rojo",
+                    Presentations = [ new CreateOrderProductPresentationDTO { Name = "Rojo", Sizes = [ new CreateOrderProductVariantDTO { SizeId = 1,
                             Quantity = 1,
                             UnitCost = 10m,
                             SalePrice = 900m
-                        }
-                    ]
+                        } ] } ]
                 }
             ]
         };

@@ -11,5 +11,5 @@ public class ProductDTO
     public int? CategoryId { get; set; }
     public string? CategoryName { get; set; }
     public string? PrimaryImageUrl { get; set; }
-    public List<ProductVariantDTO> Variants { get; set; } = [];
+    public List<ProductPresentationDTO> Presentations { get; set; } = [];
 }

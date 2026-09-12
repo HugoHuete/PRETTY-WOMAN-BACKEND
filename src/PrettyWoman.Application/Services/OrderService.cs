@@ -1,6 +1,7 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.Common.Extensions;
+using PrettyWoman.Application.Common.Media;
 using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.DTOs.Orders;
 using PrettyWoman.Application.Exceptions;
@@ -87,28 +88,95 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             .ToList();
 
         var oldProducts = await _context.Products
+            .Include(product => product.ProductImages)
+                .ThenInclude(image => image.MediaAsset)
+                    .ThenInclude(asset => asset!.Variants)
+            .Include(product => product.ProductPresentations)
+                .ThenInclude(presentation => presentation.ProductImages)
+                    .ThenInclude(image => image.MediaAsset)
+                        .ThenInclude(asset => asset!.Variants)
             .Where(product => oldProductIds.Contains(product.Id))
             .OrderBy(product => product.Code)
             .ToListAsync();
 
+        var requestedProductIds = updateOrderDTO.Products
+            .Where(product => product.Id.HasValue)
+            .Select(product => product.Id!.Value)
+            .ToHashSet();
+
+        var invalidProductId = requestedProductIds.FirstOrDefault(productId => oldProducts.All(product => product.Id != productId));
+        if (invalidProductId != 0)
+        {
+            throw new AppBadRequestException($"El producto con id '{invalidProductId}' no pertenece a la orden.");
+        }
+
+        var duplicateRequestedProductId = updateOrderDTO.Products
+            .Where(product => product.Id.HasValue)
+            .GroupBy(product => product.Id!.Value)
+            .FirstOrDefault(group => group.Count() > 1)?.Key;
+
+        if (duplicateRequestedProductId.HasValue)
+        {
+            throw new AppBadRequestException($"No puede enviar el producto con id '{duplicateRequestedProductId}' más de una vez.");
+        }
+
+        var requestedPresentationNamesByProduct = updateOrderDTO.Products
+            .Where(product => product.Id.HasValue)
+            .ToDictionary(
+                product => product.Id!.Value,
+                product => product.Presentations
+                    .Select(presentation => presentation.Name?.ToUpperInvariant())
+                    .ToHashSet());
+
+        // Se determina antes de reconstruir las navegaciones qué presentaciones ya no
+        // forman parte de la orden. Al eliminarse la presentación también se eliminan
+        // sus imágenes por cascada.
+        var obsoletePresentations = oldProducts
+            .Where(product => requestedPresentationNamesByProduct.ContainsKey(product.Id))
+            .SelectMany(product => product.ProductPresentations
+                .Where(presentation =>
+                    !requestedPresentationNamesByProduct[product.Id].Contains(presentation.NormalizedName)))
+            .ToList();
+
+        var productsToDelete = oldProducts
+            .Where(product => !requestedProductIds.Contains(product.Id))
+            .ToList();
+
+        var imagesToDelete = productsToDelete
+            .SelectMany(GetAllProductImages)
+            .Concat(obsoletePresentations.SelectMany(presentation => presentation.ProductImages))
+            .DistinctBy(image => image.Id)
+            .ToList();
+
+        var mediaAssetsToDelete = imagesToDelete
+            .Select(image => image.MediaAsset)
+            .OfType<MediaAsset>()
+            .DistinctBy(asset => asset.Id)
+            .ToList();
+
+        await using var transaction = await _context.BeginTransactionAsync();
+        MediaCleanupScheduler.Enqueue(_context, mediaAssetsToDelete);
+
+        _context.ProductImages.RemoveRange(imagesToDelete);
+        _context.MediaAssets.RemoveRange(mediaAssetsToDelete);
+        _context.ProductVariants.RemoveRange(order.ProductVariants);
+        _context.Products.RemoveRange(productsToDelete);
+        await _context.SaveChangesAsync();
+
         var nextProductCode = await GetNextProductCodeAsync();
         var createdProducts = CreateProducts(updateOrderDTO, nextProductCode, oldProducts);
         var products = createdProducts.Products;
+        _context.ProductPresentations.RemoveRange(obsoletePresentations);
+
+        foreach (var obsoletePresentation in obsoletePresentations)
+        {
+            products.Single(product => product.Id == obsoletePresentation.ProductId)
+                .ProductPresentations.Remove(obsoletePresentation);
+        }
+
         var productVariants = products.SelectMany(detail => detail.ProductVariants).ToList();
         var exchangeRate = await GetOrderExchangeRateAsync();
         var totals = CalculateCosts(createdProducts.ProductCosts, updateOrderDTO.PurchaseCurrencyId, exchangeRate, updateOrderDTO.SupplierShippingCostUsd);
-        _context.ProductVariants.RemoveRange(order.ProductVariants);
-
-        var reusedProductIds = products
-            .Where(product => product.Id != 0)
-            .Select(product => product.Id)
-            .ToHashSet();
-
-        var removedProducts = oldProducts
-            .Where(product => !reusedProductIds.Contains(product.Id))
-            .ToList();
-
-        _context.Products.RemoveRange(removedProducts);
 
         order.PurchaseDate = updateOrderDTO.PurchaseDate.NormalizeToUtc() ?? order.PurchaseDate;
         order.SupplierId = updateOrderDTO.SupplierId;
@@ -125,8 +193,10 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         await SyncSupplierPaymentMovementAsync(order);
 
         await _context.SaveChangesAsync();
+        await transaction.CommitAsync();
     }
 
+    // Marcar el resto de la orden como faltantes y registrar la pérdida correspondiente. Esto solo se puede hacer si la orden no está cancelada, no está recibida y no tiene faltantes ya registrados.
     public async Task<OrderDTO> CloseShortagesAsync(int id, CloseOrderShortagesDTO closeShortagesDTO)
     {
         closeShortagesDTO.Items ??= [];
@@ -150,6 +220,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         var productsWithPendingQuantity = order.ProductVariants
             .Where(productVariant => productVariant.ReceivedQuantity < productVariant.Quantity)
             .ToList();
+
         if (productsWithPendingQuantity.Count == 0)
         {
             throw new AppBadRequestException("La orden no tiene cantidades pendientes para registrar como faltantes.");
@@ -391,6 +462,8 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                     .ThenInclude(product => product!.Subcategory)
             .Include(order => order.ProductVariants)
                 .ThenInclude(productVariant => productVariant.Size)
+            .Include(order => order.ProductVariants)
+                .ThenInclude(productVariant => productVariant.ProductPresentation)
             .Include(order => order.PurchaseShortages)
             .Include(order => order.SupplierRefund)
             .OrderByDescending(order => order.PurchaseDate)
@@ -418,6 +491,8 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                     .ThenInclude(product => product!.Subcategory)
             .Include(order => order.ProductVariants)
                 .ThenInclude(productVariant => productVariant.Size)
+            .Include(order => order.ProductVariants)
+                .ThenInclude(productVariant => productVariant.ProductPresentation)
             .Include(order => order.PurchaseShortages)
             .Include(order => order.SupplierRefund)
             .FirstOrDefaultAsync(order => order.Id == id)
@@ -559,7 +634,8 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         }
 
         var sizeIds = orderDTO.Products
-            .SelectMany(product => product.Variants)
+            .SelectMany(product => product.Presentations)
+            .SelectMany(presentation => presentation.Sizes)
             .Select(variant => variant.SizeId)
             .Distinct()
             .ToList();
@@ -577,37 +653,55 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
 
         foreach (var product in orderDTO.Products)
         {
-            if (product.Variants.Count == 0)
+            if (product.Presentations.Count == 0)
             {
-                throw new AppBadRequestException("Cada producto debe tener al menos una variante.");
+                throw new AppBadRequestException("Cada producto debe tener al menos una presentación.");
             }
 
-            var duplicatedVariant = product.Variants
-                .GroupBy(variant => new
-                {
-                    variant.SizeId,
-                    Variant = variant.Variant.NormalizeOptional()?.ToLower()
-                })
-                .FirstOrDefault(group => group.Count() > 1);
-
-            if (duplicatedVariant != null)
+            if (product.Presentations.Count(presentation => presentation.Name is null) > 1)
             {
-                throw new AppBadRequestException("No puede enviar variantes duplicadas para el mismo producto.");
+                throw new AppBadRequestException("No puede enviar más de una presentación sin nombre para el mismo producto.");
+            }
+
+            foreach (var presentation in product.Presentations)
+            {
+                if (presentation.SortOrder < 0)
+                    throw new AppBadRequestException("El orden de las presentaciones no puede ser negativo.");
+
+                if (presentation.Sizes.Count == 0)
+                    throw new AppBadRequestException("Cada presentación debe tener al menos una talla.");
+                if (presentation.Sizes.GroupBy(size => size.SizeId).Any(group => group.Count() > 1))
+                    throw new AppBadRequestException("No puede enviar tallas duplicadas en la misma presentación.");
+            }
+
+            if (product.Presentations.Where(presentation => presentation.Name is not null)
+                .GroupBy(presentation => presentation.Name!, StringComparer.OrdinalIgnoreCase).Any(group => group.Count() > 1))
+            {
+                throw new AppBadRequestException("No puede enviar nombres de presentación duplicados para el mismo producto.");
             }
         }
     }
 
     private static CreatedProducts CreateProducts(CreateOrderDTO orderDTO, int nextProductCode, List<Product>? reusableProducts = null)
     {
+        // En una edición, esta copia contiene los productos que ya pertenecen a la orden
+        // y permite reutilizarlos por Id. En una creación es null, por lo que todos los
+        // productos se construyen como entidades nuevas.
         var reusableDetails = reusableProducts?.ToList();
         var products = new List<Product>();
         var productCosts = new List<ProductPurchaseCost>();
 
         foreach (var productDTO in orderDTO.Products)
         {
+            // Si el request trae el Id de un producto existente, se conserva su identidad
+            // y sus relaciones (por ejemplo, imágenes); de lo contrario se creará uno nuevo.
             var product = reusableDetails is null
                 ? null
                 : TakeReusableProduct(productDTO, reusableDetails);
+
+            // Se consideran todas las presentaciones existentes para poder reutilizar una
+            // coincidencia aunque todavía no tenga imágenes.
+            var existingPresentations = product?.ProductPresentations.ToList() ?? [];
 
             product ??= new Product
             {
@@ -621,22 +715,49 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             product.SubcategoryId = productDTO.SubcategoryId;
             product.ProductVariants = [];
 
-            foreach (var variant in productDTO.Variants)
-            {
-                var productVariant = new ProductVariant
+            var requestedPresentations = productDTO.Presentations
+                .Select(presentationDTO =>
                 {
-                    Product = product,
-                    SizeId = variant.SizeId,
-                    Variant = variant.Variant.NormalizeOptional(),
-                    Quantity = variant.Quantity,
-                    ReceivedQuantity = 0,
-                    AvailableQuantity = 0,
-                    ReservedQuantity = 0,
-                    SalePrice = variant.SalePrice
-                };
+                    var normalizedName = presentationDTO.Name?.ToUpperInvariant();
+                    var presentation = existingPresentations
+                        .FirstOrDefault(item => item.NormalizedName == normalizedName);
 
-                product.ProductVariants.Add(productVariant);
-                productCosts.Add(new ProductPurchaseCost(productVariant, variant.UnitCost));
+                    if (presentation is null)
+                    {
+                        presentation = new ProductPresentation { Product = product };
+                    }
+
+                    presentation.Name = presentationDTO.Name;
+                    presentation.NormalizedName = normalizedName;
+                    presentation.SortOrder = presentationDTO.SortOrder;
+                    return presentation;
+                })
+                .ToList();
+
+            var requestedPresentationIds = requestedPresentations
+                .Where(presentation => presentation.Id != 0)
+                .Select(presentation => presentation.Id)
+                .ToHashSet();
+
+            // Se mantienen temporalmente todas las presentaciones existentes para evitar
+            // que EF las marque como huérfanas; las no reutilizadas se eliminan explícitamente
+            // después de crear las nuevas variantes.
+            product.ProductPresentations = requestedPresentations
+                .Concat(existingPresentations.Where(presentation =>
+                    !requestedPresentationIds.Contains(presentation.Id)))
+                .ToList();
+
+            foreach (var presentationDTO in productDTO.Presentations)
+            {
+                var presentation = product.ProductPresentations.Single(item => item.NormalizedName == presentationDTO.Name?.ToUpperInvariant());
+                foreach (var size in presentationDTO.Sizes)
+                {
+                    var productVariant = new ProductVariant { Product = product, SizeId = size.SizeId,
+                        ProductPresentation = presentation, Quantity = size.Quantity, ReceivedQuantity = 0,
+                        AvailableQuantity = 0, ReservedQuantity = 0, SalePrice = size.SalePrice };
+                    product.ProductVariants.Add(productVariant);
+                    productCosts.Add(new ProductPurchaseCost(productVariant, size.UnitCost));
+                }
             }
 
             products.Add(product);
@@ -659,6 +780,12 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         reusableProducts.Remove(reusableProduct);
 
         return reusableProduct;
+    }
+
+    private static IEnumerable<ProductImage> GetAllProductImages(Product product)
+    {
+        return product.ProductImages
+            .Concat(product.ProductPresentations.SelectMany(presentation => presentation.ProductImages));
     }
 
     private static OrderTotals CalculateCosts(List<ProductPurchaseCost> productCosts, int purchaseCurrencyId, decimal exchangeRate, decimal supplierShippingCostUsd)
@@ -849,25 +976,19 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                 Name = group.Key.Name,
                 SubcategoryId = group.Key.SubcategoryId,
                 SubcategoryName = group.Key.Subcategory?.Name,
-                Variants = group
-                    .OrderBy(productVariant => productVariant.Size != null ? productVariant.Size.DisplayOrder : 0)
-                    .ThenBy(productVariant => productVariant.Variant)
-                    .Select(productVariant => new OrderProductVariantDTO
+                Presentations = group.GroupBy(productVariant => productVariant.ProductPresentation!)
+                    .OrderBy(presentation => presentation.Key.SortOrder)
+                    .Select(presentation => new OrderProductPresentationDTO
                     {
-                        Id = productVariant.Id,
-                        SizeId = productVariant.SizeId,
-                        SizeName = productVariant.Size?.Name,
-                        Variant = productVariant.Variant,
-                        Quantity = productVariant.Quantity,
-                        ReceivedQuantity = productVariant.ReceivedQuantity,
-                        AvailableQuantity = productVariant.AvailableQuantity,
-                        ReservedQuantity = productVariant.ReservedQuantity,
-                        UnitCostUsd = productVariant.UnitCostUsd,
-                        MerchandiseTotalCostNio = productVariant.MerchandiseTotalCostNio,
-                        AllocatedShippingCostNio = productVariant.AllocatedShippingCostNio,
-                        TotalCostNio = productVariant.TotalCostNio,
-                        UnitCostNio = productVariant.UnitCostNio,
-                        SalePrice = productVariant.SalePrice
+                        Id = presentation.Key.Id, Name = presentation.Key.Name, SortOrder = presentation.Key.SortOrder,
+                        Sizes = presentation.OrderBy(item => item.Size != null ? item.Size.DisplayOrder : 0)
+                            .Select(productVariant => new OrderProductVariantDTO { Id = productVariant.Id,
+                                SizeId = productVariant.SizeId, SizeName = productVariant.Size?.Name,
+                                Quantity = productVariant.Quantity, ReceivedQuantity = productVariant.ReceivedQuantity,
+                                AvailableQuantity = productVariant.AvailableQuantity, ReservedQuantity = productVariant.ReservedQuantity,
+                                UnitCostUsd = productVariant.UnitCostUsd, MerchandiseTotalCostNio = productVariant.MerchandiseTotalCostNio,
+                                AllocatedShippingCostNio = productVariant.AllocatedShippingCostNio, TotalCostNio = productVariant.TotalCostNio,
+                                UnitCostNio = productVariant.UnitCostNio, SalePrice = productVariant.SalePrice }).ToList()
                     })
                     .ToList()
             })
@@ -963,9 +1084,11 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             product.SupplierProductCode = product.SupplierProductCode.NormalizeRequired("Código de proveedor");
             product.Name = product.Name.NormalizeRequired("Nombre");
 
-            foreach (var variant in product.Variants)
+            product.Presentations ??= [];
+            foreach (var presentation in product.Presentations)
             {
-                variant.Variant = variant.Variant.NormalizeOptional();
+                presentation.Name = presentation.Name.NormalizeOptional();
+                presentation.Sizes ??= [];
             }
         }
     }

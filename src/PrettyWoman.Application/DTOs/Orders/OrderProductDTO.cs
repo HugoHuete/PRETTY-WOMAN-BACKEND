@@ -8,5 +8,5 @@ public class OrderProductDTO
     public required string Name { get; set; }
     public int SubcategoryId { get; set; }
     public string? SubcategoryName { get; set; }
-    public ICollection<OrderProductVariantDTO> Variants { get; set; } = [];
+    public ICollection<OrderProductPresentationDTO> Presentations { get; set; } = [];
 }

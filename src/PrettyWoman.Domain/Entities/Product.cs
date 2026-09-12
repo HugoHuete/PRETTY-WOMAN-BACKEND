@@ -12,5 +12,6 @@ public class Product
 
     public ICollection<ProductVariant> ProductVariants { get; set; } = [];
     public ICollection<ProductImage> ProductImages { get; set; } = [];
+    public ICollection<ProductPresentation> ProductPresentations { get; set; } = [];
     public ICollection<DiscountCampaignProduct> DiscountCampaignProducts { get; set; } = [];
 }

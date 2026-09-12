@@ -31,14 +31,9 @@ public class AuthService(
         var user = await _userManager.FindByNameAsync(loginRequest.Username)
             ?? throw new AppUnauthorizedException("Credenciales invalidas.");
 
-        if (!user.Enabled)
+        if (!user.Enabled || await _userManager.IsLockedOutAsync(user))
         {
-            throw new AppUnauthorizedException("Credenciales invalidas.");
-        }
-
-        if (await _userManager.IsLockedOutAsync(user))
-        {
-            throw new AppUnauthorizedException("Credenciales invalidas.");
+            throw new AppUnauthorizedException("Credenciales inválidas.");
         }
 
         if (!await _userManager.CheckPasswordAsync(user, loginRequest.Password))

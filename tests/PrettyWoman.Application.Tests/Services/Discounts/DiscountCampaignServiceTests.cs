@@ -575,7 +575,7 @@ public class DiscountCampaignServiceTests
             [
                 new DiscountCampaignProduct
                 {
-                    ProductId = productVariant.ProductId,
+                    ProductVariantId = productVariant.Id,
                     DiscountTypeId = (int)DiscountTypeOption.Percentage,
                     DiscountValue = 20
                 }
@@ -583,6 +583,7 @@ public class DiscountCampaignServiceTests
         };
         context.DiscountCampaigns.Add(campaign);
         await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
 
         var result = await CreateService(context).GetByIdAsync(campaign.Id);
 
@@ -590,6 +591,7 @@ public class DiscountCampaignServiceTests
         Assert.Equal(productVariant.ProductId, detail.ProductId);
         Assert.Equal("Vestido detalle", detail.ProductName);
         Assert.Equal(productVariant.Product!.Code, detail.ProductCode);
+        Assert.Equal("Azul", detail.Variant);
         Assert.Equal((int)DiscountTypeOption.Percentage, detail.DiscountTypeId);
         Assert.Equal(nameof(DiscountTypeOption.Percentage), detail.DiscountTypeName);
         Assert.Equal(20, detail.DiscountValue);
@@ -683,15 +685,16 @@ public class DiscountCampaignServiceTests
 
     private static async Task<ProductVariant> AddProductAsync(ApplicationDbContext context, string name, int code)
     {
+        var product = new Product
+        {
+            SupplierProductCode = code.ToString(),
+            Code = code,
+            Name = name,
+            SubcategoryId = 1
+        };
         var productVariant = new ProductVariant
         {
-            Product = new Product
-            {
-                SupplierProductCode = code.ToString(),
-                Code = code,
-                Name = name,
-                SubcategoryId = 1
-            },
+            Product = product,
             Size = new Size
             {
                 Id = code,
@@ -700,6 +703,12 @@ public class DiscountCampaignServiceTests
                 DisplayOrder = 1
             },
             SizeId = code,
+            ProductPresentation = new ProductPresentation
+            {
+                Product = product,
+                Name = "Azul",
+                NormalizedName = "AZUL"
+            },
             Quantity = 1,
             ReceivedQuantity = 1,
             AvailableQuantity = 1,

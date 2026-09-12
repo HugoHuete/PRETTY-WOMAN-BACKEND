@@ -9,6 +9,7 @@ public interface IApplicationDbContext
     // Media
     DbSet<MediaAsset> MediaAssets { get; }
     DbSet<MediaAssetVariant> MediaAssetVariants { get; }
+    DbSet<MediaCleanupItem> MediaCleanupItems { get; }
 
     // Orders
     DbSet<Supplier> Suppliers { get; }
@@ -27,6 +28,7 @@ public interface IApplicationDbContext
     DbSet<Size> Sizes { get; }
     DbSet<SizeGroup> SizeGroups { get; }
     DbSet<Product> Products { get; }
+    DbSet<ProductPresentation> ProductPresentations { get; }
     DbSet<ProductImage> ProductImages { get; }
     DbSet<ProductVariant> ProductVariants { get; }
     DbSet<ProductHold> ProductHolds { get; }

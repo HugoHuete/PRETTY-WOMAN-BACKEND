@@ -91,7 +91,7 @@ public class InventoryAdjustmentApiTests(PrettyWomanApiFactory factory)
             [
                 new CreateInventoryAdjustmentItemDTO
                 {
-                    ProductId = productVariant.ProductId,
+                    ProductId = productVariant.ProductVariantId,
                     FromStockBucketId = (int)InventoryStockBucketOption.Available,
                     ToStockBucketId = (int)InventoryStockBucketOption.OutOfInventory,
                     Quantity = 2,
@@ -104,7 +104,7 @@ public class InventoryAdjustmentApiTests(PrettyWomanApiFactory factory)
         var adjustmentId = await createResponse.Content.ReadFromJsonAsync<int>();
         Assert.True(adjustmentId > 0);
 
-        var stock = await _factory.GetProductStockAsync(productVariant.ProductId);
+        var stock = await _factory.GetProductStockAsync(productVariant.ProductVariantId);
         Assert.Equal(4, stock.ReceivedQuantity);
         Assert.Equal(2, stock.AvailableQuantity);
         Assert.Equal(0, stock.ReservedQuantity);
@@ -151,7 +151,7 @@ public class InventoryAdjustmentApiTests(PrettyWomanApiFactory factory)
             [
                 new CreateInventoryAdjustmentItemDTO
                 {
-                    ProductId = productVariant.ProductId,
+                    ProductId = productVariant.ProductVariantId,
                     FromStockBucketId = (int)InventoryStockBucketOption.Available,
                     ToStockBucketId = (int)InventoryStockBucketOption.OutOfInventory,
                     Quantity = 2
@@ -161,7 +161,7 @@ public class InventoryAdjustmentApiTests(PrettyWomanApiFactory factory)
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
 
-        var stock = await _factory.GetProductStockAsync(productVariant.ProductId);
+        var stock = await _factory.GetProductStockAsync(productVariant.ProductVariantId);
         Assert.Equal(1, stock.ReceivedQuantity);
         Assert.Equal(1, stock.AvailableQuantity);
         Assert.Equal(0, stock.ReservedQuantity);

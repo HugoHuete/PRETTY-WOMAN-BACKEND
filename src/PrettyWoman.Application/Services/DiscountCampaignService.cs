@@ -183,6 +183,9 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
                 .ThenInclude(productVariant => productVariant.ProductVariant)
                     .ThenInclude(productVariant => productVariant!.Product)
             .Include(campaign => campaign.DiscountCampaignProducts)
+                .ThenInclude(productVariant => productVariant.ProductVariant)
+                    .ThenInclude(productVariant => productVariant!.ProductPresentation)
+            .Include(campaign => campaign.DiscountCampaignProducts)
                 .ThenInclude(productVariant => productVariant.DiscountType)
             .FirstOrDefaultAsync(campaign => campaign.Id == id)
             ?? throw new AppNotFoundException($"La campania de descuento con id '{id}' no existe.");
@@ -236,7 +239,7 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
                     ProductCode = productVariant.Product?.Code ?? productVariant.ProductVariant?.Product?.Code,
                     SizeId = productVariant.ProductVariant?.SizeId,
                     SizeName = productVariant.ProductVariant?.Size?.Name,
-                    Variant = productVariant.ProductVariant?.Variant,
+                    Variant = productVariant.ProductVariant?.ProductPresentation?.Name,
                     DiscountTypeId = productVariant.DiscountTypeId,
                     DiscountTypeName = productVariant.DiscountType?.Name,
                     DiscountValue = productVariant.DiscountValue

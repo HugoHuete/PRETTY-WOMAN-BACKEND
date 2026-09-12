@@ -1,5 +1,6 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging.Abstractions;
 using PrettyWoman.Application.DTOs.Orders;
 using PrettyWoman.Application.Exceptions;
@@ -56,6 +57,7 @@ public class OrderServiceTests
         otherSupplierOrder.OrderStatusId = (int)OrderStatusCode.Pending;
         otherSupplierOrder.SupplierId = 2;
         await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
 
         var result = await service.GetAllAsync(new OrderQueryDTO
         {
@@ -69,12 +71,88 @@ public class OrderServiceTests
 
         var order = Assert.Single(result.Items);
         Assert.Equal(olderMatchingOrderId, order.Id);
+        Assert.Equal("Azul", Assert.Single(Assert.Single(order.Products).Presentations).Name);
         Assert.Equal(2, result.Page);
         Assert.Equal(1, result.PageSize);
         Assert.Equal(2, result.TotalCount);
         Assert.Equal(2, result.TotalPages);
         Assert.True(result.HasPreviousPage);
         Assert.False(result.HasNextPage);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_ReturnsPersistedProductPresentationName()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-PRESENTATION", "Vestido azul"));
+        context.ChangeTracker.Clear();
+
+        var order = await service.GetByIdAsync(orderId);
+
+        Assert.Equal("Azul", Assert.Single(Assert.Single(order.Products).Presentations).Name);
+    }
+
+    [Fact]
+    public async Task CreateAsync_GroupedPresentationsPreserveSizesAndValues()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var request = CreateOrderRequest("SOHO-GROUPED", "Vestido agrupado");
+        request.Products.Single().Presentations =
+        [
+            new() { Name = "  Azul  ", SortOrder = 2, Sizes = [
+                new() { SizeId = 1, Quantity = 2, UnitCost = 8m, SalePrice = 600m },
+                new() { SizeId = 2, Quantity = 3, UnitCost = 9m, SalePrice = 650m }] },
+            new() { Name = "Rojo", SortOrder = 1, Sizes = [
+                new() { SizeId = 3, Quantity = 4, UnitCost = 10m, SalePrice = 700m }] },
+            new() { Name = "   ", SortOrder = 3, Sizes = [
+                new() { SizeId = 1, Quantity = 5, UnitCost = 11m, SalePrice = 750m }] }
+        ];
+
+        var orderId = await service.CreateAsync(request);
+        context.ChangeTracker.Clear();
+        var product = await context.Products.Include(x => x.ProductPresentations)
+            .ThenInclude(x => x.ProductVariants).ThenInclude(x => x.Size).SingleAsync();
+
+        Assert.Collection(product.ProductPresentations.OrderBy(x => x.SortOrder),
+            rojo => Assert.Equal(new[] { "L" }, rojo.ProductVariants.Select(x => x.Size!.Name)),
+            azul => Assert.Equal(new[] { "S", "M" }, azul.ProductVariants.OrderBy(x => x.Size!.DisplayOrder).Select(x => x.Size!.Name)),
+            unnamed => Assert.Equal(new[] { "S" }, unnamed.ProductVariants.Select(x => x.Size!.Name)));
+        Assert.Equal("Azul", product.ProductPresentations.Single(x => x.SortOrder == 2).Name);
+        Assert.Null(product.ProductPresentations.Single(x => x.SortOrder == 3).Name);
+
+        var response = Assert.Single((await service.GetByIdAsync(orderId)).Products);
+        Assert.Collection(response.Presentations.OrderBy(x => x.SortOrder),
+            rojo => Assert.Equal(new[] { "L" }, rojo.Sizes.Select(x => x.SizeName)),
+            azul => Assert.Equal(new[] { "S", "M" }, azul.Sizes.Select(x => x.SizeName)),
+            unnamed => Assert.Equal(new[] { "S" }, unnamed.Sizes.Select(x => x.SizeName)));
+        var red = response.Presentations.Single(x => x.Name == "Rojo").Sizes.Single();
+        Assert.Equal((17.25m, 4, 700m), (red.UnitCostUsd, red.Quantity, red.SalePrice));
+    }
+
+    [Theory]
+    [InlineData(" Azul ", "azul", 1, 2, "No puede enviar nombres de presentación duplicados para el mismo producto.")]
+    [InlineData(null, "   ", 1, 2, "No puede enviar más de una presentación sin nombre para el mismo producto.")]
+    [InlineData("Azul", "Rojo", 1, 1, "No puede enviar tallas duplicadas en la misma presentación.")]
+    public async Task CreateAsync_RejectsInvalidPresentationStructure(string? firstName, string? secondName, int firstSizeId, int secondSizeId, string message)
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var request = CreateOrderRequest("SOHO-INVALID", "Vestido inválido");
+        request.Products.Single().Presentations =
+        [
+            new() { Name = firstName, Sizes = [new() { SizeId = firstSizeId, Quantity = 1, UnitCost = 8m, SalePrice = 600m }] },
+            new() { Name = secondName, Sizes = [new() { SizeId = secondSizeId, Quantity = 1, UnitCost = 8m, SalePrice = 600m }] }
+        ];
+        if (message.Contains("tallas duplicadas"))
+            request.Products.Single().Presentations.First().Sizes.Add(new() { SizeId = firstSizeId, Quantity = 1, UnitCost = 8m, SalePrice = 600m });
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(request));
+        Assert.Equal(message, exception.Message);
     }
 
     [Fact]
@@ -277,17 +355,11 @@ public class OrderServiceTests
                     SupplierProductCode = "LOCAL-001",
                     Name = "Blusa local",
                     SubcategoryId = 1,
-                    Variants =
-                    [
-                        new CreateOrderProductVariantDTO
-                        {
-                            SizeId = 1,
-                            Variant = "Negro",
+                    Presentations = [ new CreateOrderProductPresentationDTO { Name = "Negro", Sizes = [ new CreateOrderProductVariantDTO { SizeId = 1,
                             Quantity = 2,
                             UnitCost = 250m,
                             SalePrice = 600m
-                        }
-                    ]
+                        } ] } ]
                 }
             ]
         });
@@ -395,17 +467,11 @@ public class OrderServiceTests
                     SupplierProductCode = "SOHO25120",
                     Name = "Pantalon cargo",
                     SubcategoryId = 1,
-                    Variants =
-                    [
-                        new CreateOrderProductVariantDTO
-                        {
-                            SizeId = 1,
-                            Variant = "Azul",
+                    Presentations = [ new CreateOrderProductPresentationDTO { Name = "Azul", Sizes = [ new CreateOrderProductVariantDTO { SizeId = 1,
                             Quantity = 2,
                             UnitCost = 8m,
                             SalePrice = 600m
-                        }
-                    ]
+                        } ] } ]
                 }
             ]
         });
@@ -449,17 +515,11 @@ public class OrderServiceTests
                     SupplierProductCode = "SOHO25120",
                     Name = "Pantalon cargo",
                     SubcategoryId = 1,
-                    Variants =
-                    [
-                        new CreateOrderProductVariantDTO
-                        {
-                            SizeId = 1,
-                            Variant = "Azul",
+                    Presentations = [ new CreateOrderProductPresentationDTO { Name = "Azul", Sizes = [ new CreateOrderProductVariantDTO { SizeId = 1,
                             Quantity = 2,
                             UnitCost = 8m,
                             SalePrice = 600m
-                        }
-                    ]
+                        } ] } ]
                 }
             ]
         });
@@ -491,17 +551,11 @@ public class OrderServiceTests
                     SupplierProductCode = "SOHO25120-CORREGIDO",
                     Name = "Pantalon cargo corregido",
                     SubcategoryId = 1,
-                    Variants =
-                    [
-                        new CreateOrderProductVariantDTO
-                        {
-                            SizeId = 1,
-                            Variant = "Azul",
+                    Presentations = [ new CreateOrderProductPresentationDTO { Name = "Azul", Sizes = [ new CreateOrderProductVariantDTO { SizeId = 1,
                             Quantity = 3,
                             UnitCost = 9m,
                             SalePrice = 650m
-                        }
-                    ]
+                        } ] } ]
                 }
             ]
         });
@@ -512,6 +566,66 @@ public class OrderServiceTests
         Assert.Equal(existingProduct.Code, updatedProduct.Code);
         Assert.Equal("SOHO25120-CORREGIDO", updatedProduct.SupplierProductCode);
         Assert.Equal("Pantalon cargo corregido", updatedProduct.Name);
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ReusedProductReplacesPresentationsWithoutDuplicatesOrOrphansAndReturnsInventoryContract()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var createRequest = CreateOrderRequest("SOHO-PRESENTATIONS", "Vestido");
+        createRequest.Products.Single().Presentations =
+        [
+            new() { Name = "Azul", SortOrder = 1, Sizes = [new() { SizeId = 1, Quantity = 2, UnitCost = 8m, SalePrice = 600m }] },
+            new() { Name = "Rojo", SortOrder = 2, Sizes = [new() { SizeId = 2, Quantity = 3, UnitCost = 9m, SalePrice = 650m }] }
+        ];
+        var orderId = await service.CreateAsync(createRequest);
+        var productId = await context.Products.Select(product => product.Id).SingleAsync();
+        var oldPresentationIdsByName = await context.ProductPresentations
+            .ToDictionaryAsync(presentation => presentation.Name!, presentation => presentation.Id);
+        context.ChangeTracker.Clear();
+
+        await service.UpdateAsync(orderId, new UpdateOrderDTO
+        {
+            SupplierId = 1, PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd, SupplierShippingCostUsd = 100m,
+            Products = [new()
+            {
+                Id = productId, SupplierProductCode = "SOHO-PRESENTATIONS", Name = "Vestido actualizado", SubcategoryId = 1,
+                Presentations =
+                [
+                    new() { Name = "Azul", SortOrder = 2, Sizes = [new() { SizeId = 1, Quantity = 4, UnitCost = 10m, SalePrice = 700m }] },
+                    new() { Name = "Verde", SortOrder = 1, Sizes = [new() { SizeId = 3, Quantity = 5, UnitCost = 11m, SalePrice = 750m }] }
+                ]
+            }]
+        });
+
+        context.ChangeTracker.Clear();
+        var persistedPresentations = await context.ProductPresentations.Where(presentation => presentation.ProductId == productId)
+            .OrderBy(presentation => presentation.SortOrder).ToListAsync();
+        Assert.Equal(new[] { "Verde", "Azul" }, persistedPresentations.Select(presentation => presentation.Name));
+        Assert.Equal(2, persistedPresentations.Select(presentation => presentation.NormalizedName).Distinct().Count());
+        Assert.Equal(oldPresentationIdsByName["Azul"], persistedPresentations.Single(presentation => presentation.Name == "Azul").Id);
+        Assert.DoesNotContain(persistedPresentations, presentation => presentation.Name == "Rojo");
+
+        var responseProduct = Assert.Single((await service.GetByIdAsync(orderId)).Products);
+        Assert.Equal(productId, responseProduct.Id);
+        Assert.Collection(responseProduct.Presentations.OrderBy(presentation => presentation.SortOrder),
+            verde => AssertPresentationContract(verde, "Verde", 3),
+            azul => AssertPresentationContract(azul, "Azul", 1));
+        Assert.Equal(2, await context.ProductVariants.CountAsync(variant => variant.ProductId == productId));
+    }
+
+    private static void AssertPresentationContract(OrderProductPresentationDTO presentation, string name, int sizeId)
+    {
+        Assert.True(presentation.Id > 0);
+        Assert.Equal(name, presentation.Name);
+        var size = Assert.Single(presentation.Sizes);
+        Assert.True(size.Id > 0);
+        Assert.Equal(sizeId, size.SizeId);
+        Assert.Equal(0, size.ReceivedQuantity);
+        Assert.Equal(0, size.AvailableQuantity);
+        Assert.Equal(0, size.ReservedQuantity);
     }
 
     [Fact]
@@ -540,17 +654,11 @@ public class OrderServiceTests
                     SupplierProductCode = "SOHO25120",
                     Name = "Pantalon cargo",
                     SubcategoryId = 1,
-                    Variants =
-                    [
-                        new CreateOrderProductVariantDTO
-                        {
-                            SizeId = 1,
-                            Variant = "Azul",
+                    Presentations = [ new CreateOrderProductPresentationDTO { Name = "Azul", Sizes = [ new CreateOrderProductVariantDTO { SizeId = 1,
                             Quantity = 1,
                             UnitCost = 8m,
                             SalePrice = 600m
-                        }
-                    ]
+                        } ] } ]
                 }
             ]
         }));
@@ -639,17 +747,11 @@ public class OrderServiceTests
                     SupplierProductCode = supplierProductCode,
                     Name = name,
                     SubcategoryId = 1,
-                    Variants =
-                    [
-                        new CreateOrderProductVariantDTO
-                        {
-                            SizeId = 1,
-                            Variant = "Azul",
+                    Presentations = [ new CreateOrderProductPresentationDTO { Name = "Azul", Sizes = [ new CreateOrderProductVariantDTO { SizeId = 1,
                             Quantity = 2,
                             UnitCost = 8m,
                             SalePrice = 600m
-                        }
-                    ]
+                        } ] } ]
                 }
             ]
         };
@@ -663,6 +765,8 @@ public class OrderServiceTests
         context.Subcategories.Add(new Subcategory { Id = 1, CategoryId = 1, Name = "Pantalones" });
         context.SizeGroups.Add(new SizeGroup { Id = 1, Name = "Regular" });
         context.Sizes.Add(new Size { Id = 1, Name = "S", SizeGroupId = 1, DisplayOrder = 1 });
+        context.Sizes.Add(new Size { Id = 2, Name = "M", SizeGroupId = 1, DisplayOrder = 2 });
+        context.Sizes.Add(new Size { Id = 3, Name = "L", SizeGroupId = 1, DisplayOrder = 3 });
         context.OrderStatuses.Add(new OrderStatus { Id = (int)OrderStatusCode.Pending, Name = "Pending" });
         context.OrderStatuses.Add(new OrderStatus { Id = (int)OrderStatusCode.PartiallyReceived, Name = "PartiallyReceived" });
         context.OrderStatuses.Add(new OrderStatus { Id = (int)OrderStatusCode.Received, Name = "Received" });
@@ -686,6 +790,7 @@ public class OrderServiceTests
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning))
             .Options;
 
         return new ApplicationDbContext(options);

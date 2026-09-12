@@ -155,7 +155,7 @@ public class DashboardSummaryTests(PrettyWomanApiFactory factory)
             },
             new ProductHold
             {
-                ProductId = productVariant.ProductId,
+                ProductId = productVariant.ProductVariantId,
                 Quantity = 2,
                 HoldDate = date,
                 HoldReason = "Reserva de integración",
@@ -173,7 +173,7 @@ public class DashboardSummaryTests(PrettyWomanApiFactory factory)
             },
             new ProductInventoryIssue
             {
-                ProductId = productVariant.ProductId,
+                ProductId = productVariant.ProductVariantId,
                 ProductInventoryIssueTypeId = (int)ProductInventoryIssueTypeOption.Damaged,
                 ProductInventoryIssueStatusId = (int)ProductInventoryIssueStatusOption.Open,
                 Quantity = 1,

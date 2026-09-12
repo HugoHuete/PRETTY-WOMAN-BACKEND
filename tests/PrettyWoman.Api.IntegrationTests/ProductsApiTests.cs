@@ -1,9 +1,14 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Api.IntegrationTests.Infrastructure;
 using PrettyWoman.Application.DTOs.Auth;
 using PrettyWoman.Application.DTOs.Products;
+using PrettyWoman.Domain.Enums;
+using PrettyWoman.Infrastructure.Persistence;
 
 namespace PrettyWoman.Api.IntegrationTests;
 
@@ -69,6 +74,98 @@ public class ProductsApiTests(PrettyWomanApiFactory factory)
         Assert.EndsWith(".xlsx", response.Content.Headers.ContentDisposition.FileNameStar ?? response.Content.Headers.ContentDisposition.FileName);
         Assert.Equal((byte)'P', content[0]);
         Assert.Equal((byte)'K', content[1]);
+    }
+
+    [Fact]
+    public async Task EmployeeCanListProductsGroupedByPresentationAndSize()
+    {
+        var seededProduct = await _factory.SeedProductAsync(quantity: 2, receivedQuantity: 2, availableQuantity: 2, salePrice: 500m);
+        using var client = await CreateEmployeeClientAsync();
+
+        var response = await client.GetAsync("/api/v1/products");
+        var result = await response.Content.ReadFromJsonAsync<PaginatedResult<ProductDTO>>();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.NotNull(result);
+        var product = Assert.Single(result.Items, item => item.Id == seededProduct.ProductId);
+        var presentation = Assert.Single(product.Presentations);
+        Assert.Equal("Base", presentation.Name);
+        var size = Assert.Single(presentation.Sizes);
+        Assert.Equal(seededProduct.ProductVariantId, size.Id);
+        Assert.Equal("M", size.SizeName);
+    }
+
+    [Fact]
+    public async Task EmployeeCanOrderImagesWithinPresentationScope()
+    {
+        var seededProduct = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1);
+        var firstImageId = await _factory.SeedProductImageAsync(seededProduct.ProductId, seededProduct.ProductPresentationId, isPrimary: true, sortOrder: 0);
+        var secondImageId = await _factory.SeedProductImageAsync(seededProduct.ProductId, seededProduct.ProductPresentationId, isPrimary: false, sortOrder: 1);
+        using var client = await CreateEmployeeClientAsync();
+
+        var response = await client.PutAsJsonAsync(
+            $"/api/v1/products/{seededProduct.ProductId}/images",
+            new UpdateProductImagesDTO
+            {
+                ProductPresentationId = seededProduct.ProductPresentationId,
+                PrimaryImageId = secondImageId,
+                ImageIdsInOrder = [secondImageId, firstImageId]
+            });
+        Assert.True(response.IsSuccessStatusCode, $"{response.StatusCode}: {await response.Content.ReadAsStringAsync()}");
+        var images = await response.Content.ReadFromJsonAsync<List<ProductImageDTO>>();
+        Assert.NotNull(images);
+        Assert.Equal([secondImageId, firstImageId], images.Select(image => image.Id));
+        Assert.All(images, image => Assert.Equal(seededProduct.ProductPresentationId, image.ProductPresentationId));
+        Assert.True(images[0].IsPrimary);
+        Assert.False(images[1].IsPrimary);
+    }
+
+    [Fact]
+    public async Task EmployeeCanDeleteImageAndQueuesItsStorageObjects()
+    {
+        var seededProduct = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1);
+        var imageId = await _factory.SeedProductImageAsync(seededProduct.ProductId, seededProduct.ProductPresentationId, isPrimary: true, sortOrder: 0);
+        using var beforeScope = _factory.Services.CreateScope();
+        var beforeContext = beforeScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var mediaAssetId = (await beforeContext.ProductImages
+            .Where(item => item.Id == imageId)
+            .Select(item => item.MediaAssetId)
+            .SingleAsync()).GetValueOrDefault();
+        using var client = await CreateEmployeeClientAsync();
+
+        var response = await client.DeleteAsync($"/api/v1/products/{seededProduct.ProductId}/images/{imageId}");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var cleanupItems = await context.MediaCleanupItems
+            .Where(item => item.MediaAssetId == mediaAssetId)
+            .ToListAsync();
+
+        Assert.Null(await context.MediaAssets.SingleOrDefaultAsync(item => item.Id == mediaAssetId));
+        Assert.Equal(2, cleanupItems.Count);
+        Assert.All(cleanupItems, item => Assert.Equal(MediaCleanupStatus.Pending, item.Status));
+        Assert.Contains(cleanupItems, item => item.StorageKey.EndsWith("/thumb.webp"));
+        Assert.Contains(cleanupItems, item => item.StorageKey.EndsWith("/web.webp"));
+    }
+
+    [Fact]
+    public async Task EmployeeCannotUploadImageLargerThanFourMegabytes()
+    {
+        var seededProduct = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1);
+        using var client = await CreateEmployeeClientAsync();
+        using var content = new MultipartFormDataContent();
+        using var imageContent = new ByteArrayContent(new byte[(4 * 1024 * 1024) + 1]);
+        imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+        content.Add(imageContent, "file", "too-large.jpg");
+
+        var response = await client.PostAsync(
+            $"/api/v1/products/{seededProduct.ProductId}/images",
+            content);
+
+        Assert.True(
+            response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.RequestEntityTooLarge,
+            $"Se esperaba 400 o 413, pero se recibió {response.StatusCode}.");
     }
 
     private async Task<HttpClient> CreateEmployeeClientAsync()
