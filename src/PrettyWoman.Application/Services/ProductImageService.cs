@@ -17,7 +17,10 @@ public class ProductImageService(
     IMediaObjectStorage objectStorage,
     IMediaUrlResolver mediaUrlResolver) : IProductImageService
 {
-    private const long MaxOriginalSizeBytes = 8 * 1024 * 1024;
+    private const long MaxOriginalSizeBytes = 4 * 1024 * 1024;
+    private const int MaxImageWidth = 6000;
+    private const int MaxImageHeight = 6000;
+    private const long MaxImagePixels = 25_000_000;
     private static readonly HashSet<string> SupportedContentTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "image/jpeg", "image/png", "image/webp"
@@ -63,7 +66,7 @@ public class ProductImageService(
         await content.CopyToAsync(original, cancellationToken);
         if (original.Length == 0 || original.Length > MaxOriginalSizeBytes)
         {
-            throw new AppBadRequestException("La imagen debe tener un tamaño mayor que cero y no superar 8 MB.");
+            throw new AppBadRequestException("La imagen debe tener un tamaño mayor que cero y no superar 4 MB.");
         }
 
         original.Position = 0;
@@ -71,6 +74,15 @@ public class ProductImageService(
         Image image;
         try
         {
+            var imageInfo = await Image.IdentifyAsync(original, cancellationToken);
+            if (imageInfo.Width > MaxImageWidth || imageInfo.Height > MaxImageHeight ||
+                (long)imageInfo.Width * imageInfo.Height > MaxImagePixels)
+            {
+                throw new AppBadRequestException(
+                    $"La imagen no puede superar {MaxImageWidth}x{MaxImageHeight} píxeles ni {MaxImagePixels:N0} píxeles totales.");
+            }
+
+            original.Position = 0;
             image = await Image.LoadAsync(original, cancellationToken);
             format = image.Metadata.DecodedImageFormat
                 ?? throw new AppUnsupportedMediaTypeException("No se pudo identificar el formato de la imagen.");

@@ -320,7 +320,7 @@ Las acciones de imágenes e historial están disponibles para Admin y Vendedor d
 | Flujo | Endpoint | Request / resultado |
 |---|---|---|
 | Consultar imagen | `GET /api/v1/products/{productId}/images/{imageId}` | Devuelve `{ id, productPresentationId, thumbnailUrl, webUrl, isPrimary, sortOrder }`; `productPresentationId: null` significa imagen general. |
-| Subir imagen | `POST /api/v1/products/{productId}/images?productPresentationId=31` | `multipart/form-data`, campo `file`; máximo 8 MB. Omitir el query param para una imagen general. Devuelve la imagen creada. |
+| Subir imagen | `POST /api/v1/products/{productId}/images?productPresentationId=31` | `multipart/form-data`, campo `file`; máximo 4 MB, 6000 px de ancho o alto y 25 millones de píxeles totales. Omitir el query param para una imagen general. Devuelve la imagen creada. |
 | Ordenar y seleccionar portada | `PUT /api/v1/products/{productId}/images` | `{ "productPresentationId": 31, "primaryImageId": 10, "imageIdsInOrder": [10, 11, 12] }`; el ámbito es general si el id es `null`. Devuelve la colección ordenada de ese ámbito. |
 | Eliminar imagen | `DELETE /api/v1/products/{productId}/images/{imageId}` | Devuelve `204`. Pedir confirmación. |
 | Historial del producto | `GET /api/v1/products/{productId}/inventory-movements` | Devuelve movimientos de todas las variantes del producto. |

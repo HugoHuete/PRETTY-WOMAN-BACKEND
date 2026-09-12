@@ -149,6 +149,25 @@ public class ProductsApiTests(PrettyWomanApiFactory factory)
         Assert.Contains(cleanupItems, item => item.StorageKey.EndsWith("/web.webp"));
     }
 
+    [Fact]
+    public async Task EmployeeCannotUploadImageLargerThanFourMegabytes()
+    {
+        var seededProduct = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1);
+        using var client = await CreateEmployeeClientAsync();
+        using var content = new MultipartFormDataContent();
+        using var imageContent = new ByteArrayContent(new byte[(4 * 1024 * 1024) + 1]);
+        imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
+        content.Add(imageContent, "file", "too-large.jpg");
+
+        var response = await client.PostAsync(
+            $"/api/v1/products/{seededProduct.ProductId}/images",
+            content);
+
+        Assert.True(
+            response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.RequestEntityTooLarge,
+            $"Se esperaba 400 o 413, pero se recibió {response.StatusCode}.");
+    }
+
     private async Task<HttpClient> CreateEmployeeClientAsync()
     {
         await _factory.EnsureEmployeeAsync();

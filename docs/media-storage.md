@@ -30,7 +30,7 @@ Configurar las credenciales exclusivamente mediante secretos de entorno o User S
 
 `POST /api/v1/products/{productId}/images` recibe `multipart/form-data` con un campo `file`. Para asociarla a un color o presentación, agregar `?productPresentationId={id}`; si se omite, la imagen pertenece al producto general.
 
-Se admiten JPEG, PNG y WebP de hasta 8 MB. La API valida el contenido real, conserva el original en el bucket privado y genera una miniatura WebP de 400 px y una versión WebP de 1200 px en el bucket público.
+Se admiten JPEG, PNG y WebP de hasta 4 MB, con un máximo de 6000 px de ancho o alto y 25 millones de píxeles totales. La API valida el contenido real, conserva el original en el bucket privado y genera una miniatura WebP de 400 px y una versión WebP de 1200 px en el bucket público.
 
 Para actualizar en una sola operación el orden y la imagen principal del producto general, usar `PUT /api/v1/products/{productId}/images`:
 
