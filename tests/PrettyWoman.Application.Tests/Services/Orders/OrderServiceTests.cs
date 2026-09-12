@@ -582,7 +582,8 @@ public class OrderServiceTests
         ];
         var orderId = await service.CreateAsync(createRequest);
         var productId = await context.Products.Select(product => product.Id).SingleAsync();
-        var oldPresentationIds = await context.ProductPresentations.Select(presentation => presentation.Id).ToListAsync();
+        var oldPresentationIdsByName = await context.ProductPresentations
+            .ToDictionaryAsync(presentation => presentation.Name!, presentation => presentation.Id);
         context.ChangeTracker.Clear();
 
         await service.UpdateAsync(orderId, new UpdateOrderDTO
@@ -604,7 +605,8 @@ public class OrderServiceTests
             .OrderBy(presentation => presentation.SortOrder).ToListAsync();
         Assert.Equal(new[] { "Verde", "Azul" }, persistedPresentations.Select(presentation => presentation.Name));
         Assert.Equal(2, persistedPresentations.Select(presentation => presentation.NormalizedName).Distinct().Count());
-        Assert.DoesNotContain(persistedPresentations, presentation => oldPresentationIds.Contains(presentation.Id));
+        Assert.Equal(oldPresentationIdsByName["Azul"], persistedPresentations.Single(presentation => presentation.Name == "Azul").Id);
+        Assert.DoesNotContain(persistedPresentations, presentation => presentation.Name == "Rojo");
 
         var responseProduct = Assert.Single((await service.GetByIdAsync(orderId)).Products);
         Assert.Equal(productId, responseProduct.Id);

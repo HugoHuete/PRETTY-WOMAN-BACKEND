@@ -75,6 +75,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public DbSet<RefreshToken> RefreshTokens { get; set; }
     public DbSet<MediaAsset> MediaAssets { get; set; }
     public DbSet<MediaAssetVariant> MediaAssetVariants { get; set; }
+    public DbSet<MediaCleanupItem> MediaCleanupItems { get; set; }
 
     // Orders
     public DbSet<Supplier> Suppliers { get; set; }

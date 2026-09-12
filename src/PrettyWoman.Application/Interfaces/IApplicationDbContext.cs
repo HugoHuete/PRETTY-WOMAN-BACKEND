@@ -9,6 +9,7 @@ public interface IApplicationDbContext
     // Media
     DbSet<MediaAsset> MediaAssets { get; }
     DbSet<MediaAssetVariant> MediaAssetVariants { get; }
+    DbSet<MediaCleanupItem> MediaCleanupItems { get; }
 
     // Orders
     DbSet<Supplier> Suppliers { get; }

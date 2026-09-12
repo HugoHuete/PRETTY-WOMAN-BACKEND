@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using PrettyWoman.Application.Common.Media;
 using PrettyWoman.Application.DTOs.Products;
 using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Interfaces;
@@ -248,10 +249,6 @@ public class ProductImageService(
                 .ThenInclude(asset => asset!.Variants)
             .SingleOrDefaultAsync(cancellationToken)
             ?? throw new AppNotFoundException($"La imagen con id '{imageId}' no existe para el producto con id '{productId}'.");
-        var objectsToDelete = image.MediaAsset?.Variants
-            .Select(variant => (variant.Bucket, variant.StorageKey))
-            .ToList() ?? [];
-
         await using var transaction = await context.BeginTransactionAsync(cancellationToken);
         if (image.IsPrimary)
         {
@@ -270,19 +267,18 @@ public class ProductImageService(
             }
         }
 
-        context.ProductImages.Remove(image);
         if (image.MediaAsset is not null)
         {
+            MediaCleanupScheduler.Enqueue(context, [image.MediaAsset]);
+            context.ProductImages.Remove(image);
             context.MediaAssets.Remove(image.MediaAsset);
+        }
+        else
+        {
+            context.ProductImages.Remove(image);
         }
         await context.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-
-        foreach (var item in objectsToDelete)
-        {
-            try { await objectStorage.DeleteAsync(item.Bucket, item.StorageKey, cancellationToken); }
-            catch { /* The database no longer references the object; a storage cleanup can retry later. */ }
-        }
     }
 
     private async Task SaveProductImageAsync(ProductImage productImage, CancellationToken cancellationToken)

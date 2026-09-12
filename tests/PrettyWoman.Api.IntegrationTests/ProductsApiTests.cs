@@ -1,10 +1,14 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Api.IntegrationTests.Infrastructure;
 using PrettyWoman.Application.DTOs.Auth;
 using PrettyWoman.Application.DTOs.Products;
+using PrettyWoman.Domain.Enums;
+using PrettyWoman.Infrastructure.Persistence;
 
 namespace PrettyWoman.Api.IntegrationTests;
 
@@ -114,6 +118,35 @@ public class ProductsApiTests(PrettyWomanApiFactory factory)
         Assert.All(images, image => Assert.Equal(seededProduct.ProductPresentationId, image.ProductPresentationId));
         Assert.True(images[0].IsPrimary);
         Assert.False(images[1].IsPrimary);
+    }
+
+    [Fact]
+    public async Task EmployeeCanDeleteImageAndQueuesItsStorageObjects()
+    {
+        var seededProduct = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1);
+        var imageId = await _factory.SeedProductImageAsync(seededProduct.ProductId, seededProduct.ProductPresentationId, isPrimary: true, sortOrder: 0);
+        using var beforeScope = _factory.Services.CreateScope();
+        var beforeContext = beforeScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var mediaAssetId = (await beforeContext.ProductImages
+            .Where(item => item.Id == imageId)
+            .Select(item => item.MediaAssetId)
+            .SingleAsync()).GetValueOrDefault();
+        using var client = await CreateEmployeeClientAsync();
+
+        var response = await client.DeleteAsync($"/api/v1/products/{seededProduct.ProductId}/images/{imageId}");
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var cleanupItems = await context.MediaCleanupItems
+            .Where(item => item.MediaAssetId == mediaAssetId)
+            .ToListAsync();
+
+        Assert.Null(await context.MediaAssets.SingleOrDefaultAsync(item => item.Id == mediaAssetId));
+        Assert.Equal(2, cleanupItems.Count);
+        Assert.All(cleanupItems, item => Assert.Equal(MediaCleanupStatus.Pending, item.Status));
+        Assert.Contains(cleanupItems, item => item.StorageKey.EndsWith("/thumb.webp"));
+        Assert.Contains(cleanupItems, item => item.StorageKey.EndsWith("/web.webp"));
     }
 
     private async Task<HttpClient> CreateEmployeeClientAsync()

@@ -1,6 +1,7 @@
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.Common.Extensions;
+using PrettyWoman.Application.Common.Media;
 using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.DTOs.Orders;
 using PrettyWoman.Application.Exceptions;
@@ -87,8 +88,13 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             .ToList();
 
         var oldProducts = await _context.Products
+            .Include(product => product.ProductImages)
+                .ThenInclude(image => image.MediaAsset)
+                    .ThenInclude(asset => asset!.Variants)
             .Include(product => product.ProductPresentations)
                 .ThenInclude(presentation => presentation.ProductImages)
+                    .ThenInclude(image => image.MediaAsset)
+                        .ThenInclude(asset => asset!.Variants)
             .Where(product => oldProductIds.Contains(product.Id))
             .OrderBy(product => product.Code)
             .ToListAsync();
@@ -97,23 +103,77 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             .Where(product => product.Id.HasValue)
             .Select(product => product.Id!.Value)
             .ToHashSet();
+
         var invalidProductId = requestedProductIds.FirstOrDefault(productId => oldProducts.All(product => product.Id != productId));
         if (invalidProductId != 0)
         {
             throw new AppBadRequestException($"El producto con id '{invalidProductId}' no pertenece a la orden.");
         }
 
+        var duplicateRequestedProductId = updateOrderDTO.Products
+            .Where(product => product.Id.HasValue)
+            .GroupBy(product => product.Id!.Value)
+            .FirstOrDefault(group => group.Count() > 1)?.Key;
+
+        if (duplicateRequestedProductId.HasValue)
+        {
+            throw new AppBadRequestException($"No puede enviar el producto con id '{duplicateRequestedProductId}' más de una vez.");
+        }
+
+        var requestedPresentationNamesByProduct = updateOrderDTO.Products
+            .Where(product => product.Id.HasValue)
+            .ToDictionary(
+                product => product.Id!.Value,
+                product => product.Presentations
+                    .Select(presentation => presentation.Name?.ToUpperInvariant())
+                    .ToHashSet());
+
+        // Se determina antes de reconstruir las navegaciones qué presentaciones ya no
+        // forman parte de la orden. Al eliminarse la presentación también se eliminan
+        // sus imágenes por cascada.
+        var obsoletePresentations = oldProducts
+            .Where(product => requestedPresentationNamesByProduct.ContainsKey(product.Id))
+            .SelectMany(product => product.ProductPresentations
+                .Where(presentation =>
+                    !requestedPresentationNamesByProduct[product.Id].Contains(presentation.NormalizedName)))
+            .ToList();
+
+        var productsToDelete = oldProducts
+            .Where(product => !requestedProductIds.Contains(product.Id))
+            .ToList();
+
+        var imagesToDelete = productsToDelete
+            .SelectMany(GetAllProductImages)
+            .Concat(obsoletePresentations.SelectMany(presentation => presentation.ProductImages))
+            .DistinctBy(image => image.Id)
+            .ToList();
+
+        var mediaAssetsToDelete = imagesToDelete
+            .Select(image => image.MediaAsset)
+            .OfType<MediaAsset>()
+            .DistinctBy(asset => asset.Id)
+            .ToList();
+
         await using var transaction = await _context.BeginTransactionAsync();
+        MediaCleanupScheduler.Enqueue(_context, mediaAssetsToDelete);
+
+        _context.ProductImages.RemoveRange(imagesToDelete);
+        _context.MediaAssets.RemoveRange(mediaAssetsToDelete);
         _context.ProductVariants.RemoveRange(order.ProductVariants);
-        _context.ProductPresentations.RemoveRange(oldProducts
-            .SelectMany(product => product.ProductPresentations)
-            .Where(presentation => presentation.ProductImages.Count == 0));
-        _context.Products.RemoveRange(oldProducts.Where(product => !requestedProductIds.Contains(product.Id)));
+        _context.Products.RemoveRange(productsToDelete);
         await _context.SaveChangesAsync();
 
         var nextProductCode = await GetNextProductCodeAsync();
         var createdProducts = CreateProducts(updateOrderDTO, nextProductCode, oldProducts);
         var products = createdProducts.Products;
+        _context.ProductPresentations.RemoveRange(obsoletePresentations);
+
+        foreach (var obsoletePresentation in obsoletePresentations)
+        {
+            products.Single(product => product.Id == obsoletePresentation.ProductId)
+                .ProductPresentations.Remove(obsoletePresentation);
+        }
+
         var productVariants = products.SelectMany(detail => detail.ProductVariants).ToList();
         var exchangeRate = await GetOrderExchangeRateAsync();
         var totals = CalculateCosts(createdProducts.ProductCosts, updateOrderDTO.PurchaseCurrencyId, exchangeRate, updateOrderDTO.SupplierShippingCostUsd);
@@ -136,6 +196,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         await transaction.CommitAsync();
     }
 
+    // Marcar el resto de la orden como faltantes y registrar la pérdida correspondiente. Esto solo se puede hacer si la orden no está cancelada, no está recibida y no tiene faltantes ya registrados.
     public async Task<OrderDTO> CloseShortagesAsync(int id, CloseOrderShortagesDTO closeShortagesDTO)
     {
         closeShortagesDTO.Items ??= [];
@@ -159,6 +220,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         var productsWithPendingQuantity = order.ProductVariants
             .Where(productVariant => productVariant.ReceivedQuantity < productVariant.Quantity)
             .ToList();
+
         if (productsWithPendingQuantity.Count == 0)
         {
             throw new AppBadRequestException("La orden no tiene cantidades pendientes para registrar como faltantes.");
@@ -622,19 +684,24 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
 
     private static CreatedProducts CreateProducts(CreateOrderDTO orderDTO, int nextProductCode, List<Product>? reusableProducts = null)
     {
+        // En una edición, esta copia contiene los productos que ya pertenecen a la orden
+        // y permite reutilizarlos por Id. En una creación es null, por lo que todos los
+        // productos se construyen como entidades nuevas.
         var reusableDetails = reusableProducts?.ToList();
         var products = new List<Product>();
         var productCosts = new List<ProductPurchaseCost>();
 
         foreach (var productDTO in orderDTO.Products)
         {
+            // Si el request trae el Id de un producto existente, se conserva su identidad
+            // y sus relaciones (por ejemplo, imágenes); de lo contrario se creará uno nuevo.
             var product = reusableDetails is null
                 ? null
                 : TakeReusableProduct(productDTO, reusableDetails);
 
-            var existingPresentations = product?.ProductPresentations
-                .Where(presentation => presentation.ProductImages.Count > 0)
-                .ToList() ?? [];
+            // Se consideran todas las presentaciones existentes para poder reutilizar una
+            // coincidencia aunque todavía no tenga imágenes.
+            var existingPresentations = product?.ProductPresentations.ToList() ?? [];
 
             product ??= new Product
             {
@@ -647,6 +714,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             product.Name = productDTO.Name;
             product.SubcategoryId = productDTO.SubcategoryId;
             product.ProductVariants = [];
+
             var requestedPresentations = productDTO.Presentations
                 .Select(presentationDTO =>
                 {
@@ -665,12 +733,18 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                     return presentation;
                 })
                 .ToList();
+
             var requestedPresentationIds = requestedPresentations
                 .Where(presentation => presentation.Id != 0)
                 .Select(presentation => presentation.Id)
                 .ToHashSet();
+
+            // Se mantienen temporalmente todas las presentaciones existentes para evitar
+            // que EF las marque como huérfanas; las no reutilizadas se eliminan explícitamente
+            // después de crear las nuevas variantes.
             product.ProductPresentations = requestedPresentations
-                .Concat(existingPresentations.Where(presentation => !requestedPresentationIds.Contains(presentation.Id)))
+                .Concat(existingPresentations.Where(presentation =>
+                    !requestedPresentationIds.Contains(presentation.Id)))
                 .ToList();
 
             foreach (var presentationDTO in productDTO.Presentations)
@@ -706,6 +780,12 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         reusableProducts.Remove(reusableProduct);
 
         return reusableProduct;
+    }
+
+    private static IEnumerable<ProductImage> GetAllProductImages(Product product)
+    {
+        return product.ProductImages
+            .Concat(product.ProductPresentations.SelectMany(presentation => presentation.ProductImages));
     }
 
     private static OrderTotals CalculateCosts(List<ProductPurchaseCost> productCosts, int purchaseCurrencyId, decimal exchangeRate, decimal supplierShippingCostUsd)

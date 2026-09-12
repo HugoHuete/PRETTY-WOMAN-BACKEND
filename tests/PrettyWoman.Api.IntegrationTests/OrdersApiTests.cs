@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using PrettyWoman.Api.IntegrationTests.Infrastructure;
 using PrettyWoman.Application.DTOs.Auth;
 using PrettyWoman.Application.DTOs.Orders;
+using PrettyWoman.Domain.Enums;
 using PrettyWoman.Infrastructure.Persistence;
 
 namespace PrettyWoman.Api.IntegrationTests;
@@ -164,6 +165,52 @@ public class OrdersApiTests(PrettyWomanApiFactory factory)
     }
 
     [Fact]
+    public async Task UpdateOrder_ReusingProductKeepsMatchingPresentationWithoutImages()
+    {
+        var seeded = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 0, availableQuantity: 0);
+        var catalog = await ReadSeededOrderDataAsync(seeded);
+        using var client = await CreateAdminClientAsync();
+        var original = await client.GetFromJsonAsync<OrderDTO>($"/api/v1/orders/{seeded.OrderId}");
+
+        Assert.NotNull(original);
+        var originalPresentation = Assert.Single(original.Products.Single().Presentations);
+
+        var response = await client.PutAsJsonAsync($"/api/v1/orders/{seeded.OrderId}", new UpdateOrderDTO
+        {
+            SupplierId = catalog.SupplierId,
+            PurchaseCurrencyId = 1,
+            Products =
+            [
+                new CreateOrderProductDTO
+                {
+                    Id = catalog.ProductId,
+                    SupplierProductCode = catalog.SupplierProductCode,
+                    Name = catalog.ProductName,
+                    SubcategoryId = catalog.SubcategoryId,
+                    Presentations =
+                    [
+                        new CreateOrderProductPresentationDTO
+                        {
+                            Name = "  Base  ",
+                            SortOrder = 2,
+                            Sizes = [CreateSize(catalog.SizeId)]
+                        }
+                    ]
+                }
+            ]
+        });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var updated = await client.GetFromJsonAsync<OrderDTO>($"/api/v1/orders/{seeded.OrderId}");
+
+        Assert.NotNull(updated);
+        var presentation = Assert.Single(updated.Products.Single().Presentations);
+        Assert.Equal(originalPresentation.Id, presentation.Id);
+        Assert.Equal("Base", presentation.Name);
+        Assert.Equal(2, presentation.SortOrder);
+    }
+
+    [Fact]
     public async Task UpdateOrder_ReusingProductKeepsPresentationImages()
     {
         var seeded = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 0, availableQuantity: 0);
@@ -202,6 +249,94 @@ public class OrdersApiTests(PrettyWomanApiFactory factory)
         var image = await context.ProductImages.SingleOrDefaultAsync(item => item.Id == imageId);
         Assert.NotNull(image);
         Assert.Equal(seeded.ProductPresentationId, image.ProductPresentationId);
+    }
+
+    [Fact]
+    public async Task UpdateOrder_RemovesOmittedPresentationAndItsImages()
+    {
+        var seeded = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 0, availableQuantity: 0);
+        var imageId = await _factory.SeedProductImageAsync(seeded.ProductId, seeded.ProductPresentationId, isPrimary: true, sortOrder: 0);
+        using var beforeScope = _factory.Services.CreateScope();
+        var beforeContext = beforeScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var mediaAssetId = (await beforeContext.ProductImages
+            .Where(item => item.Id == imageId)
+            .Select(item => item.MediaAssetId)
+            .SingleAsync()).GetValueOrDefault();
+        var catalog = await ReadSeededOrderDataAsync(seeded);
+        using var client = await CreateAdminClientAsync();
+
+        var response = await client.PutAsJsonAsync($"/api/v1/orders/{seeded.OrderId}", new UpdateOrderDTO
+        {
+            SupplierId = catalog.SupplierId,
+            PurchaseCurrencyId = 1,
+            Products =
+            [
+                new CreateOrderProductDTO
+                {
+                    Id = catalog.ProductId,
+                    SupplierProductCode = catalog.SupplierProductCode,
+                    Name = catalog.ProductName,
+                    SubcategoryId = catalog.SubcategoryId,
+                    Presentations =
+                    [
+                        new CreateOrderProductPresentationDTO
+                        {
+                            Name = "Verde",
+                            SortOrder = 0,
+                            Sizes = [CreateSize(catalog.SizeId)]
+                        }
+                    ]
+                }
+            ]
+        });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Null(await context.ProductImages.SingleOrDefaultAsync(item => item.Id == imageId));
+        Assert.Null(await context.ProductPresentations.SingleOrDefaultAsync(item => item.Id == seeded.ProductPresentationId));
+        Assert.Null(await context.MediaAssets.SingleOrDefaultAsync(item => item.Id == mediaAssetId));
+
+        var cleanupItems = await context.MediaCleanupItems
+            .Where(item => item.MediaAssetId == mediaAssetId)
+            .ToListAsync();
+        Assert.Equal(2, cleanupItems.Count);
+        Assert.All(cleanupItems, item => Assert.Equal(MediaCleanupStatus.Pending, item.Status));
+        Assert.Contains(cleanupItems, item => item.StorageKey.EndsWith("/thumb.webp"));
+        Assert.Contains(cleanupItems, item => item.StorageKey.EndsWith("/web.webp"));
+    }
+
+    [Fact]
+    public async Task UpdateOrder_RemovesOmittedProductAndQueuesItsStorageObjects()
+    {
+        var seeded = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 0, availableQuantity: 0);
+        var imageId = await _factory.SeedProductImageAsync(seeded.ProductId, seeded.ProductPresentationId, isPrimary: true, sortOrder: 0);
+        using var beforeScope = _factory.Services.CreateScope();
+        var beforeContext = beforeScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var mediaAssetId = (await beforeContext.ProductImages
+            .Where(item => item.Id == imageId)
+            .Select(item => item.MediaAssetId)
+            .SingleAsync()).GetValueOrDefault();
+        using var client = await CreateAdminClientAsync();
+
+        var response = await client.PutAsJsonAsync($"/api/v1/orders/{seeded.OrderId}", new UpdateOrderDTO
+        {
+            SupplierId = 1,
+            PurchaseCurrencyId = 1,
+            Products = []
+        });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Null(await context.Products.SingleOrDefaultAsync(item => item.Id == seeded.ProductId));
+        Assert.Null(await context.MediaAssets.SingleOrDefaultAsync(item => item.Id == mediaAssetId));
+
+        var cleanupItems = await context.MediaCleanupItems
+            .Where(item => item.MediaAssetId == mediaAssetId)
+            .ToListAsync();
+        Assert.Equal(2, cleanupItems.Count);
+        Assert.All(cleanupItems, item => Assert.Equal(MediaCleanupStatus.Pending, item.Status));
     }
 
     [Fact]
@@ -250,6 +385,40 @@ public class OrdersApiTests(PrettyWomanApiFactory factory)
                 Sizes = [CreateSize(catalog.SizeId)]
             }
         ]));
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task UpdateOrder_RejectsDuplicateProductIds()
+    {
+        var seeded = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 0, availableQuantity: 0);
+        var catalog = await ReadSeededOrderDataAsync(seeded);
+        using var client = await CreateAdminClientAsync();
+
+        var product = new CreateOrderProductDTO
+        {
+            Id = catalog.ProductId,
+            SupplierProductCode = catalog.SupplierProductCode,
+            Name = catalog.ProductName,
+            SubcategoryId = catalog.SubcategoryId,
+            Presentations =
+            [
+                new CreateOrderProductPresentationDTO
+                {
+                    Name = "Base",
+                    SortOrder = 0,
+                    Sizes = [CreateSize(catalog.SizeId)]
+                }
+            ]
+        };
+
+        var response = await client.PutAsJsonAsync($"/api/v1/orders/{seeded.OrderId}", new UpdateOrderDTO
+        {
+            SupplierId = catalog.SupplierId,
+            PurchaseCurrencyId = 1,
+            Products = [product, product]
+        });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
     }
