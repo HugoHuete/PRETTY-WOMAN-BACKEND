@@ -6,7 +6,7 @@ namespace PrettyWoman.Application.Interfaces;
 public interface IOrderService
 {
     Task<OrderDTO> GetByIdAsync(int id);
-    Task<PaginatedResult<OrderDTO>> GetAllAsync(OrderQueryDTO query);
+    Task<PaginatedResult<OrderSummaryDTO>> GetAllAsync(OrderQueryDTO query);
     Task<IEnumerable<OrderStatusDTO>> GetStatusesAsync();
     Task<IEnumerable<OrderTrackingNumberDTO>> GetTrackingNumbersAsync(int orderId, bool? isReceived = null);
     Task<int> CreateAsync(CreateOrderDTO createOrderDTO);

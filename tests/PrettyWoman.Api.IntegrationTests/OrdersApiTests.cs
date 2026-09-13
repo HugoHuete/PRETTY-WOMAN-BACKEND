@@ -97,6 +97,20 @@ public class OrdersApiTests(PrettyWomanApiFactory factory)
     }
 
     [Fact]
+    public async Task ListOrders_DoesNotReturnProductOrShortageDetails()
+    {
+        await _factory.SeedProductAsync(quantity: 2, receivedQuantity: 0, availableQuantity: 0);
+        using var client = await CreateAdminClientAsync();
+
+        var response = await client.GetAsync("/api/v1/orders?page=1&pageSize=20");
+        var body = await response.Content.ReadAsStringAsync();
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.DoesNotContain("\"products\"", body, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("\"purchaseShortages\"", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task UpdateOrder_ReusingProductReplacesPresentationsAndKeepsProductIdentity()
     {
         var seeded = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 0, availableQuantity: 0);

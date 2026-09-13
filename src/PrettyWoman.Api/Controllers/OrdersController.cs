@@ -15,7 +15,7 @@ public class OrdersController(IOrderService orderService) : ControllerBase
     private readonly IOrderService _orderService = orderService;
 
     [HttpGet]
-    public async Task<ActionResult<PaginatedResult<OrderDTO>>> GetAll([FromQuery] OrderQueryDTO query)
+    public async Task<ActionResult<PaginatedResult<OrderSummaryDTO>>> GetAll([FromQuery] OrderQueryDTO query)
     {
         var orders = await _orderService.GetAllAsync(query);
         return Ok(orders);

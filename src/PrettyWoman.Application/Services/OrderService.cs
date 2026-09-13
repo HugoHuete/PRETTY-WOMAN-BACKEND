@@ -359,9 +359,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         return await GetByIdAsync(id);
     }
 
-    public async Task<IEnumerable<OrderTrackingNumberDTO>> AddTrackingNumbersAsync(
-        int orderId,
-        IEnumerable<CreateOrderTrackingNumberDTO> createTrackingDTOs)
+    public async Task<IEnumerable<OrderTrackingNumberDTO>> AddTrackingNumbersAsync(int orderId, IEnumerable<CreateOrderTrackingNumberDTO> createTrackingDTOs)
     {
         await EnsureOrderExistsAsync(orderId);
 
@@ -409,10 +407,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         return _mapper.Map<List<OrderTrackingNumberDTO>>(createdTrackingNumbers);
     }
 
-    public async Task<OrderTrackingNumberDTO> UpdateTrackingNumberAsync(
-        int orderId,
-        int trackingId,
-        UpdateOrderTrackingNumberDTO updateTrackingDTO)
+    public async Task<OrderTrackingNumberDTO> UpdateTrackingNumberAsync(int orderId, int trackingId, UpdateOrderTrackingNumberDTO updateTrackingDTO)
     {
         var trackingNumber = await _context.OrderTrackingNumbers
             .Include(tracking => tracking.ShippingCompany)
@@ -445,7 +440,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         await _context.SaveChangesAsync();
     }
 
-    public async Task<PaginatedResult<OrderDTO>> GetAllAsync(OrderQueryDTO query)
+    public async Task<PaginatedResult<OrderSummaryDTO>> GetAllAsync(OrderQueryDTO query)
     {
         NormalizePagination(query);
 
@@ -455,26 +450,35 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
 
         var totalCount = await ordersQuery.CountAsync();
         var orders = await ordersQuery
-            .Include(order => order.Supplier)
-            .Include(order => order.OrderStatus)
-            .Include(order => order.ProductVariants)
-                .ThenInclude(productVariant => productVariant.Product)
-                    .ThenInclude(product => product!.Subcategory)
-            .Include(order => order.ProductVariants)
-                .ThenInclude(productVariant => productVariant.Size)
-            .Include(order => order.ProductVariants)
-                .ThenInclude(productVariant => productVariant.ProductPresentation)
-            .Include(order => order.PurchaseShortages)
-            .Include(order => order.SupplierRefund)
             .OrderByDescending(order => order.PurchaseDate)
             .ThenByDescending(order => order.Id)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
+            .Select(order => new OrderSummaryDTO
+            {
+                Id = order.Id,
+                PurchaseDate = order.PurchaseDate,
+                CreatedAt = order.CreatedAt,
+                OrderStatusId = order.OrderStatusId,
+                SupplierId = order.SupplierId,
+                PurchaseCurrencyId = order.PurchaseCurrencyId,
+                PurchaseCurrencyName = order.PurchaseCurrencyId == (int)PurchaseCurrencyOption.Usd ? "USD" : "NIO",
+                AmountUsd = order.AmountUsd,
+                MerchandiseTotalNio = order.MerchandiseTotalNio,
+                ReceivedAmountNio = order.ReceivedAmountNio,
+                SupplierShippingCostUsd = order.SupplierShippingCostUsd,
+                WarehouseShippingCostUsd = order.WarehouseShippingCostUsd,
+                TotalCostNio = order.TotalCostNio,
+                Comments = order.Comments,
+                ExchangeRate = order.ExchangeRate,
+                OrderStatusName = order.OrderStatus != null ? order.OrderStatus.Name : null,
+                SupplierName = order.Supplier != null ? order.Supplier.Name : null
+            })
             .ToListAsync();
 
-        return new PaginatedResult<OrderDTO>
+        return new PaginatedResult<OrderSummaryDTO>
         {
-            Items = orders.Select(MapOrderDto).ToList(),
+            Items = orders,
             Page = query.Page,
             PageSize = query.PageSize,
             TotalCount = totalCount
@@ -752,9 +756,17 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                 var presentation = product.ProductPresentations.Single(item => item.NormalizedName == presentationDTO.Name?.ToUpperInvariant());
                 foreach (var size in presentationDTO.Sizes)
                 {
-                    var productVariant = new ProductVariant { Product = product, SizeId = size.SizeId,
-                        ProductPresentation = presentation, Quantity = size.Quantity, ReceivedQuantity = 0,
-                        AvailableQuantity = 0, ReservedQuantity = 0, SalePrice = size.SalePrice };
+                    var productVariant = new ProductVariant
+                    {
+                        Product = product,
+                        SizeId = size.SizeId,
+                        ProductPresentation = presentation,
+                        Quantity = size.Quantity,
+                        ReceivedQuantity = 0,
+                        AvailableQuantity = 0,
+                        ReservedQuantity = 0,
+                        SalePrice = size.SalePrice
+                    };
                     product.ProductVariants.Add(productVariant);
                     productCosts.Add(new ProductPurchaseCost(productVariant, size.UnitCost));
                 }
@@ -845,7 +857,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
     }
     private static List<decimal> AllocateAmount(decimal total, List<decimal> weights)
     {
-        if(total == 0)
+        if (total == 0)
         {
             return weights.Select(x => x * 0m).ToList();
         }
@@ -980,15 +992,26 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                     .OrderBy(presentation => presentation.Key.SortOrder)
                     .Select(presentation => new OrderProductPresentationDTO
                     {
-                        Id = presentation.Key.Id, Name = presentation.Key.Name, SortOrder = presentation.Key.SortOrder,
+                        Id = presentation.Key.Id,
+                        Name = presentation.Key.Name,
+                        SortOrder = presentation.Key.SortOrder,
                         Sizes = presentation.OrderBy(item => item.Size != null ? item.Size.DisplayOrder : 0)
-                            .Select(productVariant => new OrderProductVariantDTO { Id = productVariant.Id,
-                                SizeId = productVariant.SizeId, SizeName = productVariant.Size?.Name,
-                                Quantity = productVariant.Quantity, ReceivedQuantity = productVariant.ReceivedQuantity,
-                                AvailableQuantity = productVariant.AvailableQuantity, ReservedQuantity = productVariant.ReservedQuantity,
-                                UnitCostUsd = productVariant.UnitCostUsd, MerchandiseTotalCostNio = productVariant.MerchandiseTotalCostNio,
-                                AllocatedShippingCostNio = productVariant.AllocatedShippingCostNio, TotalCostNio = productVariant.TotalCostNio,
-                                UnitCostNio = productVariant.UnitCostNio, SalePrice = productVariant.SalePrice }).ToList()
+                            .Select(productVariant => new OrderProductVariantDTO
+                            {
+                                Id = productVariant.Id,
+                                SizeId = productVariant.SizeId,
+                                SizeName = productVariant.Size?.Name,
+                                Quantity = productVariant.Quantity,
+                                ReceivedQuantity = productVariant.ReceivedQuantity,
+                                AvailableQuantity = productVariant.AvailableQuantity,
+                                ReservedQuantity = productVariant.ReservedQuantity,
+                                UnitCostUsd = productVariant.UnitCostUsd,
+                                MerchandiseTotalCostNio = productVariant.MerchandiseTotalCostNio,
+                                AllocatedShippingCostNio = productVariant.AllocatedShippingCostNio,
+                                TotalCostNio = productVariant.TotalCostNio,
+                                UnitCostNio = productVariant.UnitCostNio,
+                                SalePrice = productVariant.SalePrice
+                            }).ToList()
                     })
                     .ToList()
             })
