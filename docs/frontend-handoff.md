@@ -151,6 +151,8 @@ Ejemplos: `GET /api/v1/auth/users?user=maria`, `GET /api/v1/auth/users?role=Empl
 
 `GET /api/v1/orders/{id}/tracking-numbers` acepta `isReceived` opcional: `true` devuelve trackings con `ProductReceiptId` y `false` los pendientes; sin el parámetro devuelve todos.
 
+Los requests de `POST` y `PUT` para tracking solo registran o modifican los datos logísticos del paquete. `weight` y `shippingCost` se envían únicamente dentro de la recepción (`POST /api/v1/orders/{orderId}/receipts`) y se corrigen desde la recepción.
+
 Ambas acciones son exclusivas de Admin. Se ejecutan desde el detalle de la orden; sus respuestas devuelven el `OrderDTO` actualizado, por lo que la UI debe reemplazar el estado local con esa respuesta o recargar `GET /api/v1/orders/{id}`.
 | Flujo | Endpoint | Cuándo mostrarlo | Resultado |
 |---|---|---|---|

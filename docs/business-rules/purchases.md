@@ -76,9 +76,11 @@ Cada tracking puede tener:
 * compañía de envío
 * número de tracking
 * fecha de entrega
-* peso
-* costo de envío
+* peso del paquete, conocido al recibirlo
+* costo de envío del paquete, conocido al recibirlo
 * estado de entregado
+
+El peso y el costo de envío de un tracking no se reciben ni se actualizan mediante las APIs de crear o actualizar tracking; se registran únicamente durante la recepción.
 
 Los costos registrados por tracking tienen fines logísticos. El costo de envío proveedor -> bodega se guarda en la orden en USD, se convierte a NIO con la tasa histórica de la orden y se distribuye entre sus líneas. El costo bodega -> Nicaragua se registra posteriormente desde recepción cuando se conozca.
 

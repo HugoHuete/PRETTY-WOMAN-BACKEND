@@ -728,6 +728,41 @@ public class OrderServiceTests
         Assert.Equal($"La recepción de productos con id '{receipt.Id}' no pertenece a la orden '{orderId}'.", exception.Message);
     }
 
+    [Fact]
+    public async Task UpdateTrackingNumberAsync_PreservesWeightAndShippingCost()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.ShippingCompanies.Add(new ShippingCompany { Id = 1, Name = "Cargo Express" });
+        var service = CreateService(context);
+        var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-TRACKING-UPDATE", "Vestido"));
+        var tracking = Assert.Single(await service.AddTrackingNumbersAsync(orderId,
+        [
+            new CreateOrderTrackingNumberDTO
+            {
+                ShippingCompanyId = 1,
+                TrackingNumber = "TRACK-ORIGINAL"
+            }
+        ]));
+
+        var storedTracking = await context.OrderTrackingNumbers.SingleAsync();
+        storedTracking.Weight = 8.5m;
+        storedTracking.ShippingCost = 12m;
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var updated = await service.UpdateTrackingNumberAsync(orderId, tracking.Id, new UpdateOrderTrackingNumberDTO
+        {
+            ShippingCompanyId = 1,
+            TrackingNumber = "TRACK-UPDATED",
+            SupplierShipmentDate = new DateTime(2026, 9, 13)
+        });
+
+        Assert.Equal("TRACK-UPDATED", updated.TrackingNumber);
+        Assert.Equal(8.5m, updated.Weight);
+        Assert.Equal(12m, updated.ShippingCost);
+    }
+
     private static OrderService CreateService(ApplicationDbContext context)
     {
         return new OrderService(context, Mapper);
