@@ -102,6 +102,11 @@ public class OrderReceiptService(
                 ? 0
                 : Math.Round(item.ProductVariant.UnitCostNio / order.ExchangeRate, 2);
 
+            if (item.SalePrice.HasValue)
+            {
+                item.ProductVariant.SalePrice = item.SalePrice.Value;
+            }
+
             receipt.ProductReceiptDetails.Add(new ProductReceiptDetail
             {
                 ProductVariant = item.ProductVariant,
@@ -360,11 +365,24 @@ public class OrderReceiptService(
                 throw new AppBadRequestException($"La cantidad recibida del producto '{productVariant.Id}' supera la cantidad pendiente.");
             }
 
+            if (productDTO.SalePrice.HasValue && productDTO.SalePrice.Value <= 0)
+            {
+                throw new AppBadRequestException($"El precio de venta del producto '{productVariant.Id}' debe ser mayor que cero.");
+            }
+
+            // Las órdenes históricas pueden traer un precio asignado desde su creación;
+            // solo exigimos el nuevo campo cuando la variante todavía no tiene precio.
+            if (productVariant.ReceivedQuantity == 0 && productVariant.SalePrice <= 0 && !productDTO.SalePrice.HasValue)
+            {
+                throw new AppBadRequestException($"Debe indicar el precio de venta del producto '{productVariant.Id}' en su primera recepción.");
+            }
+
             receivedProducts.Add(new ReceivedProduct(
                 productVariant,
                 productDTO.Quantity,
                 productDTO.Weight,
-                productDTO.IsSurplus));
+                productDTO.IsSurplus,
+                productDTO.SalePrice));
         }
 
         return receivedProducts;
@@ -696,5 +714,5 @@ public class OrderReceiptService(
         receiveOrderDTO.ProductVariants ??= [];
     }
 
-    private sealed record ReceivedProduct(ProductVariant ProductVariant, int Quantity, decimal Weight, bool IsSurplus);
+    private sealed record ReceivedProduct(ProductVariant ProductVariant, int Quantity, decimal Weight, bool IsSurplus, decimal? SalePrice);
 }

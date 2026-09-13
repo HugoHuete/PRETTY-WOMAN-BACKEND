@@ -80,6 +80,7 @@ Puede trabajar con:
 | Compras | Ordenes | Admin | Listar, filtrar, crear, editar, ver detalle | Ordenes, proveedores, estados y tracking | `GET /api/v1/orders`, `GET /api/v1/orders/statuses`, `POST /api/v1/orders`, `PUT /api/v1/orders/{id}` |
 | Compras | Tracking de orden | Admin | Agregar, editar, eliminar tracking | Orden, numeros de tracking | `GET /api/v1/orders/{id}/tracking-numbers`, `POST /api/v1/orders/{id}/tracking-numbers`, `PUT /api/v1/orders/{id}/tracking-numbers/{trackingId}`, `DELETE /api/v1/orders/{id}/tracking-numbers/{trackingId}` |
 | Compras | Recepcion de productos | Admin | Listar y consultar recepciones, registrar recepción parcial/completa, corregir flete, pesos, trackings y sobrantes | Orden, productos recibidos, cantidades, pesos, trackings y flete | `GET /api/v1/orders/{orderId}/receipts`, `GET /api/v1/orders/{orderId}/receipts/{receiptId}`, `POST /api/v1/orders/{orderId}/receipts`, `PATCH /api/v1/orders/{orderId}/receipts/{receiptId}` |
+
 | Compras | Faltantes y reembolso | Admin | Cerrar cantidades que el proveedor confirmó que no llegarán; registrar reembolso posterior | Orden, variantes pendientes, pérdida y reembolso | `POST /api/v1/orders/{id}/shortages/close`, `POST /api/v1/orders/{id}/supplier-refund` |
 | Ventas | Postventa | Admin | Gestionar selección, cambios, devoluciones y reembolsos | Venta, líneas, inventario, pagos y entregas | Rutas `/sales/{id}/selection-holds`, `/exchanges`, `/returns` y reembolsos de pago |
 | Proveedores | Proveedores | Admin | Listar, crear, editar | Proveedores | `GET /api/v1/suppliers`, `POST /api/v1/suppliers`, `PUT /api/v1/suppliers/{id}` |
@@ -91,6 +92,8 @@ Puede trabajar con:
 | Configuracion | Agencias de envio | Admin | Listar, crear, editar y definir si recauda contra entrega | Agencias de envio, incluido `canCollectCashOnDelivery` | `GET /api/v1/deliveryagencies`, `POST /api/v1/deliveryagencies`, `PUT /api/v1/deliveryagencies/{id}` |
 | Configuracion | Terminales de pago | Admin | Listar, crear, editar | Terminales POS | `GET /api/v1/paymentterminals`, `POST /api/v1/paymentterminals`, `PUT /api/v1/paymentterminals/{id}` |
 | Configuracion | Categorias de gasto | Admin | Listar, crear, editar | Categorias de gasto | `GET /api/v1/expensecategories`, `POST /api/v1/expensecategories`, `PUT /api/v1/expensecategories/{id}` |
+
+Al crear o editar una orden no enviar `salePrice`. En `POST /api/v1/orders/{orderId}/receipts`, enviar `salePrice` por variante en la primera recepción; en recepciones posteriores es opcional y, si se omite, conserva el precio vigente.
 
 ## Contratos operativos confirmados
 
