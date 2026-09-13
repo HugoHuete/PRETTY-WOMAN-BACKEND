@@ -71,7 +71,7 @@ public class OrderServiceTests
 
         var order = Assert.Single(result.Items);
         Assert.Equal(olderMatchingOrderId, order.Id);
-        Assert.Equal("Azul", Assert.Single(Assert.Single(order.Products).Presentations).Name);
+        Assert.Equal("SOHO", order.SupplierName);
         Assert.Equal(2, result.Page);
         Assert.Equal(1, result.PageSize);
         Assert.Equal(2, result.TotalCount);
@@ -91,7 +91,7 @@ public class OrderServiceTests
 
         var order = await service.GetByIdAsync(orderId);
 
-        Assert.Equal("Azul", Assert.Single(Assert.Single(order.Products).Presentations).Name);
+        Assert.Equal("SOHO", order.SupplierName);
     }
 
     [Fact]

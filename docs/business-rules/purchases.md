@@ -322,7 +322,6 @@ Por tanto, al crear una orden se deben registrar también los `products` comprad
 * variante
 * cantidad comprada
 * costo unitario en la moneda de compra
-* precio de venta
 
 El campo `products.code` es un entero y representa el código interno del negocio. Debe generarse en backend como un consecutivo que aumenta de 1 en 1.
 
@@ -339,6 +338,8 @@ products:
 - talla M / azul / cantidad 3
 - talla L / negro / cantidad 1
 ```
+
+El precio de venta vigente de una variante se asigna durante su primera recepción, cuando ya se conoce el costo final con el envío bodega -> Nicaragua. En recepciones posteriores puede omitirse para conservarlo o enviarse para actualizarlo.
 
 La API no debe pedir montos totales de la orden, tasa de cambio ni costos finales por variante. Esos valores se calculan a partir de la moneda de compra, la tasa bancaria habilitada cuando aplique y las variantes enviadas en el request.
 

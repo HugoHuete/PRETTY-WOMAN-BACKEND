@@ -105,12 +105,14 @@ Cuando la orden tiene tracking numbers, el peso y el costo de envío se envían 
     {
       "productId": 30,
       "quantity": 3,
-      "weight": 1
+      "weight": 1,
+      "salePrice": 650
     },
     {
       "productId": 31,
       "quantity": 2,
-      "weight": 3
+      "weight": 3,
+      "salePrice": 725
     }
   ],
   "comments": "Recepción paquete 1"
@@ -128,7 +130,8 @@ Cuando la orden no tiene tracking numbers, el costo de envío bodega -> Nicaragu
     {
       "productId": 30,
       "quantity": 5,
-      "weight": 1
+      "weight": 1,
+      "salePrice": 650
     }
   ],
   "comments": "Recepción compra local"
@@ -165,6 +168,7 @@ Cuando la orden no tiene tracking numbers, el costo de envío bodega -> Nicaragu
 - `orders.warehouse_shipping_cost_usd` acumula los costos de envío bodega -> Nicaragua de todas las recepciones.
 - El costo de envío bodega -> Nicaragua se convierte a córdobas con `orders.exchange_rate`.
 - `products[].weight` representa el peso físico estimado por unidad para distribuir el envío; si no se envía, el backend usa `1`.
+- `products[].salePrice` es obligatorio y mayor que cero en la primera recepción de una variante que todavía no tiene precio. En recepciones posteriores es opcional: si se omite, se conserva el precio vigente; si se envía, lo actualiza.
 - `products[].isSurplus` permite registrar una unidad recibida de más. Debe marcarse por línea y requiere `products[].comments`.
 - El costo convertido se distribuye proporcionalmente a `products[].weight * products[].quantity`.
 - El costo convertido se suma a `products.allocated_shipping_cost_nio`, `products.total_cost_nio` y recalcula `products.unit_cost_nio` y `products.unit_cost_usd`. Si hay sobrantes, el costo unitario se reparte entre la mayor cantidad entre unidades compradas y unidades recibidas.

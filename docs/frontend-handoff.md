@@ -45,7 +45,6 @@ Puede trabajar con:
 - Cambios o cancelaciones segun permisos definidos.
 
 ## Modulos del frontend admin
-
 | Modulo | Objetivo | Roles principales | Estado esperado |
 |---|---|---|---|
 | Autenticacion | Iniciar sesion y administrar acceso | Admin, Vendedor | Necesario para MVP |
@@ -62,12 +61,12 @@ Puede trabajar con:
 | Configuracion | Agencias, terminales, proveedores y categorias de gasto | Admin | Segun necesidad operativa |
 
 ## Mapa inicial de pantallas
-
 | Modulo | Pantalla | Roles | Acciones principales | Datos necesarios | Endpoints relacionados |
 |---|---|---|---|---|---|
 | Autenticacion | Login | Admin, Vendedor | Iniciar sesion, renovar y cerrar sesion | Credenciales y sesion | `POST /api/v1/auth/login`, `POST /api/v1/auth/refresh`, `POST /api/v1/auth/logout` |
 | Autenticacion | Usuarios | Admin | Listar, filtrar, crear, actualizar, desbloquear, deshabilitar y habilitar usuario | Usuarios, roles/permisos y estado | `GET /api/v1/auth/users`, `POST /api/v1/auth/users`, `PUT /api/v1/auth/users/{id}`, `POST /api/v1/auth/users/{id}/unlock`, `POST /api/v1/auth/users/{id}/disable`, `POST /api/v1/auth/users/{id}/enable` |
 | Dashboard | Resumen | Admin, Vendedor | Ver ventas, pagos, reservas, entregas e incidencias | Ventas, cobros, reservas, entregas e incidencias; el bloque financiero es exclusivo de Admin | `GET /api/v1/dashboard/summary` |
+| Finanzas | Tasa de cambio vigente | Admin, Vendedor | Consultar la tasa bancaria y de tienda activa | Tasa de cambio vigente | `GET /api/v1/exchange-rates/current` |
 | Productos | Lista de productos | Admin, Vendedor | Buscar, filtrar, paginar, abrir detalle | Productos, categoria, subcategoria, talla, stock | `GET /api/v1/products` |
 | Productos | Exportar productos | Admin, Vendedor | Descargar catálogo filtrado en Excel | Productos y variantes | `GET /api/v1/products/export` |
 | Productos | Detalle de producto | Admin, Vendedor | Ver informacion completa, disponibilidad, imágenes e historial | Producto, variantes, stock, imágenes, movimientos | `GET /api/v1/products/{productId}`, rutas de imágenes e inventario del producto |
@@ -91,7 +90,25 @@ Puede trabajar con:
 | Configuracion | Terminales de pago | Admin | Listar, crear, editar | Terminales POS | `GET /api/v1/paymentterminals`, `POST /api/v1/paymentterminals`, `PUT /api/v1/paymentterminals/{id}` |
 | Configuracion | Categorias de gasto | Admin | Listar, crear, editar | Categorias de gasto | `GET /api/v1/expensecategories`, `POST /api/v1/expensecategories`, `PUT /api/v1/expensecategories/{id}` |
 
+Al crear o editar una orden no enviar `salePrice`. En `POST /api/v1/orders/{orderId}/receipts`, enviar `salePrice` por variante en la primera recepción; en recepciones posteriores es opcional y, si se omite, conserva el precio vigente.
+
+El listado de órdenes devuelve únicamente el resumen de cada orden. No incluye `products` ni `purchaseShortages`; consultar `GET /api/v1/orders/{id}` para obtener productos, variantes y faltantes.
+
 ## Contratos operativos confirmados
+
+### Tasa de cambio vigente
+
+`GET /api/v1/exchange-rates/current` requiere autenticación con rol `Admin` o `Employee` y devuelve la tasa habilitada con fecha de inicio más reciente:
+
+```json
+{
+  "storeRate": 37,
+  "bankRate": 36.5,
+  "startDate": "2026-09-12T00:00:00Z"
+}
+```
+
+Si no existe una tasa bancaria habilitada, la API responde `404` con `ProblemDetails`. El frontend debe mostrar el detalle del error y no asumir una tasa por defecto.
 
 Los endpoints siguientes ya están implementados y son la base de las pantallas críticas. Todos requieren JWT. `Employee` es el rol técnico de Vendedor.
 
@@ -117,7 +134,6 @@ El correo sigue siendo un dato del perfil. Al crear un usuario con `POST /api/v1
 Un administrador puede deshabilitar y rehabilitar una cuenta con `POST /api/v1/auth/users/{id}/disable` y `POST /api/v1/auth/users/{id}/enable`. Una cuenta deshabilitada no puede iniciar sesión y sus tokens emitidos dejan de ser válidos de inmediato. La UI debe pedir confirmación antes de deshabilitarla.
 
 `GET /api/v1/auth/users` devuelve los usuarios para la pantalla administrativa y acepta filtros opcionales combinables:
-
 | Parámetro | Tipo | Comportamiento |
 |---|---|---|
 | `user` | texto | Búsqueda parcial, sin distinguir mayúsculas, por `username`, nombre, apellido o correo. |
@@ -135,7 +151,6 @@ Ejemplos: `GET /api/v1/auth/users?user=maria`, `GET /api/v1/auth/users?role=Empl
 `GET /api/v1/orders/{id}/tracking-numbers` acepta `isReceived` opcional: `true` devuelve trackings con `ProductReceiptId` y `false` los pendientes; sin el parámetro devuelve todos.
 
 Ambas acciones son exclusivas de Admin. Se ejecutan desde el detalle de la orden; sus respuestas devuelven el `OrderDTO` actualizado, por lo que la UI debe reemplazar el estado local con esa respuesta o recargar `GET /api/v1/orders/{id}`.
-
 | Flujo | Endpoint | Cuándo mostrarlo | Resultado |
 |---|---|---|---|
 | Cerrar faltantes | `POST /api/v1/orders/{id}/shortages/close` | Hay al menos una variante con `receivedQuantity < quantity`, la orden no está cancelada ni recibida y aún no tiene `purchaseShortages`. | Crea un faltante por cada variante pendiente y deja la orden en `Received`. |
@@ -316,7 +331,6 @@ Usar `GET /api/v1/products/export` para descargar el catálogo en formato `.xlsx
 El archivo contiene una fila por variante, con producto, código, proveedor, talla, variante, existencias, costo unitario, precio de venta, precio con descuento y campaña aplicada. La respuesta es `application/vnd.openxmlformats-officedocument.spreadsheetml.sheet` y debe manejarse en el frontend como descarga de tipo `blob`.
 
 Las acciones de imágenes e historial están disponibles para Admin y Vendedor desde el detalle de producto.
-
 | Flujo | Endpoint | Request / resultado |
 |---|---|---|
 | Consultar imagen | `GET /api/v1/products/{productId}/images/{imageId}` | Devuelve `{ id, productPresentationId, thumbnailUrl, webUrl, isPrimary, sortOrder }`; `productPresentationId: null` significa imagen general. |
@@ -385,7 +399,6 @@ Antes de crear o filtrar movimientos financieros, cargar `GET /api/v1/finances/m
 ### Ventas, pagos y envíos
 
 El listado devuelve `latestDeliveryStatusId` y `latestDeliveryStatusName`, tomados del envío más reciente; ambos son `null` si la venta no tiene envíos.
-
 | Flujo | Endpoint | Rol | Resultado |
 |---|---|---|---|
 | Listar / abrir venta | `GET /api/v1/sales`, `GET /api/v1/sales/{id}` | Admin, Vendedor | El listado acepta `deliveryStatusId` y lo compara con el estado del envío más reciente. La consulta individual incluye productos, pagos, prendas en selección y `deliveries`. |
@@ -468,7 +481,6 @@ Para mostrar existencias, considerar que `Reserved` y `ReadyForDelivery` usan `r
 ### Ventas: postventa, selección, cambios y devoluciones
 
 La consulta de historial está disponible para Admin y Vendedor; las acciones de postventa son exclusivas de Admin. Estas operaciones conservan la venta original y sus líneas históricas: no se deben simular editando cantidades de `saleProducts`.
-
 | Flujo | Endpoint | Rol | Resultado de UI esperado |
 |---|---|---|---|
 | Enviar productos a selección | `POST /api/v1/sales/{id}/selection-holds` | Admin | Solo para ventas con canal distinto de `InStoreSale`; crea los holds y deja las prendas fuera de disponibilidad mientras estén activas. |
@@ -494,7 +506,6 @@ Reglas de presentación:
 - Para payloads y campos específicos, consultar [cambios](use-cases/exchange-products-after-sale.md), [devoluciones](use-cases/return-products-after-sale.md) y [selección](use-cases/send-products-for-selection.md).
 
 ### Incidencias de inventario
-
 | Flujo | Endpoint | Rol | Resultado |
 |---|---|---|---|
 | Listar / consultar | `GET /api/v1/product-inventory-issues`, `GET /api/v1/product-inventory-issues/{id}` | Admin, Vendedor | Filtros: producto, detalle, tipo y estado. |
@@ -511,7 +522,6 @@ Para ajustes de inventario, cargar los catalogos con `GET /api/v1/inventory-cata
 Los ajustes de inventario son correcciones administrativas. Solo Admin puede crearlos; Admin y Vendedor pueden consultarlos. No usarlos para ventas, envios, devoluciones, cambios, incidencias de inventario, recepciones normales de compra ni sobrantes de compra.
 
 Endpoints:
-
 | Flujo | Endpoint | Rol | Resultado |
 |---|---|---|---|
 | Listar ajustes | `GET /api/v1/inventory-adjustments` | Admin, Vendedor | Devuelve paginado con items de ajuste y movimientos ligados. |
@@ -616,7 +626,6 @@ Uso recomendado de sugerencias:
 7. Antes de enviar, mostrar resumen: producto, origen, destino, cantidad, motivo, referencia y comentarios.
 
 Ejemplos por motivo:
-
 | Motivo | Uso UI recomendado | Movimiento comun |
 |---|---|---|
 | `ManualCorrection` | Conteo fisico o revision que no pertenece a otro flujo. | `Available -> Unavailable`, `Unavailable -> Available`, `Available -> OutOfInventory` o `OutOfInventory -> Available`. |
@@ -629,7 +638,6 @@ Ejemplos por motivo:
 | `Other` | Caso excepcional. Pedir comentario mas explicito. | Depende del caso. |
 
 Errores esperados para mostrar en UI:
-
 | Caso | Status | Mensaje típico en `detail` |
 |---|---:|---|
 | Sin sesion | 401 | No autorizado. |

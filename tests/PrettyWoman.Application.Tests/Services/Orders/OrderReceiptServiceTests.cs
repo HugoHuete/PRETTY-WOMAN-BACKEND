@@ -853,6 +853,82 @@ public class OrderReceiptServiceTests
         Assert.Null(inventoryMovement.Comments);
     }
 
+    [Fact]
+    public async Task ReceiveAsync_SetsSalePriceOnFirstReceipt()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var orderService = new OrderService(context, Mapper);
+        var receiptService = CreateReceiptService(context);
+        var request = CreateOrderRequest(quantity: 2);
+        request.Products.Single().Presentations.Single().Sizes.Single().SalePrice = 0m;
+        var orderId = await orderService.CreateAsync(request);
+        var productVariant = await context.ProductVariants.SingleAsync();
+
+        await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            ProductVariants =
+            [
+                new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 1, SalePrice = 725m }
+            ]
+        });
+
+        productVariant = await context.ProductVariants.SingleAsync();
+        Assert.Equal(725m, productVariant.SalePrice);
+    }
+
+    [Fact]
+    public async Task ReceiveAsync_RequiresSalePriceOnFirstReceiptWhenVariantHasNoPrice()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var orderService = new OrderService(context, Mapper);
+        var receiptService = CreateReceiptService(context);
+        var request = CreateOrderRequest(quantity: 2);
+        request.Products.Single().Presentations.Single().Sizes.Single().SalePrice = 0m;
+        var orderId = await orderService.CreateAsync(request);
+        var productVariant = await context.ProductVariants.SingleAsync();
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 1 }]
+        }));
+
+        Assert.Contains("primera recepción", exception.Message);
+    }
+
+    [Fact]
+    public async Task ReceiveAsync_PreservesSalePriceOnLaterReceiptWhenOmittedAndUpdatesWhenProvided()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var orderService = new OrderService(context, Mapper);
+        var receiptService = CreateReceiptService(context);
+        var request = CreateOrderRequest(quantity: 3);
+        request.Products.Single().Presentations.Single().Sizes.Single().SalePrice = 0m;
+        var orderId = await orderService.CreateAsync(request);
+        var productVariant = await context.ProductVariants.SingleAsync();
+
+        await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 1, SalePrice = 725m }]
+        });
+
+        await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 1 }]
+        });
+        productVariant = await context.ProductVariants.SingleAsync();
+        Assert.Equal(725m, productVariant.SalePrice);
+
+        await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 1, SalePrice = 780m }]
+        });
+        productVariant = await context.ProductVariants.SingleAsync();
+        Assert.Equal(780m, productVariant.SalePrice);
+    }
+
     private static CreateOrderDTO CreateOrderRequest(int quantity)
     {
         return new CreateOrderDTO

@@ -52,15 +52,13 @@ Registrar una compra al proveedor junto con los artículos comprados y sus varia
           "sizeId": 1,
           "variant": "Azul",
           "quantity": 2,
-          "unitCost": 8.5,
-          "salePrice": 650
+          "unitCost": 8.5
         },
         {
           "sizeId": 2,
           "variant": "Azul",
           "quantity": 3,
-          "unitCost": 8.5,
-          "salePrice": 650
+          "unitCost": 8.5
         }
       ]
     }
@@ -106,6 +104,7 @@ Estos valores se calculan en backend.
 - Al actualizar una orden, enviar `products[].id` cuando se esté corrigiendo un `product` existente para conservar su `code` interno.
 - Si se agrega un `product` nuevo durante la actualización, se envía sin `id` y el backend asigna el siguiente `code` disponible.
 - El inventario disponible no aumenta al crear la orden.
+- El precio de venta no se solicita al crear ni actualizar la orden; inicia en cero y se asigna al recibir la variante.
 - El inventario aumenta solamente al recibir productos.
 
 ## Errores esperados
