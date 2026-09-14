@@ -77,7 +77,8 @@ Puede trabajar con:
 | Clientes | Estado de cliente | Admin | Bloquear, desbloquear | Cliente, motivo de bloqueo | `PATCH /api/v1/clients/{id}/block`, `PATCH /api/v1/clients/{id}/unblock` |
 | Compras | Ordenes | Admin | Listar, filtrar, crear, editar, ver detalle | Ordenes, proveedores, estados y tracking | `GET /api/v1/orders`, `GET /api/v1/orders/statuses`, `POST /api/v1/orders`, `PUT /api/v1/orders/{id}` |
 | Compras | Compañías de envío | Admin, Vendedor | Consultar compañías disponibles para registrar tracking | Compañías de envío | `GET /api/v1/shipping-companies` |
-| Compras | Tracking de orden | Admin | Agregar, editar, eliminar tracking | Orden, numeros de tracking | `GET /api/v1/orders/{id}/tracking-numbers`, `POST /api/v1/orders/{id}/tracking-numbers`, `PUT /api/v1/orders/{id}/tracking-numbers/{trackingId}`, `DELETE /api/v1/orders/{id}/tracking-numbers/{trackingId}` |
+| Compras | Tracking de orden | Admin | Agregar, editar, eliminar y consultar tracking | Orden, numeros de tracking | `GET /api/v1/orders/{id}/tracking-numbers`, `POST /api/v1/orders/{id}/tracking-numbers`, `PUT /api/v1/orders/{id}/tracking-numbers/{trackingId}`, `DELETE /api/v1/orders/{id}/tracking-numbers/{trackingId}` |
+| Compras | Tracking global | Admin | Listar y filtrar trackings de todas las órdenes | Trackings, órdenes y compañías de envío | `GET /api/v1/tracking-numbers` |
 | Compras | Recepcion de productos | Admin | Listar y consultar recepciones, registrar recepción parcial/completa, corregir flete, pesos, trackings y sobrantes | Orden, productos recibidos, cantidades, pesos, trackings y flete | `GET /api/v1/orders/{orderId}/receipts`, `GET /api/v1/orders/{orderId}/receipts/{receiptId}`, `POST /api/v1/orders/{orderId}/receipts`, `PATCH /api/v1/orders/{orderId}/receipts/{receiptId}` |
 | Compras | Faltantes y reembolso | Admin | Cerrar cantidades que el proveedor confirmó que no llegarán; registrar reembolso posterior | Orden, variantes pendientes, pérdida y reembolso | `POST /api/v1/orders/{id}/shortages/close`, `POST /api/v1/orders/{id}/supplier-refund` |
 | Ventas | Postventa | Admin | Gestionar selección, cambios, devoluciones y reembolsos | Venta, líneas, inventario, pagos y entregas | Rutas `/sales/{id}/selection-holds`, `/exchanges`, `/returns` y reembolsos de pago |
@@ -150,6 +151,8 @@ Ejemplos: `GET /api/v1/auth/users?user=maria`, `GET /api/v1/auth/users?role=Empl
 `GET /api/v1/orders/statuses` devuelve el catálogo de estados de orden, ordenado por `id`, para poblar el filtro `orderStatusId` de la UI. Cada elemento tiene `id` y `name`.
 
 `GET /api/v1/orders/{id}/tracking-numbers` acepta `isReceived` opcional: `true` devuelve trackings con `ProductReceiptId` y `false` los pendientes; sin el parámetro devuelve todos.
+
+`GET /api/v1/tracking-numbers` devuelve un `PaginatedResult<OrderTrackingNumberDTO>` con tracking numbers de todas las órdenes. Acepta `page`, `pageSize`, `isReceived`, `trackingNumber`, `shippingCompanyId`, `orderStatusId`, `purchaseDateFrom` y `purchaseDateTo`. La página se limita a 100 elementos.
 
 Los requests de `POST` y `PUT` para tracking solo registran o modifican los datos logísticos del paquete. `weight` y `shippingCost` se envían únicamente dentro de la recepción (`POST /api/v1/orders/{orderId}/receipts`) y se corrigen desde la recepción.
 
