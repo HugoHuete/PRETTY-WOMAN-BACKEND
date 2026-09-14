@@ -129,11 +129,11 @@ amount: order.total_cost_nio
 order_id: order.id
 ```
 
-Si la orden se actualiza antes de recibir inventario, el movimiento financiero se crea, actualiza o elimina según el nuevo total. Si la orden queda sin productos ni costos, no debe conservar un movimiento financiero de monto cero.
+Si la orden se actualiza antes de recibir inventario o cerrar faltantes, el movimiento financiero se crea, actualiza o elimina según el nuevo total. Si la orden queda sin productos ni costos, no debe conservar un movimiento financiero de monto cero.
 
 ## Actualizar productos de una orden
 
-Cuando se actualiza una orden que todavía no tiene inventario recibido ni recepciones registradas, el request puede reemplazar sus variantes y corregir datos del modelo comprado.
+Cuando se actualiza una orden que todavía no tiene inventario recibido, faltantes cerrados ni recepciones registradas, el request puede reemplazar sus variantes y corregir datos del modelo comprado.
 
 Para conservar el código interno del negocio, cada `product` existente debe enviarse con su `id`:
 

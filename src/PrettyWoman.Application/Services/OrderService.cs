@@ -77,6 +77,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         var order = await _context.Orders
             .Include(order => order.ProductVariants)
                 .ThenInclude(productVariant => productVariant.Product)
+            .Include(order => order.PurchaseShortages)
             .FirstOrDefaultAsync(order => order.Id == id)
             ?? throw new AppNotFoundException($"La orden con id '{id}' no existe.");
 
@@ -175,7 +176,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         }
 
         var productVariants = products.SelectMany(detail => detail.ProductVariants).ToList();
-        var exchangeRate = await GetOrderExchangeRateAsync();
+        var exchangeRate = order.ExchangeRate;
         var totals = CalculateCosts(createdProducts.ProductCosts, updateOrderDTO.PurchaseCurrencyId, exchangeRate, updateOrderDTO.SupplierShippingCostUsd);
 
         order.PurchaseDate = updateOrderDTO.PurchaseDate.NormalizeToUtc() ?? order.PurchaseDate;
@@ -910,12 +911,13 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
     /// </summary>
     private static async Task EnsureOrderProductsCanBeReplacedAsync(Order order)
     {
-        if (order.ProductVariants.Any(productVariant =>
-            productVariant.ReceivedQuantity > 0 ||
-            productVariant.AvailableQuantity > 0 ||
-            productVariant.ReservedQuantity > 0))
+        if (order.PurchaseShortages.Count != 0 ||
+            order.ProductVariants.Any(productVariant =>
+                productVariant.ReceivedQuantity > 0 ||
+                productVariant.AvailableQuantity > 0 ||
+                productVariant.ReservedQuantity > 0))
         {
-            throw new AppBadRequestException("No se puede modificar productos de una orden que ya tiene inventario recibido o reservado.");
+            throw new AppBadRequestException("No se puede modificar productos de una orden que ya tiene inventario recibido, reservado o faltantes cerrados.");
         }
     }
 
