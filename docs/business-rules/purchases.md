@@ -347,11 +347,11 @@ La API no debe pedir montos totales de la orden, tasa de cambio ni costos finale
 
 ## Regla: actualización de una orden de compra
 
-Una orden puede actualizar sus datos generales y sus productos mientras no tenga inventario recibido, disponible, reservado ni recepciones registradas.
+Una orden puede actualizar sus datos generales y sus productos mientras no tenga inventario recibido, disponible, reservado, faltantes cerrados ni recepciones registradas.
 
 Si la orden ya tiene recepción física de productos, no se deben reemplazar sus líneas de compra desde la actualización de orden, porque eso puede alterar inventario y costos históricos.
 
-Cuando una orden todavía no tiene inventario recibido, actualizar sus productos se trata como reemplazo completo de las líneas de compra (`products`), pero no debe quemar códigos internos de `products` si la operación es una corrección.
+Cuando una orden todavía no tiene inventario recibido ni faltantes cerrados, actualizar sus productos se trata como reemplazo completo de las líneas de compra (`products`), pero no debe quemar códigos internos de `products` si la operación es una corrección.
 
 Para conservar `products.code`, el request de actualización debe enviar `products[].id` para cada producto existente. El backend debe reutilizar ese `product`, actualizar sus datos editables y recrear sus variantes `products` con los nuevos costos, cantidades y precios.
 
@@ -359,7 +359,7 @@ Si el request incluye un `products[].id` que no pertenece a la orden, la actuali
 
 Si se agrega un producto nuevo, se envía sin `id` y el backend asigna el siguiente `products.code` disponible.
 
-Si un producto existente no se incluye en la actualización, se considera eliminado de esa orden siempre que no tenga inventario recibido, disponible, reservado ni recepciones asociadas.
+Si un producto existente no se incluye en la actualización, se considera eliminado de esa orden siempre que no tenga inventario recibido, disponible, reservado, faltantes cerrados ni recepciones asociadas.
 
 ## Regla: movimiento financiero de compra
 
@@ -373,6 +373,6 @@ Por tanto, al crear una orden se debe crear también un `financial_movement` rel
 * `exchange_rate = orders.exchange_rate`
 * `order_id = orders.id`
 
-Si una orden se actualiza antes de tener inventario recibido o recepciones registradas, el movimiento financiero relacionado debe actualizarse para reflejar el nuevo total de la compra.
+Si una orden se actualiza antes de tener inventario recibido, faltantes cerrados o recepciones registradas, el movimiento financiero relacionado debe actualizarse para reflejar el nuevo total de la compra.
 
 Una orden puede tener total financiero igual a cero mientras se registra de forma preliminar sin productos ni costos. En ese estado no debe crear ni conservar un `financial_movement` de compra. Cuando una actualización haga que `orders.total_cost_nio` sea mayor que cero, el backend debe crear o actualizar el movimiento financiero; si vuelve a cero antes de recibir inventario, debe eliminarlo.

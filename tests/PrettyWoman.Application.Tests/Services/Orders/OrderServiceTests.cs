@@ -311,6 +311,57 @@ public class OrderServiceTests
     }
 
     [Fact]
+    public async Task UpdateAsync_RejectsOrderWithClosedShortagesEvenWhenNothingWasReceived()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-CLOSED-SHORTAGE", "Producto faltante"));
+        var productVariant = await context.ProductVariants.SingleAsync(item => item.OrderId == orderId);
+
+        await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
+        {
+            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
+        });
+
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.UpdateAsync(orderId, new UpdateOrderDTO
+        {
+            SupplierId = 1,
+            PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd,
+            SupplierShippingCostUsd = 100m,
+            Products =
+            [
+                new CreateOrderProductDTO
+                {
+                    Id = productVariant.ProductId,
+                    SupplierProductCode = "SOHO-CLOSED-SHORTAGE",
+                    Name = "Producto faltante actualizado",
+                    SubcategoryId = 1,
+                    Presentations =
+                    [
+                        new CreateOrderProductPresentationDTO
+                        {
+                            Name = "Azul",
+                            Sizes =
+                            [
+                                new CreateOrderProductVariantDTO
+                                {
+                                    SizeId = 1,
+                                    Quantity = 2,
+                                    UnitCost = 8m,
+                                    SalePrice = 600m
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        }));
+
+        Assert.Equal("No se puede modificar productos de una orden que ya tiene inventario recibido, reservado o faltantes cerrados.", exception.Message);
+    }
+
+    [Fact]
     public async Task CloseShortagesAsync_ConservesMerchandiseCentsWhenSplittingLoss()
     {
         await using var context = CreateContext();
@@ -440,6 +491,59 @@ public class OrderServiceTests
         Assert.Equal(0m, order.MerchandiseTotalNio);
         Assert.Equal(0m, order.TotalCostNio);
         Assert.False(await context.FinancialMovements.AnyAsync(movement => movement.OrderId == orderId));
+    }
+
+    [Fact]
+    public async Task UpdateAsync_ReusesOriginalExchangeRateForRecalculation()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-EXCHANGE-RATE", "Vestido"));
+        var existingProduct = await context.Products.SingleAsync();
+
+        var exchangeRate = await context.DollarExchangeRates.SingleAsync();
+        exchangeRate.BankRate = 40m;
+        await context.SaveChangesAsync();
+
+        await service.UpdateAsync(orderId, new UpdateOrderDTO
+        {
+            SupplierId = 1,
+            PurchaseCurrencyId = (int)PurchaseCurrencyOption.Usd,
+            SupplierShippingCostUsd = 100m,
+            Products =
+            [
+                new CreateOrderProductDTO
+                {
+                    Id = existingProduct.Id,
+                    SupplierProductCode = "SOHO-EXCHANGE-RATE",
+                    Name = "Vestido actualizado",
+                    SubcategoryId = 1,
+                    Presentations =
+                    [
+                        new CreateOrderProductPresentationDTO
+                        {
+                            Name = "Azul",
+                            Sizes =
+                            [
+                                new CreateOrderProductVariantDTO
+                                {
+                                    SizeId = 1,
+                                    Quantity = 2,
+                                    UnitCost = 8m,
+                                    SalePrice = 600m
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        });
+
+        var order = await context.Orders.SingleAsync(order => order.Id == orderId);
+
+        Assert.Equal(36.5m, order.ExchangeRate);
+        Assert.Equal(4234m, order.TotalCostNio);
     }
 
     [Fact]
