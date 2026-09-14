@@ -318,8 +318,8 @@ Para una orden con tracking, sustituir el costo directo por elementos como:
       "sortOrder": 0,
       "primaryImageUrl": "https://images.example.com/azul.webp",
       "sizes": [
-        { "id": 101, "sizeName": "S", "availableQuantity": 2 },
-        { "id": 102, "sizeName": "M", "availableQuantity": 1 }
+        { "id": 101, "sizeName": "S", "availableQuantity": 2, "unitCostNio": 425.75 },
+        { "id": 102, "sizeName": "M", "availableQuantity": 1, "unitCostNio": 425.75 }
       ]
     }
   ]

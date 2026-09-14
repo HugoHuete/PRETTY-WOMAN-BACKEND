@@ -13,6 +13,27 @@ namespace PrettyWoman.Application.Tests.Services.Products;
 public class ProductServiceTests
 {
     [Fact]
+    public async Task GetAllAsync_MapsUnitCostInNioForVariants()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var variant = await context.ProductVariants.SingleAsync(productVariant => productVariant.Id == 1);
+        variant.UnitCostNio = 425.75m;
+        await context.SaveChangesAsync();
+        var service = CreateService(context);
+
+        var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1001 });
+
+        var mappedVariant = result.Items
+            .Single()
+            .Presentations
+            .SelectMany(presentation => presentation.Sizes)
+            .Single(productVariant => productVariant.Id == variant.Id);
+
+        Assert.Equal(425.75m, mappedVariant.UnitCostNio);
+    }
+
+    [Fact]
     public async Task GetAllAsync_FiltersUnavailableProductsByCategorySubcategoryAndSize()
     {
         await using var context = CreateContext();
