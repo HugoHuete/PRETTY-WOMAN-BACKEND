@@ -511,7 +511,7 @@ Reglas de presentación:
 ### Incidencias de inventario
 | Flujo | Endpoint | Rol | Resultado |
 |---|---|---|---|
-| Listar / consultar | `GET /api/v1/product-inventory-issues`, `GET /api/v1/product-inventory-issues/{id}` | Admin, Vendedor | Filtros: producto, detalle, tipo y estado. |
+| Listar / consultar | `GET /api/v1/product-inventory-issues`, `GET /api/v1/product-inventory-issues/{id}` | Admin, Vendedor | Filtros: codigo de producto (`productCode`), tipo y estado. |
 | Abrir incidencia | `POST /api/v1/product-inventory-issues` | Admin | Devuelve `201` y el id; mueve la cantidad de disponible a no disponible. |
 | Resolver | `PATCH /api/v1/product-inventory-issues/{id}/resolution` | Admin | Devuelve la incidencia resuelta. |
 | Cancelar incidencia abierta | `DELETE /api/v1/product-inventory-issues/{id}` | Admin | La deja en estado `Cancelled` y repone disponibilidad. |
