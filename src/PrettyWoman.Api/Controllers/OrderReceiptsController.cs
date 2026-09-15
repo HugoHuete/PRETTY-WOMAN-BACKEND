@@ -35,12 +35,12 @@ public class OrderReceiptsController(IOrderReceiptService orderReceiptService) :
     }
 
     [HttpPatch("{receiptId:int}")]
-    public async Task<ActionResult<OrderReceiptDTO>> UpdateShippingCost(
+    public async Task<ActionResult<OrderReceiptDTO>> Update(
         int orderId,
         int receiptId,
         [FromBody] UpdateOrderReceiptDTO updateOrderReceiptDTO)
     {
-        var receipt = await _orderReceiptService.UpdateShippingCostAsync(orderId, receiptId, updateOrderReceiptDTO);
+        var receipt = await _orderReceiptService.UpdateReceiptAsync(orderId, receiptId, updateOrderReceiptDTO);
         return Ok(receipt);
     }
 }

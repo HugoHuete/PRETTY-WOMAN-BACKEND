@@ -79,7 +79,7 @@ Puede trabajar con:
 | Compras | Compañías de envío | Admin, Vendedor | Consultar compañías disponibles para registrar tracking | Compañías de envío | `GET /api/v1/shipping-companies` |
 | Compras | Tracking de orden | Admin | Agregar, editar, eliminar y consultar tracking | Orden, numeros de tracking | `GET /api/v1/orders/{id}/tracking-numbers`, `POST /api/v1/orders/{id}/tracking-numbers`, `PUT /api/v1/orders/{id}/tracking-numbers/{trackingId}`, `DELETE /api/v1/orders/{id}/tracking-numbers/{trackingId}` |
 | Compras | Tracking global | Admin | Listar y filtrar trackings de todas las órdenes | Trackings, órdenes y compañías de envío | `GET /api/v1/tracking-numbers` |
-| Compras | Recepcion de productos | Admin | Listar y consultar recepciones, registrar recepción parcial/completa, corregir flete, pesos, trackings y sobrantes | Orden, productos recibidos, cantidades, pesos, trackings y flete | `GET /api/v1/orders/{orderId}/receipts`, `GET /api/v1/orders/{orderId}/receipts/{receiptId}`, `POST /api/v1/orders/{orderId}/receipts`, `PATCH /api/v1/orders/{orderId}/receipts/{receiptId}` |
+| Compras | Recepcion de productos | Admin | Listar y consultar recepciones, registrar recepción parcial/completa, corregir flete, pesos, precios de venta, trackings y sobrantes | Orden, productos recibidos, cantidades, pesos, trackings y flete | `GET /api/v1/orders/{orderId}/receipts`, `GET /api/v1/orders/{orderId}/receipts/{receiptId}`, `POST /api/v1/orders/{orderId}/receipts`, `PATCH /api/v1/orders/{orderId}/receipts/{receiptId}` |
 | Compras | Faltantes y reembolso | Admin | Cerrar cantidades que el proveedor confirmó que no llegarán; registrar reembolso posterior | Orden, variantes pendientes, pérdida y reembolso | `POST /api/v1/orders/{id}/shortages/close`, `POST /api/v1/orders/{id}/supplier-refund` |
 | Ventas | Postventa | Admin | Gestionar selección, cambios, devoluciones y reembolsos | Venta, líneas, inventario, pagos y entregas | Rutas `/sales/{id}/selection-holds`, `/exchanges`, `/returns` y reembolsos de pago |
 | Proveedores | Proveedores | Admin | Listar, crear, editar | Proveedores | `GET /api/v1/suppliers`, `POST /api/v1/suppliers`, `PUT /api/v1/suppliers/{id}` |
@@ -92,7 +92,7 @@ Puede trabajar con:
 | Configuracion | Terminales de pago | Admin | Listar, crear, editar | Terminales POS | `GET /api/v1/paymentterminals`, `POST /api/v1/paymentterminals`, `PUT /api/v1/paymentterminals/{id}` |
 | Configuracion | Categorias de gasto | Admin | Listar, crear, editar | Categorias de gasto | `GET /api/v1/expensecategories`, `POST /api/v1/expensecategories`, `PUT /api/v1/expensecategories/{id}` |
 
-Al crear o editar una orden no enviar `salePrice`. En `POST /api/v1/orders/{orderId}/receipts`, enviar `salePrice` por variante en la primera recepción; en recepciones posteriores es opcional y, si se omite, conserva el precio vigente.
+Al crear o editar una orden no enviar `salePrice`. En `POST /api/v1/orders/{orderId}/receipts`, enviar `salePrice` por variante en la primera recepción; en recepciones posteriores es opcional y, si se omite, conserva el precio vigente. `PATCH /api/v1/orders/{orderId}/receipts/{receiptId}` también permite corregir el flete, los pesos y el `salePrice` de cada variante recibida; si se omite el precio de una variante, conserva el precio vigente. Las ventas ya registradas mantienen su precio histórico.
 
 El listado de órdenes devuelve únicamente el resumen de cada orden. No incluye `products` ni `purchaseShortages`; consultar `GET /api/v1/orders/{id}` para obtener productos, variantes y faltantes.
 
@@ -299,7 +299,7 @@ Para una orden con tracking, sustituir el costo directo por elementos como:
 - Cada producto requiere `productId` y `quantity > 0`; `weight` es opcional y vale `1` por defecto.
 - Para recibir más de la cantidad pendiente, la línea debe enviar `isSurplus: true` y un comentario. Mostrar una confirmación antes de enviarla.
 - El backend distribuye el flete de bodega entre los productos de esa recepción según `weight * quantity`; la UI no debe prorratearlo.
-- La respuesta `OrderReceiptDTO` incluye `id`, `orderId`, `receivedDate`, `warehouseShippingCostUsd`, `warehouseShippingCostNio`, `orderStatusId`, `trackingNumberIds` y, por producto, `productId`, `quantity`, `isSurplus` y `allocatedWarehouseShippingCostNio`.
+La respuesta `OrderReceiptDTO` incluye `id`, `orderId`, `receivedDate`, `warehouseShippingCostUsd`, `warehouseShippingCostNio`, `orderStatusId`, `trackingNumberIds` y, por producto, `productId`, `quantity`, `isSurplus`, `salePrice` y `allocatedWarehouseShippingCostNio`.
 - Después de una recepción, recargar el detalle de la orden para mostrar cantidades y costos calculados. Si quedan pendientes que el proveedor ya confirmó que no llegarán, habilitar el flujo de faltantes descrito arriba.
 
 ### Productos: listado, presentaciones e imágenes

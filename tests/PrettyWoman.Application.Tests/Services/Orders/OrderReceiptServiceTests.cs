@@ -358,7 +358,7 @@ public class OrderReceiptServiceTests
     }
 
     [Fact]
-    public async Task UpdateShippingCostAsync_RecalculatesReceiptOrderProductAndFinancialMovement()
+    public async Task UpdateReceiptAsync_RecalculatesReceiptOrderProductAndFinancialMovement()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -380,7 +380,7 @@ public class OrderReceiptServiceTests
             ]
         });
 
-        var updated = await receiptService.UpdateShippingCostAsync(orderId, receipt.Id, new UpdateOrderReceiptDTO
+        var updated = await receiptService.UpdateReceiptAsync(orderId, receipt.Id, new UpdateOrderReceiptDTO
         {
             WarehouseShippingCostUsd = 20m
         });
@@ -401,7 +401,7 @@ public class OrderReceiptServiceTests
     }
 
     [Fact]
-    public async Task UpdateShippingCostAsync_UpdatesProductWeightsAndReallocatesShipping()
+    public async Task UpdateReceiptAsync_UpdatesProductWeightsAndReallocatesShipping()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -423,12 +423,12 @@ public class OrderReceiptServiceTests
             .OrderBy(detail => detail.Id)
             .ToListAsync();
 
-        var updated = await receiptService.UpdateShippingCostAsync(orderId, receipt.Id, new UpdateOrderReceiptDTO
+        var updated = await receiptService.UpdateReceiptAsync(orderId, receipt.Id, new UpdateOrderReceiptDTO
         {
             WarehouseShippingCostUsd = 10m,
             ProductVariants =
             [
-                new UpdateOrderReceiptProductDTO { ProductReceiptDetailId = details[0].Id, Weight = 3m },
+                new UpdateOrderReceiptProductDTO { ProductReceiptDetailId = details[0].Id, Weight = 3m, SalePrice = 777m },
                 new UpdateOrderReceiptProductDTO { ProductReceiptDetailId = details[1].Id, Weight = 1m }
             ]
         });
@@ -442,11 +442,16 @@ public class OrderReceiptServiceTests
         Assert.Equal(91.25m, details[1].AllocatedWarehouseShippingCostNio);
         Assert.Equal(638.75m, productVariants[0].AllocatedShippingCostNio);
         Assert.Equal(456.25m, productVariants[1].AllocatedShippingCostNio);
+        Assert.Equal(777m, productVariants[0].SalePrice);
+        Assert.Equal(777m, updated.ProductVariants.Single(productVariant => productVariant.ProductReceiptDetailId == details[0].Id).SalePrice);
+
+        var fetched = await receiptService.GetByIdAsync(orderId, receipt.Id);
+        Assert.Equal(777m, fetched.ProductVariants.Single(productVariant => productVariant.ProductReceiptDetailId == details[0].Id).SalePrice);
         Assert.Equal(3m, updated.ProductVariants.Single(productVariant => productVariant.ProductReceiptDetailId == details[0].Id).Weight);
     }
 
     [Fact]
-    public async Task UpdateShippingCostAsync_RejectsIncompleteProductWeightSet()
+    public async Task UpdateReceiptAsync_RejectsIncompleteProductWeightSet()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -465,7 +470,7 @@ public class OrderReceiptServiceTests
         });
         var detail = await context.ProductReceiptDetails.FirstAsync(detail => detail.ProductReceiptId == receipt.Id);
 
-        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.UpdateShippingCostAsync(
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.UpdateReceiptAsync(
             orderId,
             receipt.Id,
             new UpdateOrderReceiptDTO
@@ -478,7 +483,7 @@ public class OrderReceiptServiceTests
     }
 
     [Fact]
-    public async Task UpdateShippingCostAsync_RejectsNonPositiveProductWeight()
+    public async Task UpdateReceiptAsync_RejectsNonPositiveProductWeight()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -493,7 +498,7 @@ public class OrderReceiptServiceTests
         });
         var detail = await context.ProductReceiptDetails.SingleAsync();
 
-        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.UpdateShippingCostAsync(
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.UpdateReceiptAsync(
             orderId,
             receipt.Id,
             new UpdateOrderReceiptDTO
@@ -506,7 +511,46 @@ public class OrderReceiptServiceTests
     }
 
     [Fact]
-    public async Task UpdateShippingCostAsync_UpdatesIndividualTrackingCostsAndAllocation()
+    public async Task UpdateReceiptAsync_RejectsNonPositiveSalePrice()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var orderService = new OrderService(context, Mapper);
+        var receiptService = CreateReceiptService(context);
+        var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 1));
+        var productVariant = await context.ProductVariants.SingleAsync();
+        var receipt = await receiptService.ReceiveAsync(orderId, new ReceiveOrderDTO
+        {
+            WarehouseShippingCostUsd = 10m,
+            ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 1 }]
+        });
+        var detail = await context.ProductReceiptDetails.SingleAsync();
+
+        foreach (var salePrice in new[] { 0m, -1m })
+        {
+            var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.UpdateReceiptAsync(
+                orderId,
+                receipt.Id,
+                new UpdateOrderReceiptDTO
+                {
+                    WarehouseShippingCostUsd = 10m,
+                    ProductVariants =
+                    [
+                        new UpdateOrderReceiptProductDTO
+                        {
+                            ProductReceiptDetailId = detail.Id,
+                            Weight = 1m,
+                            SalePrice = salePrice
+                        }
+                    ]
+                }));
+
+            Assert.Contains("precio de venta", exception.Message, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public async Task UpdateReceiptAsync_UpdatesIndividualTrackingCostsAndAllocation()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -531,7 +575,7 @@ public class OrderReceiptServiceTests
             ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 2 }]
         });
 
-        await receiptService.UpdateShippingCostAsync(orderId, receipt.Id, new UpdateOrderReceiptDTO
+        await receiptService.UpdateReceiptAsync(orderId, receipt.Id, new UpdateOrderReceiptDTO
         {
             TrackingNumbers =
             [
@@ -555,7 +599,7 @@ public class OrderReceiptServiceTests
     }
 
     [Fact]
-    public async Task UpdateShippingCostAsync_RemovesFinancialMovementWhenCostBecomesZero()
+    public async Task UpdateReceiptAsync_RemovesFinancialMovementWhenCostBecomesZero()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -570,7 +614,7 @@ public class OrderReceiptServiceTests
             ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 2 }]
         });
 
-        await receiptService.UpdateShippingCostAsync(orderId, receipt.Id, new UpdateOrderReceiptDTO
+        await receiptService.UpdateReceiptAsync(orderId, receipt.Id, new UpdateOrderReceiptDTO
         {
             WarehouseShippingCostUsd = 0m
         });
@@ -586,7 +630,7 @@ public class OrderReceiptServiceTests
     }
 
     [Fact]
-    public async Task UpdateShippingCostAsync_CreatesFinancialMovementWhenCostBecomesPositive()
+    public async Task UpdateReceiptAsync_CreatesFinancialMovementWhenCostBecomesPositive()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -601,7 +645,7 @@ public class OrderReceiptServiceTests
             ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 2 }]
         });
 
-        await receiptService.UpdateShippingCostAsync(orderId, receipt.Id, new UpdateOrderReceiptDTO
+        await receiptService.UpdateReceiptAsync(orderId, receipt.Id, new UpdateOrderReceiptDTO
         {
             WarehouseShippingCostUsd = 10m
         });
@@ -613,7 +657,7 @@ public class OrderReceiptServiceTests
     }
 
     [Fact]
-    public async Task UpdateShippingCostAsync_RejectsTrackingThatDoesNotBelongToReceipt()
+    public async Task UpdateReceiptAsync_RejectsTrackingThatDoesNotBelongToReceipt()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -634,7 +678,7 @@ public class OrderReceiptServiceTests
         });
         var otherTracking = await context.OrderTrackingNumbers.OrderBy(item => item.Id).LastAsync();
 
-        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.UpdateShippingCostAsync(
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.UpdateReceiptAsync(
             orderId,
             receipt.Id,
             new UpdateOrderReceiptDTO
@@ -646,7 +690,7 @@ public class OrderReceiptServiceTests
     }
 
     [Fact]
-    public async Task UpdateShippingCostAsync_RejectsNegativeShippingCost()
+    public async Task UpdateReceiptAsync_RejectsNegativeShippingCost()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -660,7 +704,7 @@ public class OrderReceiptServiceTests
             ProductVariants = [new ReceiveOrderProductDTO { ProductId = productVariant.Id, Quantity = 2 }]
         });
 
-        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.UpdateShippingCostAsync(
+        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => receiptService.UpdateReceiptAsync(
             orderId,
             receipt.Id,
             new UpdateOrderReceiptDTO { WarehouseShippingCostUsd = -1m }));
@@ -669,7 +713,7 @@ public class OrderReceiptServiceTests
     }
 
     [Fact]
-    public async Task UpdateShippingCostAsync_PropagatesCostToEverySaleLineWithoutChangingSaleAmount()
+    public async Task UpdateReceiptAsync_PropagatesCostToEverySaleLineWithoutChangingSaleAmount()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -698,7 +742,7 @@ public class OrderReceiptServiceTests
         context.SaleProducts.Add(saleProduct);
         await context.SaveChangesAsync();
 
-        await receiptService.UpdateShippingCostAsync(orderId, receipt.Id, new UpdateOrderReceiptDTO
+        await receiptService.UpdateReceiptAsync(orderId, receipt.Id, new UpdateOrderReceiptDTO
         {
             WarehouseShippingCostUsd = 20m
         });
