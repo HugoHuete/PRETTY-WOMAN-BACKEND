@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using PrettyWoman.Api.IntegrationTests.Infrastructure;
@@ -108,6 +109,50 @@ public class OrdersApiTests(PrettyWomanApiFactory factory)
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         Assert.DoesNotContain("\"products\"", body, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("\"purchaseShortages\"", body, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ListTrackingNumbers_ReturnsPaginatedGlobalResults()
+    {
+        var first = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 0, availableQuantity: 0);
+        var second = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 0, availableQuantity: 0);
+
+        using (var scope = _factory.Services.CreateScope())
+        {
+            var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+            var shippingCompany = new PrettyWoman.Domain.Entities.ShippingCompany
+            {
+                Name = $"Global Carrier {Guid.NewGuid():N}"
+            };
+            context.ShippingCompanies.Add(shippingCompany);
+            await context.SaveChangesAsync();
+            context.OrderTrackingNumbers.AddRange(
+                new PrettyWoman.Domain.Entities.OrderTrackingNumber
+                {
+                    OrderId = first.OrderId,
+                    ShippingCompanyId = shippingCompany.Id,
+                    TrackingNumber = "GLOBAL-TRACK-ALPHA"
+                },
+                new PrettyWoman.Domain.Entities.OrderTrackingNumber
+                {
+                    OrderId = second.OrderId,
+                    ShippingCompanyId = shippingCompany.Id,
+                    TrackingNumber = "OTHER-TRACK"
+                });
+            await context.SaveChangesAsync();
+        }
+
+        using var client = await CreateAdminClientAsync();
+        var response = await client.GetAsync("/api/v1/tracking-numbers?page=1&pageSize=1&trackingNumber=GLOBAL");
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStreamAsync());
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, document.RootElement.GetProperty("page").GetInt32());
+        Assert.Equal(1, document.RootElement.GetProperty("pageSize").GetInt32());
+        Assert.Equal(1, document.RootElement.GetProperty("totalCount").GetInt32());
+        var item = Assert.Single(document.RootElement.GetProperty("items").EnumerateArray().ToArray());
+        Assert.Equal(first.OrderId, item.GetProperty("orderId").GetInt32());
+        Assert.Equal("GLOBAL-TRACK-ALPHA", item.GetProperty("trackingNumber").GetString());
     }
 
     [Fact]

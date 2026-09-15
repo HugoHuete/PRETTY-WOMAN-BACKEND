@@ -414,6 +414,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             ReservedQuantity = productVariant.ReservedQuantity,
             UnavailableQuantity = productVariant.UnavailableQuantity,
             SalePrice = productVariant.SalePrice,
+            UnitCostNio = productVariant.UnitCostNio,
             DiscountedSalePrice = discount?.DiscountedSalePrice,
             DiscountCampaignId = discount?.CampaignId,
             DiscountCampaignName = discount?.CampaignName

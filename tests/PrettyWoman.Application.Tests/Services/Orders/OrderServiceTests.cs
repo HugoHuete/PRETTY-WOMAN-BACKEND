@@ -196,10 +196,7 @@ public class OrderServiceTests
         order.OrderStatusId = (int)OrderStatusCode.PartiallyReceived;
         await context.SaveChangesAsync();
 
-        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
-        {
-            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
-        });
+        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO());
 
         Assert.Equal((int)OrderStatusCode.PendingRefund, closedOrder.OrderStatusId);
         Assert.Single(closedOrder.PurchaseShortages);
@@ -246,10 +243,7 @@ public class OrderServiceTests
         order.OrderStatusId = (int)OrderStatusCode.PartiallyReceived;
         await context.SaveChangesAsync();
 
-        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
-        {
-            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
-        });
+        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO());
 
         var shortage = Assert.Single(closedOrder.PurchaseShortages);
         Assert.Equal(0m, shortage.LossAmountNio);
@@ -271,10 +265,7 @@ public class OrderServiceTests
         productVariant.AvailableQuantity = 1;
         order.OrderStatusId = (int)OrderStatusCode.PartiallyReceived;
         await context.SaveChangesAsync();
-        await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
-        {
-            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
-        });
+        await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO());
 
         var declinedOrder = await service.DeclineSupplierRefundAsync(orderId, new DeclineSupplierRefundDTO
         {
@@ -299,10 +290,7 @@ public class OrderServiceTests
         var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-AUSENTE", "Variante no recibida"));
         var productVariant = await context.ProductVariants.SingleAsync(item => item.OrderId == orderId);
 
-        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
-        {
-            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
-        });
+        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO());
 
         Assert.Equal((int)OrderStatusCode.PendingRefund, closedOrder.OrderStatusId);
         Assert.Equal(2, Assert.Single(closedOrder.PurchaseShortages).Quantity);
@@ -319,10 +307,7 @@ public class OrderServiceTests
         var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-CLOSED-SHORTAGE", "Producto faltante"));
         var productVariant = await context.ProductVariants.SingleAsync(item => item.OrderId == orderId);
 
-        await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
-        {
-            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
-        });
+        await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO());
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.UpdateAsync(orderId, new UpdateOrderDTO
         {
@@ -377,10 +362,7 @@ public class OrderServiceTests
         order.OrderStatusId = (int)OrderStatusCode.PartiallyReceived;
         await context.SaveChangesAsync();
 
-        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
-        {
-            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
-        });
+        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO());
 
         Assert.Equal(0.02m, closedOrder.TotalShortageLossNio);
         Assert.Equal(0.01m, closedOrder.MerchandiseTotalNio);
@@ -768,6 +750,108 @@ public class OrderServiceTests
         }));
 
         Assert.Equal($"El producto con id '{otherOrderProduct.Id}' no pertenece a la orden.", exception.Message);
+    }
+
+    [Fact]
+    public async Task GetAllTrackingNumbersAsync_PaginatesAndFiltersAcrossOrders()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.ShippingCompanies.AddRange(
+            new ShippingCompany { Id = 1, Name = "Carrier A" },
+            new ShippingCompany { Id = 2, Name = "Carrier B" });
+        var service = CreateService(context);
+        var firstOrderId = await service.CreateAsync(CreateOrderRequest("SOHO-GLOBAL-A", "Orden A"));
+        var secondOrderId = await service.CreateAsync(CreateOrderRequest("SOHO-GLOBAL-B", "Orden B"));
+        var thirdOrderId = await service.CreateAsync(CreateOrderRequest("SOHO-GLOBAL-C", "Orden C"));
+
+        var firstOrder = await context.Orders.SingleAsync(order => order.Id == firstOrderId);
+        var secondOrder = await context.Orders.SingleAsync(order => order.Id == secondOrderId);
+        var thirdOrder = await context.Orders.SingleAsync(order => order.Id == thirdOrderId);
+        firstOrder.PurchaseDate = new DateTime(2026, 7, 12, 0, 0, 0, DateTimeKind.Utc);
+        secondOrder.PurchaseDate = new DateTime(2026, 7, 12, 0, 0, 0, DateTimeKind.Utc);
+        thirdOrder.PurchaseDate = new DateTime(2026, 7, 11, 0, 0, 0, DateTimeKind.Utc);
+        secondOrder.OrderStatusId = (int)OrderStatusCode.Received;
+
+        var receipt = new ProductReceipt
+        {
+            OrderId = secondOrderId,
+            ReceivedDate = DateTime.UtcNow
+        };
+        context.ProductReceipts.Add(receipt);
+        await context.SaveChangesAsync();
+
+        context.OrderTrackingNumbers.AddRange(
+            new OrderTrackingNumber
+            {
+                OrderId = firstOrderId,
+                ShippingCompanyId = 1,
+                TrackingNumber = "GLOBAL-ALPHA"
+            },
+            new OrderTrackingNumber
+            {
+                OrderId = secondOrderId,
+                ShippingCompanyId = 1,
+                TrackingNumber = "GLOBAL-BETA",
+                ProductReceiptId = receipt.Id
+            },
+            new OrderTrackingNumber
+            {
+                OrderId = thirdOrderId,
+                ShippingCompanyId = 2,
+                TrackingNumber = "GLOBAL-GAMMA"
+            });
+        await context.SaveChangesAsync();
+
+        context.ChangeTracker.Clear();
+
+        var result = await service.GetAllTrackingNumbersAsync(new OrderTrackingNumberQueryDTO
+        {
+            Page = 1,
+            PageSize = 1,
+            IsReceived = false,
+            TrackingNumber = "global",
+            ShippingCompanyId = 1,
+            OrderStatusId = (int)OrderStatusCode.Pending,
+            PurchaseDateFrom = new DateTime(2026, 7, 12, 0, 0, 0, DateTimeKind.Utc),
+            PurchaseDateTo = new DateTime(2026, 7, 12, 23, 59, 59, DateTimeKind.Utc)
+        });
+
+        var tracking = Assert.Single(result.Items);
+        Assert.Equal(firstOrderId, tracking.OrderId);
+        Assert.Equal("GLOBAL-ALPHA", tracking.TrackingNumber);
+        Assert.Equal(1, result.Page);
+        Assert.Equal(1, result.PageSize);
+        Assert.Equal(1, result.TotalCount);
+    }
+
+    [Fact]
+    public async Task GetAllTrackingNumbersAsync_ReturnsEmptyForPageOffsetBeyondIntRange()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.ShippingCompanies.Add(new ShippingCompany { Id = 1, Name = "Carrier A" });
+        var service = CreateService(context);
+        var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-OVERFLOW", "Orden"));
+        context.OrderTrackingNumbers.Add(new OrderTrackingNumber
+        {
+            OrderId = orderId,
+            ShippingCompanyId = 1,
+            TrackingNumber = "GLOBAL-OVERFLOW"
+        });
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var result = await service.GetAllTrackingNumbersAsync(new OrderTrackingNumberQueryDTO
+        {
+            Page = int.MaxValue,
+            PageSize = 100
+        });
+
+        Assert.Empty(result.Items);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal(int.MaxValue, result.Page);
+        Assert.Equal(100, result.PageSize);
     }
 
     [Fact]

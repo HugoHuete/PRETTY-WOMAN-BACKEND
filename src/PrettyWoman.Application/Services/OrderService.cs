@@ -200,7 +200,6 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
     // Marcar el resto de la orden como faltantes y registrar la pérdida correspondiente. Esto solo se puede hacer si la orden no está cancelada, no está recibida y no tiene faltantes ya registrados.
     public async Task<OrderDTO> CloseShortagesAsync(int id, CloseOrderShortagesDTO closeShortagesDTO)
     {
-        closeShortagesDTO.Items ??= [];
 
         var order = await GetOrderForShortageUpdateAsync(id);
         if (order.OrderStatusId == (int)OrderStatusCode.Cancelled)
@@ -227,19 +226,11 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             throw new AppBadRequestException("La orden no tiene cantidades pendientes para registrar como faltantes.");
         }
 
-        if (closeShortagesDTO.Items.Count != productsWithPendingQuantity.Count ||
-            closeShortagesDTO.Items.Select(item => item.ProductId).Distinct().Count() != closeShortagesDTO.Items.Count ||
-            closeShortagesDTO.Items.Any(item => productsWithPendingQuantity.All(productVariant => productVariant.Id != item.ProductId)))
-        {
-            throw new AppBadRequestException("Debe registrar exactamente un faltante por cada variante pendiente de la orden.");
-        }
-
         var shortageDate = closeShortagesDTO.ClosedAt.NormalizeToUtc() ?? DateTime.UtcNow;
         var shortages = new List<PurchaseShortage>();
 
-        foreach (var item in closeShortagesDTO.Items)
+        foreach (var productVariant in productsWithPendingQuantity)
         {
-            var productVariant = productsWithPendingQuantity.Single(productVariant => productVariant.Id == item.ProductId);
             var originalQuantity = productVariant.Quantity;
             var shortageQuantity = originalQuantity - productVariant.ReceivedQuantity;
             var originalMerchandiseTotalNio = productVariant.MerchandiseTotalCostNio;
@@ -528,6 +519,83 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         return _mapper.Map<List<OrderTrackingNumberDTO>>(trackingNumbers);
     }
 
+    public async Task<PaginatedResult<OrderTrackingNumberDTO>> GetAllTrackingNumbersAsync(OrderTrackingNumberQueryDTO query)
+    {
+        NormalizeTrackingNumberPagination(query);
+
+        var trackingQuery = _context.OrderTrackingNumbers
+            .AsNoTracking()
+            .Include(tracking => tracking.Order)
+            .Include(tracking => tracking.ShippingCompany)
+            .AsQueryable();
+
+        if (query.IsReceived.HasValue)
+        {
+            trackingQuery = query.IsReceived.Value
+                ? trackingQuery.Where(tracking => tracking.ProductReceiptId.HasValue)
+                : trackingQuery.Where(tracking => !tracking.ProductReceiptId.HasValue);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.TrackingNumber))
+        {
+            var trackingNumber = query.TrackingNumber.ToLower();
+            trackingQuery = trackingQuery.Where(tracking => tracking.TrackingNumber.ToLower().Contains(trackingNumber));
+        }
+
+        if (query.ShippingCompanyId.HasValue)
+        {
+            trackingQuery = trackingQuery.Where(tracking => tracking.ShippingCompanyId == query.ShippingCompanyId.Value);
+        }
+
+        if (query.OrderStatusId.HasValue)
+        {
+            trackingQuery = trackingQuery.Where(tracking => tracking.Order != null &&
+                tracking.Order.OrderStatusId == query.OrderStatusId.Value);
+        }
+
+        if (query.PurchaseDateFrom.HasValue)
+        {
+            var dateFrom = query.PurchaseDateFrom.NormalizeToUtc()!.Value;
+            trackingQuery = trackingQuery.Where(tracking => tracking.Order != null &&
+                tracking.Order.PurchaseDate >= dateFrom);
+        }
+
+        if (query.PurchaseDateTo.HasValue)
+        {
+            var dateTo = query.PurchaseDateTo.NormalizeToUtc()!.Value;
+            trackingQuery = trackingQuery.Where(tracking => tracking.Order != null &&
+                tracking.Order.PurchaseDate <= dateTo);
+        }
+
+        var totalCount = await trackingQuery.CountAsync();
+        var offset = ((long)query.Page - 1) * query.PageSize;
+
+        if (offset >= totalCount)
+        {
+            return new PaginatedResult<OrderTrackingNumberDTO>
+            {
+                Page = query.Page,
+                PageSize = query.PageSize,
+                TotalCount = totalCount
+            };
+        }
+
+        var trackingNumbers = await trackingQuery
+            .OrderByDescending(tracking => tracking.Order!.PurchaseDate)
+            .ThenByDescending(tracking => tracking.Id)
+            .Skip((int)offset)
+            .Take(query.PageSize)
+            .ToListAsync();
+
+        return new PaginatedResult<OrderTrackingNumberDTO>
+        {
+            Items = _mapper.Map<List<OrderTrackingNumberDTO>>(trackingNumbers),
+            Page = query.Page,
+            PageSize = query.PageSize,
+            TotalCount = totalCount
+        };
+    }
+
     private static IQueryable<Order> ApplyOrderFilters(IQueryable<Order> query, OrderQueryDTO filters)
     {
         if (filters.OrderStatusId.HasValue)
@@ -559,6 +627,19 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
     {
         query.Page = Math.Max(query.Page, 1);
         query.PageSize = Math.Clamp(query.PageSize, 1, 100);
+    }
+
+    private static void NormalizeTrackingNumberPagination(OrderTrackingNumberQueryDTO query)
+    {
+        query.Page = Math.Max(query.Page, 1);
+        query.PageSize = Math.Clamp(query.PageSize, 1, 100);
+        query.TrackingNumber = query.TrackingNumber.NormalizeOptional();
+
+        if (query.PurchaseDateFrom.HasValue && query.PurchaseDateTo.HasValue &&
+            query.PurchaseDateFrom.NormalizeToUtc() > query.PurchaseDateTo.NormalizeToUtc())
+        {
+            throw new AppBadRequestException("La fecha inicial no puede ser mayor que la fecha final.");
+        }
     }
 
     private async Task SyncSupplierPaymentMovementAsync(Order order)

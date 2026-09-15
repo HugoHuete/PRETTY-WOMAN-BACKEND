@@ -47,6 +47,7 @@ public class OrderReceiptService(
         var receipt = await _context.ProductReceipts
             .Include(item => item.Order)
             .Include(item => item.ProductReceiptDetails)
+                .ThenInclude(item => item.ProductVariant)
             .Include(item => item.OrderTrackingNumbers)
                 .ThenInclude(item => item.ShippingCompany)
             .FirstOrDefaultAsync(item => item.Id == receiptId && item.OrderId == orderId)
@@ -150,6 +151,7 @@ public class OrderReceiptService(
                     ProductId = item.ProductVariant.Id,
                     Quantity = item.Quantity,
                     IsSurplus = item.IsSurplus,
+                    SalePrice = item.ProductVariant.SalePrice,
                     AllocatedWarehouseShippingCostNio = warehouseShippingAllocations[item.ProductVariant.Id]
                 })
                 .ToList(),
@@ -159,7 +161,7 @@ public class OrderReceiptService(
         };
     }
 
-    public async Task<OrderReceiptDTO> UpdateShippingCostAsync(int orderId, int receiptId, UpdateOrderReceiptDTO updateOrderReceiptDTO)
+    public async Task<OrderReceiptDTO> UpdateReceiptAsync(int orderId, int receiptId, UpdateOrderReceiptDTO updateOrderReceiptDTO)
     {
         updateOrderReceiptDTO.TrackingNumbers ??= [];
         updateOrderReceiptDTO.ProductVariants ??= [];
@@ -275,6 +277,7 @@ public class OrderReceiptService(
                     ProductId = detail.ProductId,
                     Quantity = (int)detail.Quantity,
                     Weight = detail.Weight,
+                    SalePrice = detail.ProductVariant?.SalePrice ?? 0,
                     AllocatedWarehouseShippingCostNio = detail.AllocatedWarehouseShippingCostNio
                 })
                 .ToList(),
@@ -314,6 +317,7 @@ public class OrderReceiptService(
                     ProductId = detail.ProductId,
                     Quantity = (int)detail.Quantity,
                     Weight = detail.Weight,
+                    SalePrice = detail.ProductVariant?.SalePrice ?? 0,
                     AllocatedWarehouseShippingCostNio = detail.AllocatedWarehouseShippingCostNio
                 })
                 .ToList(),
@@ -611,6 +615,12 @@ public class OrderReceiptService(
             throw new AppBadRequestException("El peso del producto debe ser mayor que cero.");
         }
 
+        if (updateOrderReceiptDTO.ProductVariants.Any(productVariant =>
+            productVariant.SalePrice.HasValue && productVariant.SalePrice.Value <= 0))
+        {
+            throw new AppBadRequestException("El precio de venta debe ser mayor que cero.");
+        }
+
         var receiptDetailById = receipt.ProductReceiptDetails.ToDictionary(detail => detail.Id);
         var requestedDetailIds = updateOrderReceiptDTO.ProductVariants
             .Select(productVariant => productVariant.ProductReceiptDetailId)
@@ -622,7 +632,13 @@ public class OrderReceiptService(
 
         foreach (var productVariant in updateOrderReceiptDTO.ProductVariants)
         {
-            receiptDetailById[productVariant.ProductReceiptDetailId].Weight = productVariant.Weight;
+            var receiptDetail = receiptDetailById[productVariant.ProductReceiptDetailId];
+            receiptDetail.Weight = productVariant.Weight;
+
+            if (productVariant.SalePrice.HasValue)
+            {
+                receiptDetail.ProductVariant!.SalePrice = productVariant.SalePrice.Value;
+            }
         }
     }
 

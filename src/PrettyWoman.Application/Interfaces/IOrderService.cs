@@ -9,6 +9,7 @@ public interface IOrderService
     Task<PaginatedResult<OrderSummaryDTO>> GetAllAsync(OrderQueryDTO query);
     Task<IEnumerable<OrderStatusDTO>> GetStatusesAsync();
     Task<IEnumerable<OrderTrackingNumberDTO>> GetTrackingNumbersAsync(int orderId, bool? isReceived = null);
+    Task<PaginatedResult<OrderTrackingNumberDTO>> GetAllTrackingNumbersAsync(OrderTrackingNumberQueryDTO query);
     Task<int> CreateAsync(CreateOrderDTO createOrderDTO);
     Task UpdateAsync(int id, UpdateOrderDTO updateOrderDTO);
     Task<OrderDTO> CloseShortagesAsync(int id, CloseOrderShortagesDTO closeShortagesDTO);
