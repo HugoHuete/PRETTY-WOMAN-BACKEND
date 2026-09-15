@@ -14,14 +14,7 @@ public class R2MediaObjectStorage(IOptions<R2MediaOptions> options) : IMediaObje
 
     public async Task UploadAsync(MediaBucket bucket, string storageKey, Stream content, string contentType, CancellationToken cancellationToken = default)
     {
-        var request = new PutObjectRequest
-        {
-            BucketName = GetBucketName(bucket),
-            Key = storageKey,
-            InputStream = content,
-            ContentType = contentType,
-            AutoCloseStream = false
-        };
+        var request = CreateUploadRequest(GetBucketName(bucket), storageKey, content, contentType);
         await GetClient().PutObjectAsync(request, cancellationToken);
     }
 
@@ -35,6 +28,22 @@ public class R2MediaObjectStorage(IOptions<R2MediaOptions> options) : IMediaObje
     }
 
     public void Dispose() => _client?.Dispose();
+
+    internal static PutObjectRequest CreateUploadRequest(
+        string bucketName,
+        string storageKey,
+        Stream content,
+        string contentType) =>
+        new()
+        {
+            BucketName = bucketName,
+            Key = storageKey,
+            InputStream = content,
+            ContentType = contentType,
+            AutoCloseStream = false,
+            DisablePayloadSigning = true,
+            DisableDefaultChecksumValidation = true
+        };
 
     private AmazonS3Client GetClient()
     {
