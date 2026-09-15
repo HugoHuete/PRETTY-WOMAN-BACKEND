@@ -51,6 +51,15 @@ public class ProductsController(IProductService productService, IProductImageSer
         return NoContent();
     }
 
+    [HttpGet("{productId:int}/images")]
+    public async Task<ActionResult<IReadOnlyCollection<ProductImageDTO>>> GetImages(
+        int productId,
+        [FromQuery] int? productPresentationId,
+        CancellationToken cancellationToken)
+    {
+        var images = await _productImageService.GetAllAsync(productId, productPresentationId, cancellationToken);
+        return Ok(images);
+    }
     [HttpGet("{productId:int}/images/{imageId:int}")]
     public async Task<ActionResult<ProductImageDTO>> GetImageById(int productId, int imageId, CancellationToken cancellationToken)
     {
@@ -65,10 +74,11 @@ public class ProductsController(IProductService productService, IProductImageSer
         int productId,
         [FromQuery] int? productPresentationId,
         IFormFile file,
+        [FromForm] bool? isPrimary,
         CancellationToken cancellationToken)
     {
         await using var content = file.OpenReadStream();
-        var image = await _productImageService.UploadAsync(productId, productPresentationId, content, file.ContentType, cancellationToken);
+        var image = await _productImageService.UploadAsync(productId, productPresentationId, content, file.ContentType, isPrimary, cancellationToken);
         return CreatedAtAction(nameof(GetImageById), new { productId, imageId = image.Id }, image);
     }
 

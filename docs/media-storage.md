@@ -28,7 +28,11 @@ Configurar las credenciales exclusivamente mediante secretos de entorno o User S
 
 ## Subida de imágenes de producto
 
-`POST /api/v1/products/{productId}/images` recibe `multipart/form-data` con un campo `file`. Para asociarla a un color o presentación, agregar `?productPresentationId={id}`; si se omite, la imagen pertenece al producto general.
+Para cargar las imágenes existentes de un producto usar `GET /api/v1/products/{productId}/images?productPresentationId={id}`. El parámetro es opcional: si se omite devuelve las imágenes generales; si se incluye devuelve las de esa presentación. La respuesta es una lista de `ProductImageDTO` ordenada por `sortOrder`.
+
+`POST /api/v1/products/{productId}/images` recibe `multipart/form-data` con un campo `file` y el campo opcional `isPrimary`. Para asociarla a un color o presentación, agregar `?productPresentationId={id}`; si se omite, la imagen pertenece al producto general. Si `isPrimary=true`, la nueva imagen reemplaza la principal del ámbito; si se omite o es `false`, se conserva la actual y la primera imagen del ámbito se marca automáticamente como principal.
+
+Las claves siguen el formato products/{productCode}/{presentation}_{counter}_{uniqueId}, o products/{productCode}/{counter}_{uniqueId} cuando no hay presentación. El sufijo único por carga evita colisiones y la reutilización de claves durante la limpieza diferida.
 
 Se admiten JPEG, PNG y WebP de hasta 4 MB, con un máximo de 6000 px de ancho o alto y 25 millones de píxeles totales. La API valida el contenido real, conserva el original en el bucket privado y genera una miniatura WebP de 400 px y una versión WebP de 1200 px en el bucket público.
 

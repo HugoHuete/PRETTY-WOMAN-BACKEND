@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.Common.Media;
 using PrettyWoman.Application.DTOs.Products;
@@ -18,6 +20,8 @@ public class ProductImageService(
     IMediaUrlResolver mediaUrlResolver) : IProductImageService
 {
     private const long MaxOriginalSizeBytes = 4 * 1024 * 1024;
+    private const string GeneralPrimaryConstraintName = "ix_product_images_product_id_general_primary";
+    private const string PresentationPrimaryConstraintName = "ix_product_images_product_id_presentation_primary";
     private const int MaxImageWidth = 6000;
     private const int MaxImageHeight = 6000;
     private const long MaxImagePixels = 25_000_000;
@@ -38,11 +42,35 @@ public class ProductImageService(
         return MapProductImage(image);
     }
 
+    public async Task<IReadOnlyCollection<ProductImageDTO>> GetAllAsync(
+        int productId,
+        int? productPresentationId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!await context.Products.AnyAsync(product => product.Id == productId, cancellationToken))
+        {
+            throw new AppNotFoundException($"El producto con id '{productId}' no existe.");
+        }
+
+        await EnsurePresentationBelongsToProductAsync(productId, productPresentationId, cancellationToken);
+
+        var images = await context.ProductImages
+            .Where(image => image.ProductId == productId &&
+                image.ProductPresentationId == productPresentationId)
+            .Include(image => image.MediaAsset)
+                .ThenInclude(asset => asset!.Variants)
+            .OrderBy(image => image.SortOrder)
+            .ThenBy(image => image.Id)
+            .ToListAsync(cancellationToken);
+
+        return images.Select(MapProductImage).ToList();
+    }
     public async Task<ProductImageDTO> UploadAsync(
         int productId,
         int? productPresentationId,
         Stream content,
         string? declaredContentType,
+        bool? isPrimary = null,
         CancellationToken cancellationToken = default)
     {
         if (content is null || !content.CanRead)
@@ -55,12 +83,18 @@ public class ProductImageService(
             throw new AppUnsupportedMediaTypeException("Solo se permiten imágenes JPEG, PNG o WebP.");
         }
 
-        if (!await context.Products.AnyAsync(product => product.Id == productId, cancellationToken))
-        {
-            throw new AppNotFoundException($"El producto con id '{productId}' no existe.");
-        }
+        var product = await context.Products
+            .Include(item => item.ProductPresentations)
+            .SingleOrDefaultAsync(item => item.Id == productId, cancellationToken)
+            ?? throw new AppNotFoundException($"El producto con id '{productId}' no existe.");
 
-        await EnsurePresentationBelongsToProductAsync(productId, productPresentationId, cancellationToken);
+        var presentation = productPresentationId.HasValue
+            ? product.ProductPresentations.SingleOrDefault(item => item.Id == productPresentationId.Value)
+            : null;
+        if (productPresentationId.HasValue && presentation is null)
+        {
+            throw new AppNotFoundException($"La presentación con id '{productPresentationId.Value}' no existe para el producto con id '{productId}'.");
+        }
 
         await using var original = new MemoryStream();
         await content.CopyToAsync(original, cancellationToken);
@@ -100,11 +134,18 @@ public class ProductImageService(
                 throw new AppUnsupportedMediaTypeException("Solo se permiten imágenes JPEG, PNG o WebP.");
             }
 
+            var nextSortOrder = await context.ProductImages
+                .Where(productImage => productImage.ProductId == productId &&
+                    productImage.ProductPresentationId == productPresentationId)
+                .Select(productImage => (int?)productImage.SortOrder)
+                .MaxAsync(cancellationToken) ?? -1;
+            var counter = nextSortOrder + 2;
             var assetId = Guid.NewGuid();
-            var baseKey = $"productVariants/{productId}/{assetId:N}";
-            var originalKey = $"{baseKey}/original.{GetExtension(format)}";
-            var thumbnailKey = $"{baseKey}/thumb-400.webp";
-            var webKey = $"{baseKey}/web-1200.webp";
+            var fileName = BuildFileName(presentation?.Name, counter, assetId);
+            var baseKey = $"products/{product.Code}/{fileName}";
+            var originalKey = $"{baseKey}.{GetExtension(format)}";
+            var thumbnailKey = $"{baseKey}-thumb-400.webp";
+            var webKey = $"{baseKey}-web-1200.webp";
             var thumbnailUrl = mediaUrlResolver.GetPublicUrl(thumbnailKey);
             var webUrl = mediaUrlResolver.GetPublicUrl(webKey);
 
@@ -124,15 +165,21 @@ public class ProductImageService(
                 await objectStorage.UploadAsync(MediaBucket.Public, webKey, web.Content, "image/webp", cancellationToken);
                 uploaded.Add((MediaBucket.Public, webKey));
 
-                var nextSortOrder = await context.ProductImages
+                var primaryImages = await context.ProductImages
                     .Where(productImage => productImage.ProductId == productId &&
-                        productImage.ProductPresentationId == productPresentationId)
-                    .Select(productImage => (int?)productImage.SortOrder)
-                    .MaxAsync(cancellationToken) ?? -1;
-                var hasPrimaryImage = await context.ProductImages
-                    .AnyAsync(productImage => productImage.ProductId == productId &&
                         productImage.ProductPresentationId == productPresentationId &&
-                        productImage.IsPrimary, cancellationToken);
+                        productImage.IsPrimary)
+                    .ToListAsync(cancellationToken);
+
+                if (isPrimary == true)
+                {
+                    foreach (var primaryImage in primaryImages)
+                    {
+                        primaryImage.IsPrimary = false;
+                    }
+                }
+
+                var hasPrimaryImage = primaryImages.Count != 0;
 
                 var asset = new MediaAsset
                 {
@@ -158,7 +205,7 @@ public class ProductImageService(
                     ProductId = productId,
                     ProductPresentationId = productPresentationId,
                     MediaAsset = asset,
-                    IsPrimary = !hasPrimaryImage,
+                    IsPrimary = isPrimary == true || !hasPrimaryImage,
                     SortOrder = nextSortOrder + 1
                 };
 
@@ -299,7 +346,7 @@ public class ProductImageService(
         {
             await context.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException exception) when (IsPrimaryImageUniqueViolation(exception))
         {
             if (!productImage.IsPrimary || !await context.ProductImages.AnyAsync(image =>
                     image.ProductId == productImage.ProductId &&
@@ -312,11 +359,23 @@ public class ProductImageService(
 
             productImage.IsPrimary = false;
             productImage.SortOrder = (await context.ProductImages
-                .Where(image => image.ProductId == productImage.ProductId)
+                .Where(image => image.ProductId == productImage.ProductId && image.ProductPresentationId == productImage.ProductPresentationId)
                 .Select(image => (int?)image.SortOrder)
                 .MaxAsync(cancellationToken) ?? -1) + 1;
             await context.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    private static bool IsPrimaryImageUniqueViolation(DbUpdateException exception)
+    {
+        var innerException = exception.InnerException;
+        if (innerException is null || !string.Equals(innerException.GetType().Name, "PostgresException", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        return innerException.Message.Contains(GeneralPrimaryConstraintName, StringComparison.OrdinalIgnoreCase) ||
+            innerException.Message.Contains(PresentationPrimaryConstraintName, StringComparison.OrdinalIgnoreCase);
     }
 
     private ProductImageDTO MapProductImage(ProductImage image)
@@ -354,6 +413,45 @@ public class ProductImageService(
         {
             throw new AppNotFoundException($"La presentación con id '{productPresentationId.Value}' no existe para el producto con id '{productId}'.");
         }
+    }
+
+    private static string BuildFileName(string? presentationName, int counter, Guid uploadId)
+    {
+        var segment = NormalizeStorageSegment(presentationName);
+        var uniqueSuffix = uploadId.ToString("N");
+        return segment is null
+            ? $"{counter}_{uniqueSuffix}"
+            : $"{segment}_{counter}_{uniqueSuffix}";
+    }
+
+    private static string? NormalizeStorageSegment(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var decomposed = value.Trim().Normalize(NormalizationForm.FormD);
+        var builder = new StringBuilder(decomposed.Length);
+        foreach (var character in decomposed)
+        {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark)
+            {
+                continue;
+            }
+
+            if (char.IsLetterOrDigit(character))
+            {
+                builder.Append(char.ToLowerInvariant(character));
+            }
+            else if (builder.Length > 0 && builder[^1] != '-')
+            {
+                builder.Append('-');
+            }
+        }
+
+        var segment = builder.ToString().Trim('-');
+        return segment.Length == 0 ? null : segment;
     }
 
     private static async Task<GeneratedVariant> CreateWebpAsync(Image image, int maxWidth, CancellationToken cancellationToken)
