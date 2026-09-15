@@ -200,7 +200,6 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
     // Marcar el resto de la orden como faltantes y registrar la pérdida correspondiente. Esto solo se puede hacer si la orden no está cancelada, no está recibida y no tiene faltantes ya registrados.
     public async Task<OrderDTO> CloseShortagesAsync(int id, CloseOrderShortagesDTO closeShortagesDTO)
     {
-        closeShortagesDTO.Items ??= [];
 
         var order = await GetOrderForShortageUpdateAsync(id);
         if (order.OrderStatusId == (int)OrderStatusCode.Cancelled)
@@ -227,19 +226,11 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             throw new AppBadRequestException("La orden no tiene cantidades pendientes para registrar como faltantes.");
         }
 
-        if (closeShortagesDTO.Items.Count != productsWithPendingQuantity.Count ||
-            closeShortagesDTO.Items.Select(item => item.ProductId).Distinct().Count() != closeShortagesDTO.Items.Count ||
-            closeShortagesDTO.Items.Any(item => productsWithPendingQuantity.All(productVariant => productVariant.Id != item.ProductId)))
-        {
-            throw new AppBadRequestException("Debe registrar exactamente un faltante por cada variante pendiente de la orden.");
-        }
-
         var shortageDate = closeShortagesDTO.ClosedAt.NormalizeToUtc() ?? DateTime.UtcNow;
         var shortages = new List<PurchaseShortage>();
 
-        foreach (var item in closeShortagesDTO.Items)
+        foreach (var productVariant in productsWithPendingQuantity)
         {
-            var productVariant = productsWithPendingQuantity.Single(productVariant => productVariant.Id == item.ProductId);
             var originalQuantity = productVariant.Quantity;
             var shortageQuantity = originalQuantity - productVariant.ReceivedQuantity;
             var originalMerchandiseTotalNio = productVariant.MerchandiseTotalCostNio;

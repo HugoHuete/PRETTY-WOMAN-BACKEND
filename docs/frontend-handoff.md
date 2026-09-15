@@ -165,18 +165,14 @@ Ambas acciones son exclusivas de Admin. Se ejecutan desde el detalle de la orden
 
 #### Cerrar faltantes
 
-Este flujo no permite escoger una cantidad parcial ni cerrar solo algunas variantes: la UI debe listar todas las variantes pendientes y enviar **exactamente una** por cada una. La API deriva la cantidad faltante como `quantity - receivedQuantity`.
+Este flujo cierra todas las variantes pendientes de la orden. La UI puede mostrar la lista para confirmacion, pero no debe enviarla en el request: la API obtiene las variantes pendientes y calcula las cantidades faltantes.
 
 ```json
 {
-  "closedAt": "2026-07-19T18:00:00Z",
-  "items": [
-    {
-      "productId": 123
-    }
-  ]
+  "closedAt": "2026-07-19T18:00:00Z"
 }
 ```
+
 
 - `closedAt` es opcional. Para notas generales de la compra, usar `comments` al crear o actualizar la orden.
 - La UI no envía la cantidad faltante ni el costo perdido: son valores calculados por el backend.

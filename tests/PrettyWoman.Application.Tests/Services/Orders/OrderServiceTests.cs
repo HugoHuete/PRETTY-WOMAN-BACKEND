@@ -196,10 +196,7 @@ public class OrderServiceTests
         order.OrderStatusId = (int)OrderStatusCode.PartiallyReceived;
         await context.SaveChangesAsync();
 
-        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
-        {
-            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
-        });
+        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO());
 
         Assert.Equal((int)OrderStatusCode.PendingRefund, closedOrder.OrderStatusId);
         Assert.Single(closedOrder.PurchaseShortages);
@@ -246,10 +243,7 @@ public class OrderServiceTests
         order.OrderStatusId = (int)OrderStatusCode.PartiallyReceived;
         await context.SaveChangesAsync();
 
-        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
-        {
-            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
-        });
+        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO());
 
         var shortage = Assert.Single(closedOrder.PurchaseShortages);
         Assert.Equal(0m, shortage.LossAmountNio);
@@ -271,10 +265,7 @@ public class OrderServiceTests
         productVariant.AvailableQuantity = 1;
         order.OrderStatusId = (int)OrderStatusCode.PartiallyReceived;
         await context.SaveChangesAsync();
-        await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
-        {
-            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
-        });
+        await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO());
 
         var declinedOrder = await service.DeclineSupplierRefundAsync(orderId, new DeclineSupplierRefundDTO
         {
@@ -299,10 +290,7 @@ public class OrderServiceTests
         var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-AUSENTE", "Variante no recibida"));
         var productVariant = await context.ProductVariants.SingleAsync(item => item.OrderId == orderId);
 
-        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
-        {
-            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
-        });
+        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO());
 
         Assert.Equal((int)OrderStatusCode.PendingRefund, closedOrder.OrderStatusId);
         Assert.Equal(2, Assert.Single(closedOrder.PurchaseShortages).Quantity);
@@ -319,10 +307,7 @@ public class OrderServiceTests
         var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-CLOSED-SHORTAGE", "Producto faltante"));
         var productVariant = await context.ProductVariants.SingleAsync(item => item.OrderId == orderId);
 
-        await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
-        {
-            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
-        });
+        await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO());
 
         var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.UpdateAsync(orderId, new UpdateOrderDTO
         {
@@ -377,10 +362,7 @@ public class OrderServiceTests
         order.OrderStatusId = (int)OrderStatusCode.PartiallyReceived;
         await context.SaveChangesAsync();
 
-        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO
-        {
-            Items = [new CloseOrderShortageItemDTO { ProductId = productVariant.Id }]
-        });
+        var closedOrder = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO());
 
         Assert.Equal(0.02m, closedOrder.TotalShortageLossNio);
         Assert.Equal(0.01m, closedOrder.MerchandiseTotalNio);
