@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using ClosedXML.Excel;
 using PrettyWoman.Application.DTOs.Products;
@@ -31,6 +32,20 @@ public class ProductServiceTests
             .Single(productVariant => productVariant.Id == variant.Id);
 
         Assert.Equal(425.75m, mappedVariant.UnitCostNio);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_DoesNotExposeSizeGroupInProductVariants()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var service = CreateService(context);
+
+        var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1001 });
+        var json = JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.DoesNotContain("\"sizeGroupId\"", json);
+        Assert.DoesNotContain("\"sizeGroupName\"", json);
     }
 
     [Fact]
