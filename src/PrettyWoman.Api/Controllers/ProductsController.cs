@@ -51,6 +51,25 @@ public class ProductsController(IProductService productService, IProductImageSer
         return NoContent();
     }
 
+    [HttpPatch("{productId:int}/price")]
+    public async Task<IActionResult> UpdateProductPrice(
+        int productId,
+        UpdateProductPriceDTO request)
+    {
+        await _productService.UpdatePriceForProductAsync(productId, request);
+        return NoContent();
+    }
+
+    [HttpPatch("{productId:int}/presentations/{productPresentationId:int}/price")]
+    public async Task<IActionResult> UpdatePresentationPrice(
+        int productId,
+        int productPresentationId,
+        UpdateProductPriceDTO request)
+    {
+        await _productService.UpdatePriceForPresentationAsync(productId, productPresentationId, request);
+        return NoContent();
+    }
+
     [HttpGet("{productId:int}/images")]
     public async Task<ActionResult<IReadOnlyCollection<ProductImageDTO>>> GetImages(
         int productId,

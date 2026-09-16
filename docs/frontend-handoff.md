@@ -343,6 +343,8 @@ Las acciones de imágenes e historial están disponibles para Admin y Vendedor d
 | Historial del producto | `GET /api/v1/products/{productId}/inventory-movements` | Devuelve movimientos de todas las variantes del producto. |
 | Historial de variante | `GET /api/v1/products/{productId}/variants/{productVariantId}/inventory-movements` | Devuelve movimientos de una variante. |
 | Actualizar precio de variante | `PATCH /api/v1/products/{productId}/variants/{productVariantId}/price` | Recibe `{ "salePrice": 750 }`; `salePrice` debe ser mayor que cero. Actualiza solo el precio actual de la variante y devuelve `204 No Content`. Las ventas existentes conservan sus precios históricos. |
+| Actualizar precio del producto | `PATCH /api/v1/products/{productId}/price` | Recibe `{ "salePrice": 750 }`; actualiza el precio de todas las variantes del producto y devuelve `204 No Content`. |
+| Actualizar precio de presentación | `PATCH /api/v1/products/{productId}/presentations/{productPresentationId}/price` | Recibe `{ "salePrice": 750 }`; actualiza el precio de las variantes de esa presentación y devuelve `204 No Content`. |
 
 Después de subir, ordenar o eliminar, actualizar la colección con la respuesta o recargar el detalle. Usar `thumbnailUrl` en listas y `webUrl` para vista ampliada. La imagen principal de cada presentación se muestra en `presentations[].primaryImageUrl`; si no existe, la API usa la imagen principal general y luego la portada de la primera presentación como fallback del producto.
 

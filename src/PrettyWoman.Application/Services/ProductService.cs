@@ -265,6 +265,53 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
         await _context.SaveChangesAsync();
     }
 
+    public async Task UpdatePriceForProductAsync(int productId, UpdateProductPriceDTO request)
+    {
+        var productExists = await _context.Products
+            .AsNoTracking()
+            .AnyAsync(product => product.Id == productId);
+
+        if (!productExists)
+        {
+            throw new AppNotFoundException($"El producto con id '{productId}' no existe.");
+        }
+
+        var productVariants = await _context.ProductVariants
+            .Where(productVariant => productVariant.ProductId == productId)
+            .ToListAsync();
+
+        foreach (var productVariant in productVariants)
+        {
+            productVariant.SalePrice = request.SalePrice;
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task UpdatePriceForPresentationAsync(int productId, int productPresentationId, UpdateProductPriceDTO request)
+    {
+        var presentationExists = await _context.ProductPresentations
+            .AsNoTracking()
+            .AnyAsync(presentation => presentation.Id == productPresentationId && presentation.ProductId == productId);
+
+        if (!presentationExists)
+        {
+            throw new AppNotFoundException($"La presentacion con id '{productPresentationId}' no existe para el producto con id '{productId}'.");
+        }
+
+        var productVariants = await _context.ProductVariants
+            .Where(productVariant => productVariant.ProductId == productId &&
+                productVariant.ProductPresentationId == productPresentationId)
+            .ToListAsync();
+
+        foreach (var productVariant in productVariants)
+        {
+            productVariant.SalePrice = request.SalePrice;
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
     public async Task<IEnumerable<ProductInventoryMovementDTO>> GetInventoryMovementsAsync(int productId, int? productVariantId = null)
     {
         var productExists = await _context.Products

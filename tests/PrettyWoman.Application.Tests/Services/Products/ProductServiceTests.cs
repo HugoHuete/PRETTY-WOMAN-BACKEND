@@ -340,6 +340,50 @@ public class ProductServiceTests
     }
 
     [Fact]
+    public async Task UpdatePriceForProductAsync_UpdatesAllProductVariants()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var service = CreateService(context);
+
+        await service.UpdatePriceForProductAsync(1, new UpdateProductPriceDTO { SalePrice = 750m });
+
+        Assert.Equal([750m, 750m], await context.ProductVariants
+            .Where(productVariant => productVariant.ProductId == 1)
+            .OrderBy(productVariant => productVariant.Id)
+            .Select(productVariant => productVariant.SalePrice)
+            .ToArrayAsync());
+        Assert.Equal(500m, await context.ProductVariants
+            .Where(productVariant => productVariant.ProductId == 2)
+            .Select(productVariant => productVariant.SalePrice)
+            .SingleAsync());
+    }
+
+    [Fact]
+    public async Task UpdatePriceForPresentationAsync_UpdatesOnlyPresentationVariants()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var service = CreateService(context);
+        var presentationId = await context.ProductPresentations
+            .Where(presentation => presentation.ProductId == 1)
+            .Select(presentation => presentation.Id)
+            .SingleAsync();
+
+        await service.UpdatePriceForPresentationAsync(1, presentationId, new UpdateProductPriceDTO { SalePrice = 725m });
+
+        Assert.Equal([725m, 725m], await context.ProductVariants
+            .Where(productVariant => productVariant.ProductPresentationId == presentationId)
+            .OrderBy(productVariant => productVariant.Id)
+            .Select(productVariant => productVariant.SalePrice)
+            .ToArrayAsync());
+        Assert.Equal(500m, await context.ProductVariants
+            .Where(productVariant => productVariant.ProductId == 2)
+            .Select(productVariant => productVariant.SalePrice)
+            .SingleAsync());
+    }
+
+    [Fact]
     public async Task UpdatePriceAsync_ThrowsWhenVariantDoesNotExist()
     {
         await using var context = CreateContext();
