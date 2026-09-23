@@ -13,11 +13,15 @@ namespace PrettyWoman.Application.Services;
 public class DiscountCampaignService(IApplicationDbContext context) : IDiscountCampaignService
 {
     private readonly IApplicationDbContext _context = context;
+    private const decimal MaxDiscountValue = 9_999_999_999m;
 
     public async Task<int> CreateAsync(CreateDiscountCampaignDTO createDiscountCampaignDTO)
     {
-        NormalizeAndValidateCampaign(createDiscountCampaignDTO);
-        await ValidateProductsAsync(createDiscountCampaignDTO.ProductVariants);
+        createDiscountCampaignDTO.Name = NormalizeAndValidateCampaign(
+            createDiscountCampaignDTO.Name,
+            createDiscountCampaignDTO.StartDate,
+            createDiscountCampaignDTO.EndDate);
+        await ValidateTargetsAsync(createDiscountCampaignDTO.Targets);
         await EnsureNameIsUniqueAsync(createDiscountCampaignDTO.Name);
 
         var discountCampaign = new DiscountCampaign
@@ -26,13 +30,13 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             StartDate = createDiscountCampaignDTO.StartDate,
             EndDate = createDiscountCampaignDTO.EndDate,
             CancelledAt = null,
-            DiscountCampaignProducts = createDiscountCampaignDTO.ProductVariants
-                .Select(productVariant => new DiscountCampaignProduct
+            DiscountCampaignProducts = createDiscountCampaignDTO.Targets
+                .Select(target => new DiscountCampaignProduct
                 {
-                    ProductId = productVariant.ProductId,
-                    ProductVariantId = productVariant.ProductVariantId,
-                    DiscountTypeId = productVariant.DiscountTypeId,
-                    DiscountValue = productVariant.DiscountValue
+                    ProductId = target.ProductId,
+                    ProductPresentationId = target.ProductPresentationId,
+                    DiscountTypeId = target.DiscountTypeId,
+                    DiscountValue = target.DiscountValue
                 })
                 .ToList()
         };
@@ -50,47 +54,50 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             .FirstOrDefaultAsync(campaign => campaign.Id == id)
             ?? throw new AppNotFoundException($"La campania de descuento con id '{id}' no existe.");
 
-        NormalizeAndValidateCampaign(updateDiscountCampaignDTO);
-        await ValidateProductsAsync(updateDiscountCampaignDTO.ProductVariants);
+        updateDiscountCampaignDTO.Name = NormalizeAndValidateCampaign(
+            updateDiscountCampaignDTO.Name,
+            updateDiscountCampaignDTO.StartDate,
+            updateDiscountCampaignDTO.EndDate);
+
+        await ValidateTargetsAsync(updateDiscountCampaignDTO.Targets);
         await EnsureNameIsUniqueAsync(updateDiscountCampaignDTO.Name, id);
 
         discountCampaign.Name = updateDiscountCampaignDTO.Name;
         discountCampaign.StartDate = updateDiscountCampaignDTO.StartDate;
         discountCampaign.EndDate = updateDiscountCampaignDTO.EndDate;
 
-        var existingProductsByTarget = discountCampaign.DiscountCampaignProducts
+        var existingTargetsByKey = discountCampaign.DiscountCampaignProducts
             .ToDictionary(GetTargetKey);
-        var requestedTargets = updateDiscountCampaignDTO.ProductVariants
+        var requestedTargets = updateDiscountCampaignDTO.Targets
             .Select(GetTargetKey)
             .ToHashSet();
 
-        var productsToRemove = discountCampaign.DiscountCampaignProducts
-            .Where(productVariant => !requestedTargets.Contains(GetTargetKey(productVariant)))
+        var targetsToRemove = discountCampaign.DiscountCampaignProducts
+            .Where(existingTarget => !requestedTargets.Contains(GetTargetKey(existingTarget)))
             .ToList();
 
-        _context.DiscountCampaignProducts.RemoveRange(productsToRemove);
+        _context.DiscountCampaignProducts.RemoveRange(targetsToRemove);
 
-        foreach (var productVariant in updateDiscountCampaignDTO.ProductVariants)
+        foreach (var target in updateDiscountCampaignDTO.Targets)
         {
-            if (existingProductsByTarget.TryGetValue(GetTargetKey(productVariant), out var existingProduct))
+            if (existingTargetsByKey.TryGetValue(GetTargetKey(target), out var existingTarget))
             {
-                existingProduct.DiscountTypeId = productVariant.DiscountTypeId;
-                existingProduct.DiscountValue = productVariant.DiscountValue;
+                existingTarget.DiscountTypeId = target.DiscountTypeId;
+                existingTarget.DiscountValue = target.DiscountValue;
                 continue;
             }
 
             discountCampaign.DiscountCampaignProducts.Add(new DiscountCampaignProduct
             {
-                ProductId = productVariant.ProductId,
-                ProductVariantId = productVariant.ProductVariantId,
-                DiscountTypeId = productVariant.DiscountTypeId,
-                DiscountValue = productVariant.DiscountValue
+                ProductId = target.ProductId,
+                ProductPresentationId = target.ProductPresentationId,
+                DiscountTypeId = target.DiscountTypeId,
+                DiscountValue = target.DiscountValue
             });
         }
 
         await _context.SaveChangesAsync();
     }
-
     public async Task CancelAsync(int id)
     {
         var discountCampaign = await _context.DiscountCampaigns.FirstOrDefaultAsync(campaign => campaign.Id == id)
@@ -106,6 +113,59 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             ?? throw new AppNotFoundException($"La campania de descuento con id '{id}' no existe.");
 
         discountCampaign.CancelledAt = null;
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task<DiscountCampaignImportResultDTO> ValidateImportAsync(
+        int campaignId,
+        DiscountCampaignImportRequestDTO request)
+    {
+        await EnsureCampaignExistsAsync(campaignId);
+
+        var resolvedRows = await ResolveImportRowsAsync(request.Rows ?? []);
+
+        return new DiscountCampaignImportResultDTO
+        {
+            IsValid = resolvedRows.Count > 0 && resolvedRows.All(row => row.Errors.Count == 0),
+            Rows = resolvedRows.Select(MapImportRow).ToList()
+        };
+    }
+
+    public async Task ImportAsync(int campaignId, DiscountCampaignImportRequestDTO request)
+    {
+        var campaign = await _context.DiscountCampaigns
+            .Include(discountCampaign => discountCampaign.DiscountCampaignProducts)
+            .FirstOrDefaultAsync(discountCampaign => discountCampaign.Id == campaignId)
+            ?? throw new AppNotFoundException($"La campania de descuento con id '{campaignId}' no existe.");
+
+        var resolvedRows = await ResolveImportRowsAsync(request.Rows ?? []);
+        var invalidRows = resolvedRows.Where(row => row.Errors.Count > 0).ToList();
+
+        if (resolvedRows.Count == 0 || invalidRows.Count > 0)
+        {
+            var errors = invalidRows
+                .SelectMany(row => row.Errors.Select(error => $"Fila {row.Input.RowNumber}: {error}"))
+                .ToList();
+
+            if (errors.Count == 0)
+            {
+                errors.Add("La importacion debe contener al menos una fila valida.");
+            }
+
+            throw new AppBadRequestException(string.Join(" ", errors));
+        }
+
+        _context.DiscountCampaignProducts.RemoveRange(campaign.DiscountCampaignProducts);
+        campaign.DiscountCampaignProducts = resolvedRows
+            .Select(row => new DiscountCampaignProduct
+            {
+                ProductId = row.Input.ProductPresentationId.HasValue ? null : row.ProductId,
+                ProductPresentationId = row.Input.ProductPresentationId,
+                DiscountTypeId = row.Input.DiscountTypeId,
+                DiscountValue = row.Input.DiscountValue
+            })
+            .ToList();
+
         await _context.SaveChangesAsync();
     }
 
@@ -175,18 +235,12 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         var discountCampaign = await _context.DiscountCampaigns
             .AsNoTracking()
             .Include(campaign => campaign.DiscountCampaignProducts)
-                .ThenInclude(productVariant => productVariant.Product)
+                .ThenInclude(target => target.Product)
             .Include(campaign => campaign.DiscountCampaignProducts)
-                .ThenInclude(productVariant => productVariant.ProductVariant)
-                    .ThenInclude(productVariant => productVariant!.Size)
+                .ThenInclude(target => target.ProductPresentation)
+                    .ThenInclude(presentation => presentation!.Product)
             .Include(campaign => campaign.DiscountCampaignProducts)
-                .ThenInclude(productVariant => productVariant.ProductVariant)
-                    .ThenInclude(productVariant => productVariant!.Product)
-            .Include(campaign => campaign.DiscountCampaignProducts)
-                .ThenInclude(productVariant => productVariant.ProductVariant)
-                    .ThenInclude(productVariant => productVariant!.ProductPresentation)
-            .Include(campaign => campaign.DiscountCampaignProducts)
-                .ThenInclude(productVariant => productVariant.DiscountType)
+                .ThenInclude(target => target.DiscountType)
             .FirstOrDefaultAsync(campaign => campaign.Id == id)
             ?? throw new AppNotFoundException($"La campania de descuento con id '{id}' no existe.");
 
@@ -228,42 +282,24 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             UpdatedAt = campaign.UpdatedAt,
             CreatedById = campaign.CreatedById,
             UpdatedById = campaign.UpdatedById,
-            ProductVariants = campaign.DiscountCampaignProducts
-                .OrderBy(productVariant => productVariant.Product?.Name ?? productVariant.ProductVariant?.Product?.Name ?? string.Empty)
-                .Select(productVariant => new DiscountCampaignProductDTO
+            Targets = campaign.DiscountCampaignProducts
+                .OrderBy(target => target.Product?.Name ?? target.ProductPresentation?.Product?.Name ?? string.Empty)
+                .ThenBy(target => target.ProductPresentation?.Name)
+                .Select(target => new DiscountCampaignTargetDTO
                 {
-                    Id = productVariant.Id,
-                    ProductId = productVariant.ProductId ?? productVariant.ProductVariant?.ProductId,
-                    ProductVariantId = productVariant.ProductVariantId,
-                    ProductName = productVariant.Product?.Name ?? productVariant.ProductVariant?.Product?.Name,
-                    ProductCode = productVariant.Product?.Code ?? productVariant.ProductVariant?.Product?.Code,
-                    SizeId = productVariant.ProductVariant?.SizeId,
-                    SizeName = productVariant.ProductVariant?.Size?.Name,
-                    Variant = productVariant.ProductVariant?.ProductPresentation?.Name,
-                    DiscountTypeId = productVariant.DiscountTypeId,
-                    DiscountTypeName = productVariant.DiscountType?.Name,
-                    DiscountValue = productVariant.DiscountValue
+                    Id = target.Id,
+                    ProductId = target.ProductId ?? target.ProductPresentation?.ProductId,
+                    ProductPresentationId = target.ProductPresentationId,
+                    ProductName = target.Product?.Name ?? target.ProductPresentation?.Product?.Name,
+                    ProductCode = target.Product?.Code ?? target.ProductPresentation?.Product?.Code,
+                    PresentationName = target.ProductPresentation?.Name,
+                    DiscountTypeId = target.DiscountTypeId,
+                    DiscountTypeName = target.DiscountType?.Name,
+                    DiscountValue = target.DiscountValue
                 })
                 .ToList()
         };
     }
-
-    private static void NormalizeAndValidateCampaign(CreateDiscountCampaignDTO discountCampaignDTO)
-    {
-        discountCampaignDTO.Name = NormalizeAndValidateCampaign(
-            discountCampaignDTO.Name,
-            discountCampaignDTO.StartDate,
-            discountCampaignDTO.EndDate);
-    }
-
-    private static void NormalizeAndValidateCampaign(UpdateDiscountCampaignDTO discountCampaignDTO)
-    {
-        discountCampaignDTO.Name = NormalizeAndValidateCampaign(
-            discountCampaignDTO.Name,
-            discountCampaignDTO.StartDate,
-            discountCampaignDTO.EndDate);
-    }
-
     private static string NormalizeAndValidateCampaign(string name, DateTime startDate, DateTime endDate)
     {
         name = name.NormalizeRequired("Nombre de la campania de descuento");
@@ -282,24 +318,24 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         query.PageSize = query.PageSize < 1 ? 20 : Math.Min(query.PageSize, 100);
     }
 
-    private async Task ValidateProductsAsync(IReadOnlyCollection<CreateDiscountCampaignProductDTO> productVariants)
+    private async Task ValidateTargetsAsync(IReadOnlyCollection<CreateDiscountCampaignTargetDTO> targets)
     {
-        foreach (var productVariant in productVariants)
+        foreach (var target in targets)
         {
-            ValidateDiscountValue(productVariant);
+            ValidateDiscountValue(target);
         }
 
-        var invalidTarget = productVariants
-            .FirstOrDefault(productVariant => productVariant.ProductId.HasValue == productVariant.ProductVariantId.HasValue);
+        var invalidTarget = targets
+            .FirstOrDefault(target => target.ProductId.HasValue == target.ProductPresentationId.HasValue);
 
         if (invalidTarget is not null)
         {
-            throw new AppBadRequestException("Cada regla de descuento debe tener exactamente uno de estos destinos: producto o variante.");
+            throw new AppBadRequestException("Cada regla de descuento debe tener exactamente uno de estos destinos: producto o presentacion.");
         }
 
-        var repeatedProductId = productVariants
-            .Where(productVariant => productVariant.ProductId.HasValue)
-            .GroupBy(productVariant => productVariant.ProductId!.Value)
+        var repeatedProductId = targets
+            .Where(target => target.ProductId.HasValue)
+            .GroupBy(target => target.ProductId!.Value)
             .Where(group => group.Count() > 1)
             .Select(group => group.Key)
             .FirstOrDefault();
@@ -309,15 +345,27 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             throw new AppBadRequestException($"El producto con id '{repeatedProductId}' esta repetido en la campania.");
         }
 
-        var productIds = productVariants
-            .Where(productVariant => productVariant.ProductId.HasValue)
-            .Select(productVariant => productVariant.ProductId!.Value)
+        var repeatedPresentationId = targets
+            .Where(target => target.ProductPresentationId.HasValue)
+            .GroupBy(target => target.ProductPresentationId!.Value)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key)
+            .FirstOrDefault();
+
+        if (repeatedPresentationId > 0)
+        {
+            throw new AppBadRequestException($"La presentacion con id '{repeatedPresentationId}' esta repetida en la campania.");
+        }
+
+        var productIds = targets
+            .Where(target => target.ProductId.HasValue)
+            .Select(target => target.ProductId!.Value)
             .Distinct()
             .ToList();
 
         var existingProductIds = await _context.Products
-            .Where(productVariant => productIds.Contains(productVariant.Id))
-            .Select(productVariant => productVariant.Id)
+            .Where(product => productIds.Contains(product.Id))
+            .Select(product => product.Id)
             .ToListAsync();
 
         var missingProductId = productIds.Except(existingProductIds).FirstOrDefault();
@@ -327,50 +375,26 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
             throw new AppNotFoundException($"El producto con id '{missingProductId}' no existe.");
         }
 
-        var productVariantIds = productVariants
-            .Where(productVariant => productVariant.ProductVariantId.HasValue)
-            .Select(productVariant => productVariant.ProductVariantId!.Value)
+        var presentationIds = targets
+            .Where(target => target.ProductPresentationId.HasValue)
+            .Select(target => target.ProductPresentationId!.Value)
             .Distinct()
             .ToList();
 
-        var existingProductVariants = await _context.ProductVariants
-            .Where(productVariant => productVariantIds.Contains(productVariant.Id))
-            .Select(productVariant => new { productVariant.Id, productVariant.ProductId })
+        var existingPresentationIds = await _context.ProductPresentations
+            .Where(presentation => presentationIds.Contains(presentation.Id))
+            .Select(presentation => presentation.Id)
             .ToListAsync();
 
-        var missingProductVariantId = productVariantIds
-            .Except(existingProductVariants.Select(productVariant => productVariant.Id))
-            .FirstOrDefault();
+        var missingPresentationId = presentationIds.Except(existingPresentationIds).FirstOrDefault();
 
-        if (missingProductVariantId > 0)
+        if (missingPresentationId > 0)
         {
-            throw new AppNotFoundException($"La variante con id '{missingProductVariantId}' no existe.");
+            throw new AppNotFoundException($"La presentacion con id '{missingPresentationId}' no existe.");
         }
 
-        var productVariantById = existingProductVariants.ToDictionary(productVariant => productVariant.Id);
-        foreach (var productVariant in productVariants.Where(productVariant => productVariant.ProductVariantId.HasValue))
-        {
-            var productVariantEntity = productVariantById[productVariant.ProductVariantId!.Value];
-            if (productVariant.ProductId.HasValue && productVariantEntity.ProductId != productVariant.ProductId.Value)
-            {
-                throw new AppBadRequestException($"La variante con id '{productVariant.ProductVariantId}' no pertenece al producto con id '{productVariant.ProductId}'.");
-            }
-        }
-
-        var repeatedProductVariantId = productVariants
-            .Where(productVariant => productVariant.ProductVariantId.HasValue)
-            .GroupBy(productVariant => productVariant.ProductVariantId!.Value)
-            .Where(group => group.Count() > 1)
-            .Select(group => group.Key)
-            .FirstOrDefault();
-
-        if (repeatedProductVariantId > 0)
-        {
-            throw new AppBadRequestException($"La variante con id '{repeatedProductVariantId}' esta repetida en la campania.");
-        }
-
-        var discountTypeIds = productVariants
-            .Select(productVariant => productVariant.DiscountTypeId)
+        var discountTypeIds = targets
+            .Select(target => target.DiscountTypeId)
             .Distinct()
             .ToList();
 
@@ -387,15 +411,189 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         }
     }
 
-    private static string GetTargetKey(CreateDiscountCampaignProductDTO productVariant) =>
-        productVariant.ProductId.HasValue
-            ? $"product:{productVariant.ProductId}"
-            : $"variant:{productVariant.ProductVariantId}";
+    private static string GetTargetKey(CreateDiscountCampaignTargetDTO target) =>
+        target.ProductId.HasValue
+            ? $"product:{target.ProductId}"
+            : $"presentation:{target.ProductPresentationId}";
 
-    private static string GetTargetKey(DiscountCampaignProduct productVariant) =>
-        productVariant.ProductId.HasValue
-            ? $"product:{productVariant.ProductId}"
-            : $"variant:{productVariant.ProductVariantId}";
+    private static string GetTargetKey(DiscountCampaignProduct target) =>
+        target.ProductId.HasValue
+            ? $"product:{target.ProductId}"
+            : $"presentation:{target.ProductPresentationId}";
+
+    private async Task EnsureCampaignExistsAsync(int campaignId)
+    {
+        var exists = await _context.DiscountCampaigns
+            .AnyAsync(campaign => campaign.Id == campaignId);
+
+        if (!exists)
+        {
+            throw new AppNotFoundException($"La campania de descuento con id '{campaignId}' no existe.");
+        }
+    }
+
+    private async Task<List<ResolvedImportRow>> ResolveImportRowsAsync(
+        IReadOnlyCollection<DiscountCampaignImportRowDTO> rows)
+    {
+        if (rows.Any(row => row is null))
+        {
+            throw new AppBadRequestException("La importacion no puede contener filas nulas.");
+        }
+
+        var resolvedRows = rows
+            .Select(row => new ResolvedImportRow(row))
+            .ToList();
+
+        var productCodes = rows
+            .Select(row => row.ProductCode)
+            .Distinct()
+            .ToList();
+
+        var products = await _context.Products
+            .Where(product => productCodes.Contains(product.Code))
+            .ToDictionaryAsync(product => product.Code);
+
+        var presentationIds = rows
+            .Where(row => row.ProductPresentationId.HasValue)
+            .Select(row => row.ProductPresentationId!.Value)
+            .Distinct()
+            .ToList();
+
+        var presentations = await _context.ProductPresentations
+            .Where(presentation => presentationIds.Contains(presentation.Id))
+            .Select(presentation => new ImportPresentationInfo(
+                presentation.Id,
+                presentation.ProductId,
+                presentation.Product!.Code,
+                presentation.Product.Name,
+                presentation.Name))
+            .ToDictionaryAsync(presentation => presentation.Id);
+
+        var discountTypeIds = rows
+            .Select(row => row.DiscountTypeId)
+            .Distinct()
+            .ToList();
+
+        var existingDiscountTypeIds = (await _context.DiscountTypes
+            .Where(discountType => discountTypeIds.Contains(discountType.Id))
+            .Select(discountType => discountType.Id)
+            .ToListAsync())
+            .ToHashSet();
+
+        foreach (var resolvedRow in resolvedRows)
+        {
+            var input = resolvedRow.Input;
+
+            if (input.RowNumber <= 0)
+            {
+                resolvedRow.Errors.Add("El numero de fila debe ser mayor que cero.");
+            }
+
+            if (!products.TryGetValue(input.ProductCode, out var product))
+            {
+                resolvedRow.Errors.Add($"El codigo de producto '{input.ProductCode}' no existe.");
+            }
+            else
+            {
+                resolvedRow.Product = product;
+                resolvedRow.ProductId = product.Id;
+            }
+
+            if (input.ProductPresentationId.HasValue)
+            {
+                if (!presentations.TryGetValue(input.ProductPresentationId.Value, out var presentation))
+                {
+                    resolvedRow.Errors.Add(
+                        $"La presentacion con id '{input.ProductPresentationId.Value}' no existe.");
+                }
+                else
+                {
+                    resolvedRow.Presentation = presentation;
+
+                    if (resolvedRow.Product is not null &&
+                        presentation.ProductId != resolvedRow.Product.Id)
+                    {
+                        resolvedRow.Errors.Add(
+                            $"La presentacion con id '{presentation.Id}' no pertenece al producto con codigo '{input.ProductCode}'.");
+                    }
+                }
+            }
+
+            if (!existingDiscountTypeIds.Contains(input.DiscountTypeId))
+            {
+                resolvedRow.Errors.Add($"El tipo de descuento con id '{input.DiscountTypeId}' no existe.");
+            }
+
+            if (input.DiscountValue <= 0)
+            {
+                resolvedRow.Errors.Add("El valor del descuento debe ser mayor que cero.");
+            }
+            else if (input.DiscountValue > MaxDiscountValue)
+            {
+                resolvedRow.Errors.Add("El valor del descuento no puede ser mayor que 9999999999.");
+            }
+            else if (input.DiscountTypeId == (int)DiscountTypeOption.Percentage &&
+                     input.DiscountValue > 100)
+            {
+                resolvedRow.Errors.Add("El porcentaje de descuento no puede ser mayor que 100.");
+            }
+
+            if (resolvedRow.Errors.Count == 0)
+            {
+                resolvedRow.TargetKey = input.ProductPresentationId.HasValue
+                    ? $"presentation:{input.ProductPresentationId}"
+                    : $"product:{resolvedRow.ProductId}";
+            }
+        }
+
+        var repeatedTargets = resolvedRows
+            .Where(row => row.TargetKey is not null)
+            .GroupBy(row => row.TargetKey!)
+            .Where(group => group.Count() > 1)
+            .SelectMany(group => group)
+            .ToList();
+
+        foreach (var repeatedTarget in repeatedTargets)
+        {
+            repeatedTarget.Errors.Add("El destino esta repetido en la importacion.");
+        }
+
+        return resolvedRows;
+    }
+
+    private static DiscountCampaignImportRowResultDTO MapImportRow(ResolvedImportRow row)
+    {
+        return new DiscountCampaignImportRowResultDTO
+        {
+            RowNumber = row.Input.RowNumber,
+            ProductCode = row.Input.ProductCode,
+            ProductId = row.ProductId,
+            ProductPresentationId = row.Input.ProductPresentationId,
+            ProductName = row.Product?.Name ?? row.Presentation?.ProductName,
+            PresentationName = row.Presentation?.Name,
+            DiscountTypeId = row.Input.DiscountTypeId,
+            DiscountValue = row.Input.DiscountValue,
+            IsValid = row.Errors.Count == 0,
+            Errors = row.Errors
+        };
+    }
+
+    private sealed class ResolvedImportRow(DiscountCampaignImportRowDTO input)
+    {
+        public DiscountCampaignImportRowDTO Input { get; } = input;
+        public Product? Product { get; set; }
+        public ImportPresentationInfo? Presentation { get; set; }
+        public int? ProductId { get; set; }
+        public string? TargetKey { get; set; }
+        public List<string> Errors { get; } = [];
+    }
+
+    private sealed record ImportPresentationInfo(
+        int Id,
+        int ProductId,
+        int ProductCode,
+        string ProductName,
+        string? Name);
 
     private async Task EnsureNameIsUniqueAsync(string name, int? currentCampaignId = null)
     {
@@ -410,14 +608,19 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
         }
     }
 
-    private static void ValidateDiscountValue(CreateDiscountCampaignProductDTO productVariant)
+    private static void ValidateDiscountValue(CreateDiscountCampaignTargetDTO target)
     {
-        if (productVariant.DiscountValue <= 0)
+        if (target.DiscountValue <= 0)
         {
             throw new AppBadRequestException("El valor del descuento debe ser mayor que cero.");
         }
 
-        if (productVariant.DiscountTypeId == (int)DiscountTypeOption.Percentage && productVariant.DiscountValue > 100)
+        if (target.DiscountValue > MaxDiscountValue)
+        {
+            throw new AppBadRequestException("El valor del descuento no puede ser mayor que 9999999999.");
+        }
+
+        if (target.DiscountTypeId == (int)DiscountTypeOption.Percentage && target.DiscountValue > 100)
         {
             throw new AppBadRequestException("El porcentaje de descuento no puede ser mayor que 100.");
         }

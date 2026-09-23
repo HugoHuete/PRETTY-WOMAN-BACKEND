@@ -29,5 +29,4 @@ public class ProductVariant
     public ICollection<ProductReceiptDetail> ProductReceiptDetails { get; set; } = [];
     public ICollection<InventoryAdjustmentItem> InventoryAdjustmentItems { get; set; } = [];
     public ICollection<PurchaseShortage> PurchaseShortages { get; set; } = [];
-    public ICollection<DiscountCampaignProduct> DiscountCampaignProducts { get; set; } = [];
 }

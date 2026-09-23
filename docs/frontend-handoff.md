@@ -348,56 +348,90 @@ Las acciones de imágenes e historial están disponibles para Admin y Vendedor d
 
 Después de subir, ordenar o eliminar, actualizar la colección con la respuesta o recargar el detalle. Usar `thumbnailUrl` en listas y `webUrl` para vista ampliada. La imagen principal de cada presentación se muestra en `presentations[].primaryImageUrl`; si no existe, la API usa la imagen principal general y luego la portada de la primera presentación como fallback del producto.
 
-### Descuentos: campañas
+### Descuentos: campanias
 
-La pantalla de campañas es exclusiva de Admin. Para el listado usar `GET /api/v1/discountcampaigns`, que devuelve un `PaginatedResult<DiscountCampaignSummaryDTO>`.
+La pantalla de campanias es exclusiva de Admin. Para el listado usar `GET /api/v1/discountcampaigns`, que devuelve un `PaginatedResult<DiscountCampaignSummaryDTO>`.
 
-```http
-GET /api/v1/discountcampaigns?page=1&pageSize=20
-GET /api/v1/discountcampaigns?page=2&pageSize=10&status=Scheduled
-GET /api/v1/discountcampaigns?status=Cancelled
-```
+El detalle y los formularios trabajan con `targets`. Cada regla debe tener exactamente uno de estos destinos:
 
-`page` y `pageSize` son opcionales; sus valores predeterminados son `1` y `20`. `pageSize` se normaliza al rango `1..100` (un valor menor de `1` usa `20`, y uno mayor de `100` usa `100`). `status` también es opcional: omitirlo devuelve campañas de todos los estados. Acepta exactamente `Scheduled`, `Active`, `Finished` o `Cancelled`.
+- `productId`: aplica al producto completo.
+- `productPresentationId`: aplica unicamente a esa presentacion. Se identifica por id; el nombre puede ser `null` y no es un identificador confiable.
 
-El estado efectivo se calcula automáticamente: una campaña no cancelada es `Scheduled` antes de `startDate`, `Active` desde `startDate` hasta `endDate` (inclusive), y `Finished` después de `endDate`. Una campaña cancelada es `Cancelled` sin importar sus fechas.
-
-La respuesta paginada tiene la forma:
+Ejemplo de campania:
 
 ```json
 {
-  "items": [
+  "name": "Rebajas de agosto",
+  "startDate": "2026-08-01T00:00:00Z",
+  "endDate": "2026-08-31T23:59:59Z",
+  "targets": [
     {
-      "id": 12,
-      "name": "Rebajas de agosto",
-      "startDate": "2026-08-01T00:00:00Z",
-      "endDate": "2026-08-31T23:59:59Z",
-      "statusId": 2,
-      "statusName": "Active",
-      "createdAt": "2026-07-28T15:30:00Z",
-      "updatedAt": null,
-      "createdById": "user-id",
-      "updatedById": null
+      "productId": 101,
+      "productPresentationId": null,
+      "discountTypeId": 2,
+      "discountValue": 20
+    },
+    {
+      "productId": null,
+      "productPresentationId": 45,
+      "discountTypeId": 3,
+      "discountValue": 450
     }
-  ],
-  "page": 1,
-  "pageSize": 20,
-  "totalCount": 1,
-  "totalPages": 1,
-  "hasPreviousPage": false,
-  "hasNextPage": false
+  ]
 }
 ```
 
-Los elementos de `items` son resúmenes: **no incluyen `productVariants`**. Usarlos para la tabla, el filtro y la paginación sin solicitar ni asumir el detalle de prendas.
+Al crear o editar, enviar `targets` con exactamente uno de `productId` o `productPresentationId`. El detalle devuelve para cada regla `id`, `productId`, `productPresentationId`, `productName`, `productCode`, `presentationName`, `discountTypeId`, `discountTypeName` y `discountValue`.
 
-Para abrir o editar una campaña, `GET /api/v1/discountcampaigns/{id}` mantiene la respuesta de detalle `DiscountCampaignDTO`, que **sí incluye `productVariants`**, `statusId` y `statusName`. Cada regla contiene `id`, `productId`, `productVariantId`, `productName`, `productCode`, `sizeId`, `sizeName`, `variant`, `discountTypeId`, `discountTypeName` y `discountValue`.
+La resolucion de precios prioriza una regla activa de presentacion; si no existe una aplicable, usa la regla activa del producto. No se configuran descuentos por variante.
 
-Al crear o editar, cada elemento de `productVariants` debe enviar exactamente uno de `productId` o `productVariantId`. `productId` aplica a todas las variantes del producto; `productVariantId` aplica únicamente a esa variante/talla. `productId` se devuelve también en reglas específicas como referencia del producto al que pertenece la variante.
+Para cancelar usar `PATCH /api/v1/discountcampaigns/{id}/cancel`; para reactivar, `PATCH /api/v1/discountcampaigns/{id}/reactivate`. Ambos devuelven `204 No Content`.
 
-Para cancelar usar `PATCH /api/v1/discountcampaigns/{id}/cancel`; para reactivar, `PATCH /api/v1/discountcampaigns/{id}/reactivate`. Ambos devuelven `204 No Content`. Reactivar elimina la cancelación, pero no fuerza `Active`: el backend vuelve a calcular el estado según las fechas, por lo que puede resultar `Scheduled`, `Active` o `Finished`.
+#### Importacion de descuentos desde CSV
 
-### Finanzas: catálogo de tipos de movimiento
+El frontend puede lee el CSV, convertirlo a JSON y validar las filas antes de guardar. No es necesario enviar el archivo como `multipart/form-data`.
+
+Formato recomendado del CSV:
+
+```csv
+productCode,productPresentationId,discountTypeId,discountValue
+101,,2,20
+102,45,3,450
+```
+
+Para validar sin modificar la campania:
+
+```http
+POST /api/v1/discountcampaigns/{id}/products/validate
+```
+
+Request:
+
+```json
+{
+  "rows": [
+    {
+      "rowNumber": 2,
+      "productCode": 101,
+      "productPresentationId": null,
+      "discountTypeId": 2,
+      "discountValue": 20
+    }
+  ]
+}
+```
+
+La respuesta contiene `isValid` y el resultado de cada fila. Las filas validas incluyen los ids y nombres resueltos de producto/presentacion; las invalidas incluyen `errors`. El backend valida el codigo del producto, que la presentacion pertenezca al producto, los tipos/valores y destinos repetidos.
+
+Despues de mostrar el resultado al usuario, guardar con:
+
+```http
+POST /api/v1/discountcampaigns/{id}/products/import
+```
+
+El endpoint vuelve a validar todo y reemplaza los destinos de la campania en una sola operacion. Si alguna fila es invalida, no modifica la campania y devuelve `400 ProblemDetails`; si todo es valido, devuelve `204 No Content`.
+
+### Finanzas: catalogo de tipos de movimiento
 
 Antes de crear o filtrar movimientos financieros, cargar `GET /api/v1/finances/movement-types`. Devuelve una lista de `{ id, name }`; la UI debe usar estos ids y nombres, no hardcodear tipos. Los movimientos automáticos —por ejemplo `SupplierRefund` o `WarehouseShippingPayment`— se muestran en el listado financiero, pero no deben crearse manualmente desde la pantalla de movimientos.
 

@@ -44,6 +44,24 @@ public class DiscountCampaignsController(IDiscountCampaignService discountCampai
         return NoContent();
     }
 
+    [HttpPost("{id:int}/products/validate")]
+    public async Task<ActionResult<DiscountCampaignImportResultDTO>> ValidateImport(
+        int id,
+        [FromBody] DiscountCampaignImportRequestDTO request)
+    {
+        var result = await _discountCampaignService.ValidateImportAsync(id, request);
+        return Ok(result);
+    }
+
+    [HttpPost("{id:int}/products/import")]
+    public async Task<IActionResult> Import(
+        int id,
+        [FromBody] DiscountCampaignImportRequestDTO request)
+    {
+        await _discountCampaignService.ImportAsync(id, request);
+        return NoContent();
+    }
+
     [HttpPatch("{id:int}/cancel")]
     public async Task<IActionResult> Cancel(int id)
     {

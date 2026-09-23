@@ -2,13 +2,13 @@ using System.ComponentModel.DataAnnotations;
 
 namespace PrettyWoman.Application.DTOs.Discounts;
 
-public class CreateDiscountCampaignProductDTO
+public class CreateDiscountCampaignTargetDTO
 {
-    [Range(1, int.MaxValue, ErrorMessage = "El producto del descuento debe ser válido.")]
+    [Range(1, int.MaxValue, ErrorMessage = "El producto del descuento debe ser valido.")]
     public int? ProductId { get; set; }
 
-    [Range(1, int.MaxValue, ErrorMessage = "La variante del descuento debe ser válida.")]
-    public int? ProductVariantId { get; set; }
+    [Range(1, int.MaxValue, ErrorMessage = "La presentacion del descuento debe ser valida.")]
+    public int? ProductPresentationId { get; set; }
 
     [Range(1, int.MaxValue, ErrorMessage = "El tipo de descuento es obligatorio.")]
     public int DiscountTypeId { get; set; }

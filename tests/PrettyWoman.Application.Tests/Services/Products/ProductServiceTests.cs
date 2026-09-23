@@ -123,7 +123,7 @@ public class ProductServiceTests
     }
 
     [Fact]
-    public async Task GetAllAsync_ReturnsOnlyActiveDiscountedPrice()
+    public async Task GetAllAsync_UsesProductDiscountWhenPresentationHasNoDiscount()
     {
         await using var context = CreateContext();
         await SeedProductsAsync(context);
@@ -142,23 +142,25 @@ public class ProductServiceTests
     }
 
     [Fact]
-    public async Task GetAllAsync_UsesBestDiscountBetweenProductAndSpecificVariantRules()
+    public async Task GetAllAsync_UsesPresentationDiscountBeforeProductDiscount()
     {
         await using var context = CreateContext();
         await SeedProductsAsync(context);
-        var variant = await context.ProductVariants.SingleAsync(productVariant => productVariant.Id == 1);
+        var presentation = await context.ProductPresentations
+            .SingleAsync(productPresentation => productPresentation.ProductId == 1);
         var now = DateTime.UtcNow;
+
         context.DiscountCampaigns.Add(new DiscountCampaign
         {
             Id = 4,
-            Name = "Promo variante específica",
+            Name = "Promo presentacion especifica",
             StartDate = now.AddDays(-1),
             EndDate = now.AddDays(1),
             DiscountCampaignProducts =
             [
                 new DiscountCampaignProduct
                 {
-                    ProductVariantId = variant.Id,
+                    ProductPresentationId = presentation.Id,
                     DiscountTypeId = (int)DiscountTypeOption.FixedPrice,
                     DiscountValue = 400m
                 }
@@ -169,13 +171,15 @@ public class ProductServiceTests
 
         var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1001 });
 
-        var specificVariant = result.Items.Single().Presentations.SelectMany(presentation => presentation.Sizes).Single(productVariant => productVariant.Id == variant.Id);
-        var otherVariant = result.Items.Single().Presentations.SelectMany(presentation => presentation.Sizes).Single(productVariant => productVariant.Id != variant.Id);
-        Assert.Equal(400m, specificVariant.DiscountedSalePrice);
-        Assert.Equal(585m, otherVariant.DiscountedSalePrice);
-        Assert.Equal(4, specificVariant.DiscountCampaignId);
+        var variants = result.Items.Single().Presentations.SelectMany(productPresentation => productPresentation.Sizes).ToList();
+        Assert.NotEmpty(variants);
+        Assert.All(variants, productVariant =>
+        {
+            Assert.Equal(400m, productVariant.DiscountedSalePrice);
+            Assert.Equal(4, productVariant.DiscountCampaignId);
+            Assert.Equal("Promo presentacion especifica", productVariant.DiscountCampaignName);
+        });
     }
-
     [Fact]
     public async Task ExportAsync_ReturnsExcelWithFilteredProductVariants()
     {
