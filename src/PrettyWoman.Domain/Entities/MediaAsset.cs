@@ -7,7 +7,6 @@ public class MediaAsset
 {
     public Guid Id { get; set; }
     public required string StorageKey { get; set; }
-    public MediaBucket OriginalBucket { get; set; }
     public MediaVisibility Visibility { get; set; }
     public required string OriginalContentType { get; set; }
     public long OriginalSizeBytes { get; set; }

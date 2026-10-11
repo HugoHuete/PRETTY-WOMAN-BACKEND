@@ -7,7 +7,7 @@ La API usa Cloudflare R2 mediante su API compatible con S3. No se guardan binari
 Crear dos buckets R2:
 
 - `pretty-woman-public-media`: variantes de catálogo que el navegador puede solicitar.
-- `pretty-woman-private-media`: originales y futuros comprobantes o evidencias que nunca deben exponerse directamente.
+- `pretty-woman-private-media`: futuros comprobantes o evidencias que nunca deben exponerse directamente.
 
 Configurar las credenciales exclusivamente mediante secretos de entorno o User Secrets. Nunca incluirlas en `appsettings.json` ni en el repositorio.
 
@@ -34,7 +34,7 @@ Para cargar las imágenes existentes de un producto usar `GET /api/v1/products/{
 
 Las claves siguen el formato products/{productCode}/{presentation}_{counter}_{uniqueId}, o products/{productCode}/{counter}_{uniqueId} cuando no hay presentación. El sufijo único por carga evita colisiones y la reutilización de claves durante la limpieza diferida.
 
-Se admiten JPEG, PNG y WebP de hasta 4 MB, con un máximo de 6000 px de ancho o alto y 25 millones de píxeles totales. La API valida el contenido real, conserva el original en el bucket privado y genera una miniatura WebP de 400 px y una versión WebP de 1200 px en el bucket público.
+Se admiten JPEG, PNG y WebP de hasta 4 MB, con un máximo de 6000 px de ancho o alto y 25 millones de píxeles totales. La API valida el contenido real, procesa el original temporalmente y genera una miniatura WebP de 400 px y una versión WebP de 1200 px en el bucket público; el archivo original no se persiste en R2.
 
 Para actualizar en una sola operación el orden y la imagen principal del producto general, usar `PUT /api/v1/products/{productId}/images`:
 

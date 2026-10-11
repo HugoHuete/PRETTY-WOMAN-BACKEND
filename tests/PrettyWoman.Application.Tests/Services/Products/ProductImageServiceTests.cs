@@ -33,6 +33,28 @@ public class ProductImageServiceTests
     }
 
     [Fact]
+    public async Task UploadAsync_DoesNotStoreOriginalVariant()
+    {
+        await using var context = CreateContextWithProduct();
+        var storage = new TrackingMediaObjectStorage();
+        var service = CreateService(context, storage);
+        await using var content = await CreatePngAsync(width: 1, height: 1);
+
+        await service.UploadAsync(1, null, content, "image/png");
+
+        Assert.Equal(2, storage.Uploads.Count);
+        Assert.All(storage.Uploads, upload => Assert.Equal(MediaBucket.Public, upload.Bucket));
+
+        var asset = await context.MediaAssets
+            .Include(item => item.Variants)
+            .SingleAsync();
+
+        Assert.DoesNotContain(asset.Variants, variant => variant.Type == MediaVariantType.Original);
+        Assert.Equal(2, asset.Variants.Count);
+        Assert.DoesNotContain(context.MediaAssetVariants, variant => variant.Type == MediaVariantType.Original);
+    }
+
+    [Fact]
     public async Task UploadAsync_RejectsImageExceedingDimensionLimitBeforeWritingToStorage()
     {
         await using var context = CreateContextWithProduct();
@@ -63,12 +85,11 @@ public class ProductImageServiceTests
 
         await service.UploadAsync(1, 10, content, "image/png");
 
-        Assert.Equal(3, storage.Uploads.Count);
-        var baseKey = storage.Uploads[0].StorageKey[..^4];
+        Assert.Equal(2, storage.Uploads.Count);
+        var baseKey = storage.Uploads[0].StorageKey[..^15];
         Assert.StartsWith("products/42/tamano-azul_1_", baseKey);
         Assert.Equal(
             [
-                (MediaBucket.Private, $"{baseKey}.png"),
                 (MediaBucket.Public, $"{baseKey}-thumb-400.webp"),
                 (MediaBucket.Public, $"{baseKey}-web-1200.webp")
             ],
@@ -90,8 +111,8 @@ public class ProductImageServiceTests
 
         var second = await service.UploadAsync(1, 10, secondContent, "image/png", isPrimary: true);
 
-        var firstBaseKey = storage.Uploads[0].StorageKey[..^4];
-        var secondBaseKey = storage.Uploads[3].StorageKey[..^4];
+        var firstBaseKey = storage.Uploads[0].StorageKey[..^15];
+        var secondBaseKey = storage.Uploads[2].StorageKey[..^15];
         Assert.NotEqual(firstBaseKey, secondBaseKey);
 
         var images = await context.ProductImages.OrderBy(image => image.Id).ToListAsync();
@@ -111,12 +132,11 @@ public class ProductImageServiceTests
 
         await service.UploadAsync(1, 10, content, "image/png");
 
-        Assert.Equal(3, storage.Uploads.Count);
-        var baseKey = storage.Uploads[0].StorageKey[..^4];
+        Assert.Equal(2, storage.Uploads.Count);
+        var baseKey = storage.Uploads[0].StorageKey[..^15];
         Assert.StartsWith("products/42/1_", baseKey);
         Assert.Equal(
             [
-                (MediaBucket.Private, $"{baseKey}.png"),
                 (MediaBucket.Public, $"{baseKey}-thumb-400.webp"),
                 (MediaBucket.Public, $"{baseKey}-web-1200.webp")
             ],
@@ -134,13 +154,13 @@ public class ProductImageServiceTests
 
         await using var firstContent = await CreatePngAsync(width: 1, height: 1);
         await service.UploadAsync(1, 10, firstContent, "image/png");
-        var firstBaseKey = storage.Uploads[0].StorageKey[..^4];
+        var firstBaseKey = storage.Uploads[0].StorageKey[..^15];
         var firstImageId = context.ProductImages.Single().Id;
         await service.DeleteAsync(1, firstImageId);
 
         await using var secondContent = await CreatePngAsync(width: 1, height: 1);
         await service.UploadAsync(1, 10, secondContent, "image/png");
-        var secondBaseKey = storage.Uploads[3].StorageKey[..^4];
+        var secondBaseKey = storage.Uploads[2].StorageKey[..^15];
 
         Assert.NotEqual(firstBaseKey, secondBaseKey);
         Assert.StartsWith("products/42/rojo_1_", secondBaseKey);
@@ -227,7 +247,6 @@ public class ProductImageServiceTests
         {
             Id = Guid.NewGuid(),
             StorageKey = key,
-            OriginalBucket = MediaBucket.Private,
             Visibility = MediaVisibility.Public,
             OriginalContentType = "image/png",
             OriginalSizeBytes = 1,

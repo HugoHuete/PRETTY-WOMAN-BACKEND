@@ -193,7 +193,6 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
             {
                 Id = assetId,
                 StorageKey = baseKey,
-                OriginalBucket = MediaBucket.Private,
                 Visibility = MediaVisibility.Public,
                 OriginalContentType = "image/jpeg",
                 OriginalSizeBytes = 10,

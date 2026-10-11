@@ -689,7 +689,6 @@ public class ProductServiceTests
     {
         Id = Guid.NewGuid(),
         StorageKey = $"productVariants/test/{Guid.NewGuid():N}",
-        OriginalBucket = MediaBucket.Private,
         Visibility = MediaVisibility.Public,
         OriginalContentType = "image/jpeg",
         OriginalSizeBytes = 1,

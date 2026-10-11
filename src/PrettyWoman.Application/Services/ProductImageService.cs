@@ -143,7 +143,6 @@ public class ProductImageService(
             var assetId = Guid.NewGuid();
             var fileName = BuildFileName(presentation?.Name, counter, assetId);
             var baseKey = $"products/{product.Code}/{fileName}";
-            var originalKey = $"{baseKey}.{GetExtension(format)}";
             var thumbnailKey = $"{baseKey}-thumb-400.webp";
             var webKey = $"{baseKey}-web-1200.webp";
             var thumbnailUrl = mediaUrlResolver.GetPublicUrl(thumbnailKey);
@@ -155,9 +154,6 @@ public class ProductImageService(
             var uploaded = new List<(MediaBucket Bucket, string Key)>();
             try
             {
-                original.Position = 0;
-                await objectStorage.UploadAsync(MediaBucket.Private, originalKey, original, detectedContentType, cancellationToken);
-                uploaded.Add((MediaBucket.Private, originalKey));
                 thumbnail.Content.Position = 0;
                 await objectStorage.UploadAsync(MediaBucket.Public, thumbnailKey, thumbnail.Content, "image/webp", cancellationToken);
                 uploaded.Add((MediaBucket.Public, thumbnailKey));
@@ -185,7 +181,6 @@ public class ProductImageService(
                 {
                     Id = assetId,
                     StorageKey = baseKey,
-                    OriginalBucket = MediaBucket.Private,
                     Visibility = MediaVisibility.Public,
                     OriginalContentType = detectedContentType,
                     OriginalSizeBytes = original.Length,
@@ -195,7 +190,6 @@ public class ProductImageService(
                     CreatedAt = DateTime.UtcNow,
                     Variants =
                     [
-                        new MediaAssetVariant { Id = Guid.NewGuid(), Type = MediaVariantType.Original, Bucket = MediaBucket.Private, StorageKey = originalKey, ContentType = detectedContentType, SizeBytes = original.Length, Width = image.Width, Height = image.Height },
                         new MediaAssetVariant { Id = Guid.NewGuid(), Type = MediaVariantType.Thumbnail, Bucket = MediaBucket.Public, StorageKey = thumbnailKey, ContentType = "image/webp", SizeBytes = thumbnail.Content.Length, Width = thumbnail.Width, Height = thumbnail.Height },
                         new MediaAssetVariant { Id = Guid.NewGuid(), Type = MediaVariantType.Web, Bucket = MediaBucket.Public, StorageKey = webKey, ContentType = "image/webp", SizeBytes = web.Content.Length, Width = web.Width, Height = web.Height }
                     ]
@@ -477,14 +471,6 @@ public class ProductImageService(
         "PNG" => "image/png",
         "WEBP" => "image/webp",
         _ => "application/octet-stream"
-    };
-
-    private static string GetExtension(IImageFormat format) => format.Name.ToUpperInvariant() switch
-    {
-        "JPEG" => "jpg",
-        "PNG" => "png",
-        "WEBP" => "webp",
-        _ => throw new AppUnsupportedMediaTypeException("Formato de imagen no compatible.")
     };
 
     private sealed record GeneratedVariant(MemoryStream Content, int Width, int Height) : IAsyncDisposable
