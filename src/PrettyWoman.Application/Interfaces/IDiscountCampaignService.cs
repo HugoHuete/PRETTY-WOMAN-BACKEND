@@ -10,7 +10,6 @@ public interface IDiscountCampaignService
     Task<int> CreateAsync(CreateDiscountCampaignDTO createDiscountCampaignDTO);
     Task UpdateAsync(int id, UpdateDiscountCampaignDTO updateDiscountCampaignDTO);
     Task<DiscountCampaignImportResultDTO> ValidateImportAsync(
-        int campaignId,
         DiscountCampaignImportRequestDTO request);
     Task ImportAsync(int campaignId, DiscountCampaignImportRequestDTO request);
     Task CancelAsync(int id);

@@ -402,7 +402,7 @@ productCode,productPresentationId,discountTypeId,discountValue
 Para validar sin modificar la campania:
 
 ```http
-POST /api/v1/discountcampaigns/{id}/products/validate
+POST /api/v1/discountcampaigns/products/validate
 ```
 
 Request:
@@ -434,6 +434,38 @@ El endpoint vuelve a validar todo y reemplaza los destinos de la campania en una
 ### Finanzas: catalogo de tipos de movimiento
 
 Antes de crear o filtrar movimientos financieros, cargar `GET /api/v1/finances/movement-types`. Devuelve una lista de `{ id, name }`; la UI debe usar estos ids y nombres, no hardcodear tipos. Los movimientos automáticos —por ejemplo `SupplierRefund` o `WarehouseShippingPayment`— se muestran en el listado financiero, pero no deben crearse manualmente desde la pantalla de movimientos.
+
+#### Movimientos manuales
+
+La pantalla de movimientos puede crear, editar y eliminar únicamente estos tipos:
+
+- `Expense`: gasto operativo. Siempre usa dirección `Out` y requiere `expenseCategoryId`.
+- `OwnerInvestment`: inversión adicional del dueño en el negocio. Siempre usa dirección `In`.
+- `OwnerWithdrawal`: retiro del dueño. Siempre usa dirección `Out`.
+- `Adjustment`: ajuste manual. Requiere indicar explícitamente `movementDirectionId` como `In` o `Out`.
+
+Los movimientos manuales se registran con `POST /api/v1/finances/movements`, se editan con `PUT /api/v1/finances/movements/{id}` y se eliminan con `DELETE /api/v1/finances/movements/{id}`. El request usa estos campos:
+
+```json
+{
+  "description": "Compra de empaques",
+  "movementDate": "2026-10-11T00:00:00Z",
+  "financialMovementTypeId": 4,
+  "movementDirectionId": null,
+  "expenseCategoryId": 2,
+  "amount": 2500.00,
+  "comments": "Bolsas y cajas"
+}
+```
+
+Los valores `4` y `2` del ejemplo son ilustrativos. `financialMovementTypeId` debe obtenerse desde `GET /api/v1/finances/movement-types`; no asumir que los ids serán siempre los mismos. `movementDirectionId` se envía únicamente para `Adjustment`, y `expenseCategoryId` únicamente para `Expense`. El monto debe ser mayor que cero, la descripción es obligatoria y la fecha/comentarios son opcionales. El backend asigna la tasa de cambio vigente al registrar el movimiento.
+
+No crear manualmente desde esta pantalla `SalePayment`, `SupplierPayment`, `SupplierRefund`, `CustomerRefund`, `LoanReceived`, `LoanPayment`, `WarehouseShippingPayment` ni `DeliveryAgencyReconciliation`. Estos movimientos se generan o actualizan desde pagos de ventas, compras, reembolsos, préstamos, recepciones y conciliaciones. El frontend puede mostrarlos en el listado, pero no debe ofrecerlos como opciones de creación, edición o eliminación manual.
+
+Los préstamos tienen su propio flujo: `POST /api/v1/loans` registra el préstamo y crea `LoanReceived`; `POST /api/v1/loans/{id}/payments` registra un pago y crea `LoanPayment`. No simular esos movimientos usando `POST /api/v1/finances/movements`.
+
+Para `Expense`, cargar también `GET /api/v1/expensecategories` y mostrar las categorías disponibles. Para inversiones, retiros y ajustes no se debe mostrar selector de categoría de gasto.
+
 
 ### Ventas, pagos y envíos
 

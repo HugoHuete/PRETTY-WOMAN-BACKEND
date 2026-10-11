@@ -44,12 +44,11 @@ public class DiscountCampaignsController(IDiscountCampaignService discountCampai
         return NoContent();
     }
 
-    [HttpPost("{id:int}/products/validate")]
+    [HttpPost("products/validate")]
     public async Task<ActionResult<DiscountCampaignImportResultDTO>> ValidateImport(
-        int id,
         [FromBody] DiscountCampaignImportRequestDTO request)
     {
-        var result = await _discountCampaignService.ValidateImportAsync(id, request);
+        var result = await _discountCampaignService.ValidateImportAsync(request);
         return Ok(result);
     }
 

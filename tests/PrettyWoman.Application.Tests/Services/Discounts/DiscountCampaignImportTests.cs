@@ -16,8 +16,7 @@ public class DiscountCampaignImportTests
         await using var context = CreateContext();
         var productVariant = await AddProductAsync(context, "Vestido", 101);
         await AddDiscountTypesAsync(context);
-        var campaign = await AddCampaignAsync(context);
-        var result = await CreateService(context).ValidateImportAsync(campaign.Id, new DiscountCampaignImportRequestDTO
+        var result = await CreateService(context).ValidateImportAsync(new DiscountCampaignImportRequestDTO
         {
             Rows =
             [
@@ -43,9 +42,7 @@ public class DiscountCampaignImportTests
     {
         await using var context = CreateContext();
         await AddDiscountTypesAsync(context);
-        var campaign = await AddCampaignAsync(context);
-
-        var result = await CreateService(context).ValidateImportAsync(campaign.Id, new DiscountCampaignImportRequestDTO
+        var result = await CreateService(context).ValidateImportAsync(new DiscountCampaignImportRequestDTO
         {
             Rows =
             [
@@ -70,9 +67,7 @@ public class DiscountCampaignImportTests
         await using var context = CreateContext();
         await AddProductAsync(context, "Vestido", 101);
         await AddDiscountTypesAsync(context);
-        var campaign = await AddCampaignAsync(context);
-
-        var result = await CreateService(context).ValidateImportAsync(campaign.Id, new DiscountCampaignImportRequestDTO
+        var result = await CreateService(context).ValidateImportAsync(new DiscountCampaignImportRequestDTO
         {
             Rows =
             [
@@ -96,10 +91,8 @@ public class DiscountCampaignImportTests
     public async Task ValidateImportAsync_RejectsNullRows()
     {
         await using var context = CreateContext();
-        var campaign = await AddCampaignAsync(context);
-
         await Assert.ThrowsAsync<AppBadRequestException>(() =>
-            CreateService(context).ValidateImportAsync(campaign.Id, new DiscountCampaignImportRequestDTO
+            CreateService(context).ValidateImportAsync(new DiscountCampaignImportRequestDTO
             {
                 Rows = [null!]
             }));
@@ -112,9 +105,7 @@ public class DiscountCampaignImportTests
         var firstProductVariant = await AddProductAsync(context, "Vestido", 101);
         var secondProductVariant = await AddProductAsync(context, "Pantalon", 102);
         await AddDiscountTypesAsync(context);
-        var campaign = await AddCampaignAsync(context);
-
-        var result = await CreateService(context).ValidateImportAsync(campaign.Id, new DiscountCampaignImportRequestDTO
+        var result = await CreateService(context).ValidateImportAsync(new DiscountCampaignImportRequestDTO
         {
             Rows =
             [
@@ -140,9 +131,7 @@ public class DiscountCampaignImportTests
         await using var context = CreateContext();
         await AddProductAsync(context, "Vestido", 101);
         await AddDiscountTypesAsync(context);
-        var campaign = await AddCampaignAsync(context);
-
-        var result = await CreateService(context).ValidateImportAsync(campaign.Id, new DiscountCampaignImportRequestDTO
+        var result = await CreateService(context).ValidateImportAsync(new DiscountCampaignImportRequestDTO
         {
             Rows =
             [

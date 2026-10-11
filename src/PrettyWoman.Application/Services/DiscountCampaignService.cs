@@ -117,11 +117,8 @@ public class DiscountCampaignService(IApplicationDbContext context) : IDiscountC
     }
 
     public async Task<DiscountCampaignImportResultDTO> ValidateImportAsync(
-        int campaignId,
         DiscountCampaignImportRequestDTO request)
     {
-        await EnsureCampaignExistsAsync(campaignId);
-
         var resolvedRows = await ResolveImportRowsAsync(request.Rows ?? []);
 
         return new DiscountCampaignImportResultDTO
