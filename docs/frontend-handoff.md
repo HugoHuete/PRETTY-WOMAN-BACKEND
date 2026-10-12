@@ -85,6 +85,7 @@ Puede trabajar con:
 | Proveedores | Proveedores | Admin | Listar, crear, editar | Proveedores | `GET /api/v1/suppliers`, `POST /api/v1/suppliers`, `PUT /api/v1/suppliers/{id}` |
 | Descuentos | Campanas | Admin | Listar, crear, editar, cancelar y reactivar | Campanas de descuento | `GET /api/v1/discountcampaigns`, `POST /api/v1/discountcampaigns`, `PUT /api/v1/discountcampaigns/{id}`, `PATCH /api/v1/discountcampaigns/{id}/cancel`, `PATCH /api/v1/discountcampaigns/{id}/reactivate` |
 | Finanzas | Balance | Admin | Ver balance actual | Balance financiero | `GET /api/v1/finances/current-balance` |
+| Finanzas | Resumen mensual | Admin | Consultar ingresos, ganancia, gastos y utilidad por año/mes | Resumen financiero mensual con totales anuales y general | `GET /api/v1/finances/monthly-summary` |
 | Finanzas | Movimientos | Admin | Listar, filtrar, crear, editar, eliminar | Movimientos, tipos de movimiento | `GET /api/v1/finances/movement-types`, `GET /api/v1/finances/movements`, `POST /api/v1/finances/movements`, `PUT /api/v1/finances/movements/{id}`, `DELETE /api/v1/finances/movements/{id}` |
 | Finanzas | Prestamos | Admin | Listar, crear, editar, eliminar, registrar pagos | Prestamos, duenos, pagos | `GET /api/v1/loans`, `POST /api/v1/loans`, `PUT /api/v1/loans/{id}`, `DELETE /api/v1/loans/{id}`, `POST /api/v1/loans/{id}/payments` |
 | Finanzas | Duenos de prestamo | Admin | Listar, crear, editar | Duenos de prestamo | `GET /api/v1/loanowners`, `POST /api/v1/loanowners`, `PUT /api/v1/loanowners/{id}` |
@@ -792,3 +793,48 @@ No existe todavía una ruta específica para cancelar una sola línea de venta. 
 - Devuelve ventas no canceladas, cobros registrados, reservas activas creadas en el período, entregas creadas en el período e incidencias de inventario abiertas registradas en el período. `payments.collectedNio` y cada elemento de `payments.byPaymentMethod` representan el monto financiero realmente recibido (`netReceivedAmount + exchangeDifferenceNio`), mientras el saldo pendiente de ventas continúa calculándose con el monto aplicado (`grossAmount`).
 - El bloque `financial` solo se devuelve a Admin e incluye ingresos, egresos y balance del período. El frontend de Vendedor no debe depender de ese campo.
 - Las listas `payments.byPaymentMethod` y `operations.deliveriesByStatus` pueden estar vacías; el frontend debe representarlas como cero, no como error.
+
+## Contrato del resumen financiero mensual
+
+- `GET /api/v1/finances/monthly-summary` requiere JWT de Admin.
+- Query opcional: `fromYear` y `toYear`, inclusivos. Se puede enviar solo uno; sin `toYear`, el período termina en el año actual de Nicaragua. Si no se envía ninguno, incluye los años con datos hasta el año actual. `fromYear > toYear` devuelve HTTP 400.
+- Cada año incluye los 12 meses, aun si alguno no tiene movimientos. El mes es numérico (`1`–`12`); el frontend debe mostrar su nombre localizado. `grandTotal` agrega los años seleccionados y su porcentaje se calcula sobre los totales, no como promedio de porcentajes mensuales.
+- Todos los montos están en NIO. `incomeNio` suma ventas no canceladas, resta reembolsos por su fecha efectiva y agrega el neto de cambios completados. `grossProfitNio` considera la ganancia de venta, el ajuste de devoluciones recibidas y el margen de prendas salientes en cambios completados. `expensesNio` suma movimientos de tipo `Expense` y el costo congelado de incidencias resueltas como `ConfirmedLost`.
+- `utilityNio = grossProfitNio - expensesNio`; `utilityPercentage = utilityNio / incomeNio * 100`, redondeado a dos decimales, o cero si el ingreso es cero. Los meses se asignan según la hora local de Nicaragua.
+- Si el período no contiene datos, `years` es una lista vacía y `grandTotal` contiene ceros.
+
+Ejemplo abreviado (la respuesta real incluye los 12 objetos de mes por cada año):
+
+```json
+{
+  "fromYear": 2025,
+  "toYear": 2026,
+  "years": [
+    {
+      "year": 2026,
+      "months": [
+        {
+          "month": 1,
+          "incomeNio": 125000.00,
+          "grossProfitNio": 51000.00,
+          "expensesNio": 12000.00,
+          "utilityNio": 39000.00,
+          "utilityPercentage": 31.20
+        }
+      ],
+      "incomeNio": 125000.00,
+      "grossProfitNio": 51000.00,
+      "expensesNio": 12000.00,
+      "utilityNio": 39000.00,
+      "utilityPercentage": 31.20
+    }
+  ],
+  "grandTotal": {
+    "incomeNio": 125000.00,
+    "grossProfitNio": 51000.00,
+    "expensesNio": 12000.00,
+    "utilityNio": 39000.00,
+    "utilityPercentage": 31.20
+  }
+}
+```

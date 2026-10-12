@@ -70,6 +70,7 @@ public class ProductInventoryIssueService(
             ProductInventoryIssueTypeId = createIssueDTO.ProductInventoryIssueTypeId,
             ProductInventoryIssueStatusId = (int)ProductInventoryIssueStatusOption.Open,
             Quantity = createIssueDTO.Quantity,
+            UnitCostNioAtIssue = productVariant.UnitCostNio,
             IssueDate = issueDate,
             Comments = createIssueDTO.Comments
         };

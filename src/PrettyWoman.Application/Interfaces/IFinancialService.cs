@@ -6,6 +6,8 @@ namespace PrettyWoman.Application.Interfaces;
 public interface IFinancialService
 {
     Task<CurrentFinancialBalanceDTO> GetCurrentBalanceAsync();
+    Task<MonthlyFinancialSummaryDTO> GetMonthlySummaryAsync(int? fromYear, int? toYear);
+    Task<byte[]> ExportMonthlySummaryAsync(int? fromYear, int? toYear);
     Task<IEnumerable<FinancialMovementTypeDTO>> GetMovementTypesAsync();
     Task<PaginatedResult<FinancialMovementDTO>> GetMovementsAsync(FinancialMovementQueryDTO query);
     Task<FinancialMovementDTO> CreateManualMovementAsync(CreateFinancialMovementDTO createMovementDTO);

@@ -21,6 +21,27 @@ public class FinancesController(IFinancialService financialService) : Controller
         return Ok(balance);
     }
 
+    [HttpGet("monthly-summary")]
+    public async Task<ActionResult<MonthlyFinancialSummaryDTO>> GetMonthlySummary(
+        [FromQuery] int? fromYear,
+        [FromQuery] int? toYear)
+    {
+        var summary = await _financialService.GetMonthlySummaryAsync(fromYear, toYear);
+        return Ok(summary);
+    }
+
+    [HttpGet("monthly-summary/export")]
+    public async Task<IActionResult> ExportMonthlySummary(
+        [FromQuery] int? fromYear,
+        [FromQuery] int? toYear)
+    {
+        var file = await _financialService.ExportMonthlySummaryAsync(fromYear, toYear);
+        return File(
+            file,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"financial-summary-{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx");
+    }
+
     [HttpGet("movement-types")]
     public async Task<ActionResult<IEnumerable<FinancialMovementTypeDTO>>> GetMovementTypes()
     {

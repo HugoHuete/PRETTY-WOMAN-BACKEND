@@ -1,3 +1,4 @@
+using System.Data;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -24,6 +25,9 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
 
     public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default) =>
         Database.BeginTransactionAsync(cancellationToken);
+
+    public Task<IDbContextTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken = default) =>
+        Database.BeginTransactionAsync(isolationLevel, cancellationToken);
 
     private void ApplyAuditValues()
     {

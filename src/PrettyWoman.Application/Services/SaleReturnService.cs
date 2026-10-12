@@ -208,6 +208,7 @@ public class SaleReturnService(
                 ProductInventoryIssueTypeId = (int)ProductInventoryIssueTypeOption.Damaged,
                 ProductInventoryIssueStatusId = (int)ProductInventoryIssueStatusOption.Open,
                 Quantity = item.Quantity,
+                UnitCostNioAtIssue = productVariant.UnitCostNio,
                 IssueDate = receivedAt,
                 Comments = item.Comments
             };
