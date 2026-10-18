@@ -19,8 +19,7 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
     public const string EmployeeEmail = "employee.integration@prettywoman.test";
     public const string EmployeePassword = "Employee123!Integration";
 
-    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder()
-        .WithImage("postgres:16-alpine")
+    private readonly PostgreSqlContainer _postgres = new PostgreSqlBuilder("postgres:16-alpine")
         .WithDatabase("pretty_woman_integration")
         .WithUsername("postgres")
         .WithPassword("postgres")
