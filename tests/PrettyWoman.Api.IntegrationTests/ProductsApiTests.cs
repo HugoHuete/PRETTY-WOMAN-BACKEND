@@ -31,6 +31,44 @@ public class ProductsApiTests(PrettyWomanApiFactory factory)
         Assert.Empty(await response.Content.ReadAsByteArrayAsync());
     }
 
+    [Fact]
+    public async Task EmployeeCanUpdateAllProductVariantPrices()
+    {
+        var productVariant = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        using var client = await CreateEmployeeClientAsync();
+
+        var response = await client.PatchAsJsonAsync(
+            $"/api/v1/products/{productVariant.ProductId}/price",
+            new UpdateProductPriceDTO { SalePrice = 750m });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Equal(750m, await context.ProductVariants
+            .Where(productVariantEntity => productVariantEntity.Id == productVariant.ProductVariantId)
+            .Select(productVariantEntity => productVariantEntity.SalePrice)
+            .SingleAsync());
+    }
+
+    [Fact]
+    public async Task EmployeeCanUpdatePresentationVariantPrices()
+    {
+        var productVariant = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        using var client = await CreateEmployeeClientAsync();
+
+        var response = await client.PatchAsJsonAsync(
+            $"/api/v1/products/{productVariant.ProductId}/presentations/{productVariant.ProductPresentationId}/price",
+            new UpdateProductPriceDTO { SalePrice = 725m });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.Equal(725m, await context.ProductVariants
+            .Where(productVariantEntity => productVariantEntity.Id == productVariant.ProductVariantId)
+            .Select(productVariantEntity => productVariantEntity.SalePrice)
+            .SingleAsync());
+    }
+
     [Theory]
     [InlineData(0)]
     [InlineData(-1)]

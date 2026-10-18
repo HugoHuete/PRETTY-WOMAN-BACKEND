@@ -4,8 +4,7 @@ public class ProductInventoryIssueQueryDTO
 {
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 20;
-    public int? ProductId { get; set; }
-    public int? ProductVariantId { get; set; }
+    public int? ProductCode { get; set; }
     public int? ProductInventoryIssueTypeId { get; set; }
     public int? ProductInventoryIssueStatusId { get; set; }
 }

@@ -11,16 +11,16 @@ public class DiscountCampaignProductConfiguration : IEntityTypeConfiguration<Dis
         builder.Property(x => x.DiscountValue).HasPrecision(12, 2);
 
         builder.HasOne(x => x.Product).WithMany(x => x.DiscountCampaignProducts).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
-        builder.HasOne(x => x.ProductVariant).WithMany(x => x.DiscountCampaignProducts).HasForeignKey(x => x.ProductVariantId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.ProductPresentation).WithMany(x => x.DiscountCampaignProducts).HasForeignKey(x => x.ProductPresentationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.DiscountCampaign).WithMany(x => x.DiscountCampaignProducts).HasForeignKey(x => x.DiscountCampaignId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.DiscountType).WithMany().HasForeignKey(x => x.DiscountTypeId).OnDelete(DeleteBehavior.Restrict);
 
         builder.HasIndex(x => new { x.DiscountCampaignId, x.ProductId })
             .IsUnique()
             .HasFilter("product_id IS NOT NULL");
-        builder.HasIndex(x => new { x.DiscountCampaignId, x.ProductVariantId })
+        builder.HasIndex(x => new { x.DiscountCampaignId, x.ProductPresentationId })
             .IsUnique()
-            .HasFilter("product_variant_id IS NOT NULL");
+            .HasFilter("product_presentation_id IS NOT NULL");
 
         builder.ToTable(t =>
         {
@@ -29,7 +29,7 @@ public class DiscountCampaignProductConfiguration : IEntityTypeConfiguration<Dis
                 "discount_value > 0");
             t.HasCheckConstraint(
                 "ck_discount_campaign_product_exactly_one_target",
-                "(product_id IS NOT NULL) <> (product_variant_id IS NOT NULL)");
+                "(product_id IS NOT NULL) <> (product_presentation_id IS NOT NULL)");
         });
     }
 }

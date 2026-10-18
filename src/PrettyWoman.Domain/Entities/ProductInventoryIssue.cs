@@ -9,6 +9,7 @@ public class ProductInventoryIssue : IAuditableEntity
     public int ProductInventoryIssueTypeId { get; set; }
     public int ProductInventoryIssueStatusId { get; set; } = (int)ProductInventoryIssueStatusOption.Open;
     public int Quantity { get; set; }
+    public decimal UnitCostNioAtIssue { get; set; }
     public DateTime IssueDate { get; set; }
     public DateTime? ResolvedAt { get; set; }
     public string? Comments { get; set; }

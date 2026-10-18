@@ -1,4 +1,5 @@
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG SIXLABORS_LICENSE_KEY
 WORKDIR /src
 
 COPY ["src/PrettyWoman.Api/PrettyWoman.Api.csproj", "src/PrettyWoman.Api/"]

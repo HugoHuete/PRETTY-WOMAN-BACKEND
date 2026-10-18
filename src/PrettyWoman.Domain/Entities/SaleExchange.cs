@@ -15,6 +15,7 @@ public class SaleExchange : IAuditableEntity
     public decimal OutboundItemsTotal { get; set; }
     public decimal BalanceToCollect { get; set; }
     public string? Comments { get; set; }
+    public DateTime? CompletedAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
     public string? CreatedById { get; set; }

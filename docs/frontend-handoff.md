@@ -85,6 +85,7 @@ Puede trabajar con:
 | Proveedores | Proveedores | Admin | Listar, crear, editar | Proveedores | `GET /api/v1/suppliers`, `POST /api/v1/suppliers`, `PUT /api/v1/suppliers/{id}` |
 | Descuentos | Campanas | Admin | Listar, crear, editar, cancelar y reactivar | Campanas de descuento | `GET /api/v1/discountcampaigns`, `POST /api/v1/discountcampaigns`, `PUT /api/v1/discountcampaigns/{id}`, `PATCH /api/v1/discountcampaigns/{id}/cancel`, `PATCH /api/v1/discountcampaigns/{id}/reactivate` |
 | Finanzas | Balance | Admin | Ver balance actual | Balance financiero | `GET /api/v1/finances/current-balance` |
+| Finanzas | Resumen mensual | Admin | Consultar ingresos, ganancia, gastos y utilidad por año/mes | Resumen financiero mensual con totales anuales y general | `GET /api/v1/finances/monthly-summary` |
 | Finanzas | Movimientos | Admin | Listar, filtrar, crear, editar, eliminar | Movimientos, tipos de movimiento | `GET /api/v1/finances/movement-types`, `GET /api/v1/finances/movements`, `POST /api/v1/finances/movements`, `PUT /api/v1/finances/movements/{id}`, `DELETE /api/v1/finances/movements/{id}` |
 | Finanzas | Prestamos | Admin | Listar, crear, editar, eliminar, registrar pagos | Prestamos, duenos, pagos | `GET /api/v1/loans`, `POST /api/v1/loans`, `PUT /api/v1/loans/{id}`, `DELETE /api/v1/loans/{id}`, `POST /api/v1/loans/{id}/payments` |
 | Finanzas | Duenos de prestamo | Admin | Listar, crear, editar | Duenos de prestamo | `GET /api/v1/loanowners`, `POST /api/v1/loanowners`, `PUT /api/v1/loanowners/{id}` |
@@ -335,68 +336,137 @@ El archivo contiene una fila por variante, con producto, código, proveedor, tal
 Las acciones de imágenes e historial están disponibles para Admin y Vendedor desde el detalle de producto.
 | Flujo | Endpoint | Request / resultado |
 |---|---|---|
+| Listar imágenes | `GET /api/v1/products/{productId}/images?productPresentationId=31` | Devuelve la colección `ProductImageDTO` ordenada por `sortOrder`. Omitir el query param para imágenes generales. Usar los `id` recibidos para ordenar, seleccionar principal o eliminar. |
 | Consultar imagen | `GET /api/v1/products/{productId}/images/{imageId}` | Devuelve `{ id, productPresentationId, thumbnailUrl, webUrl, isPrimary, sortOrder }`; `productPresentationId: null` significa imagen general. |
-| Subir imagen | `POST /api/v1/products/{productId}/images?productPresentationId=31` | `multipart/form-data`, campo `file`; máximo 4 MB, 6000 px de ancho o alto y 25 millones de píxeles totales. Omitir el query param para una imagen general. Devuelve la imagen creada. |
+| Subir imagen | `POST /api/v1/products/{productId}/images?productPresentationId=31` | `multipart/form-data`, campos `file` e `isPrimary` opcional; máximo 4 MB, 6000 px de ancho o alto y 25 millones de píxeles totales. Omitir el query param para una imagen general. Con `isPrimary=true`, la nueva imagen reemplaza la portada del ámbito; si se omite o es `false`, se conserva la actual y la primera imagen del ámbito queda como principal. Devuelve la imagen creada. |
 | Ordenar y seleccionar portada | `PUT /api/v1/products/{productId}/images` | `{ "productPresentationId": 31, "primaryImageId": 10, "imageIdsInOrder": [10, 11, 12] }`; el ámbito es general si el id es `null`. Devuelve la colección ordenada de ese ámbito. |
 | Eliminar imagen | `DELETE /api/v1/products/{productId}/images/{imageId}` | Devuelve `204`. Pedir confirmación. |
 | Historial del producto | `GET /api/v1/products/{productId}/inventory-movements` | Devuelve movimientos de todas las variantes del producto. |
 | Historial de variante | `GET /api/v1/products/{productId}/variants/{productVariantId}/inventory-movements` | Devuelve movimientos de una variante. |
 | Actualizar precio de variante | `PATCH /api/v1/products/{productId}/variants/{productVariantId}/price` | Recibe `{ "salePrice": 750 }`; `salePrice` debe ser mayor que cero. Actualiza solo el precio actual de la variante y devuelve `204 No Content`. Las ventas existentes conservan sus precios históricos. |
+| Actualizar precio del producto | `PATCH /api/v1/products/{productId}/price` | Recibe `{ "salePrice": 750 }`; actualiza el precio de todas las variantes del producto y devuelve `204 No Content`. |
+| Actualizar precio de presentación | `PATCH /api/v1/products/{productId}/presentations/{productPresentationId}/price` | Recibe `{ "salePrice": 750 }`; actualiza el precio de las variantes de esa presentación y devuelve `204 No Content`. |
 
 Después de subir, ordenar o eliminar, actualizar la colección con la respuesta o recargar el detalle. Usar `thumbnailUrl` en listas y `webUrl` para vista ampliada. La imagen principal de cada presentación se muestra en `presentations[].primaryImageUrl`; si no existe, la API usa la imagen principal general y luego la portada de la primera presentación como fallback del producto.
 
-### Descuentos: campañas
+### Descuentos: campanias
 
-La pantalla de campañas es exclusiva de Admin. Para el listado usar `GET /api/v1/discountcampaigns`, que devuelve un `PaginatedResult<DiscountCampaignSummaryDTO>`.
+La pantalla de campanias es exclusiva de Admin. Para el listado usar `GET /api/v1/discountcampaigns`, que devuelve un `PaginatedResult<DiscountCampaignSummaryDTO>`.
 
-```http
-GET /api/v1/discountcampaigns?page=1&pageSize=20
-GET /api/v1/discountcampaigns?page=2&pageSize=10&status=Scheduled
-GET /api/v1/discountcampaigns?status=Cancelled
-```
+El detalle y los formularios trabajan con `targets`. Cada regla debe tener exactamente uno de estos destinos:
 
-`page` y `pageSize` son opcionales; sus valores predeterminados son `1` y `20`. `pageSize` se normaliza al rango `1..100` (un valor menor de `1` usa `20`, y uno mayor de `100` usa `100`). `status` también es opcional: omitirlo devuelve campañas de todos los estados. Acepta exactamente `Scheduled`, `Active`, `Finished` o `Cancelled`.
+- `productId`: aplica al producto completo.
+- `productPresentationId`: aplica unicamente a esa presentacion. Se identifica por id; el nombre puede ser `null` y no es un identificador confiable.
 
-El estado efectivo se calcula automáticamente: una campaña no cancelada es `Scheduled` antes de `startDate`, `Active` desde `startDate` hasta `endDate` (inclusive), y `Finished` después de `endDate`. Una campaña cancelada es `Cancelled` sin importar sus fechas.
-
-La respuesta paginada tiene la forma:
+Ejemplo de campania:
 
 ```json
 {
-  "items": [
+  "name": "Rebajas de agosto",
+  "startDate": "2026-08-01T00:00:00Z",
+  "endDate": "2026-08-31T23:59:59Z",
+  "targets": [
     {
-      "id": 12,
-      "name": "Rebajas de agosto",
-      "startDate": "2026-08-01T00:00:00Z",
-      "endDate": "2026-08-31T23:59:59Z",
-      "statusId": 2,
-      "statusName": "Active",
-      "createdAt": "2026-07-28T15:30:00Z",
-      "updatedAt": null,
-      "createdById": "user-id",
-      "updatedById": null
+      "productId": 101,
+      "productPresentationId": null,
+      "discountTypeId": 2,
+      "discountValue": 20
+    },
+    {
+      "productId": null,
+      "productPresentationId": 45,
+      "discountTypeId": 3,
+      "discountValue": 450
     }
-  ],
-  "page": 1,
-  "pageSize": 20,
-  "totalCount": 1,
-  "totalPages": 1,
-  "hasPreviousPage": false,
-  "hasNextPage": false
+  ]
 }
 ```
 
-Los elementos de `items` son resúmenes: **no incluyen `productVariants`**. Usarlos para la tabla, el filtro y la paginación sin solicitar ni asumir el detalle de prendas.
+Al crear o editar, enviar `targets` con exactamente uno de `productId` o `productPresentationId`. El detalle devuelve para cada regla `id`, `productId`, `productPresentationId`, `productName`, `productCode`, `presentationName`, `discountTypeId`, `discountTypeName` y `discountValue`.
 
-Para abrir o editar una campaña, `GET /api/v1/discountcampaigns/{id}` mantiene la respuesta de detalle `DiscountCampaignDTO`, que **sí incluye `productVariants`**, `statusId` y `statusName`. Cada regla contiene `id`, `productId`, `productVariantId`, `productName`, `productCode`, `sizeId`, `sizeName`, `variant`, `discountTypeId`, `discountTypeName` y `discountValue`.
+La resolucion de precios prioriza una regla activa de presentacion; si no existe una aplicable, usa la regla activa del producto. No se configuran descuentos por variante.
 
-Al crear o editar, cada elemento de `productVariants` debe enviar exactamente uno de `productId` o `productVariantId`. `productId` aplica a todas las variantes del producto; `productVariantId` aplica únicamente a esa variante/talla. `productId` se devuelve también en reglas específicas como referencia del producto al que pertenece la variante.
+Para cancelar usar `PATCH /api/v1/discountcampaigns/{id}/cancel`; para reactivar, `PATCH /api/v1/discountcampaigns/{id}/reactivate`. Ambos devuelven `204 No Content`.
 
-Para cancelar usar `PATCH /api/v1/discountcampaigns/{id}/cancel`; para reactivar, `PATCH /api/v1/discountcampaigns/{id}/reactivate`. Ambos devuelven `204 No Content`. Reactivar elimina la cancelación, pero no fuerza `Active`: el backend vuelve a calcular el estado según las fechas, por lo que puede resultar `Scheduled`, `Active` o `Finished`.
+#### Importacion de descuentos desde CSV
 
-### Finanzas: catálogo de tipos de movimiento
+El frontend puede lee el CSV, convertirlo a JSON y validar las filas antes de guardar. No es necesario enviar el archivo como `multipart/form-data`.
+
+Formato recomendado del CSV:
+
+```csv
+productCode,productPresentationId,discountTypeId,discountValue
+101,,2,20
+102,45,3,450
+```
+
+Para validar sin modificar la campania:
+
+```http
+POST /api/v1/discountcampaigns/products/validate
+```
+
+Request:
+
+```json
+{
+  "rows": [
+    {
+      "rowNumber": 2,
+      "productCode": 101,
+      "productPresentationId": null,
+      "discountTypeId": 2,
+      "discountValue": 20
+    }
+  ]
+}
+```
+
+La respuesta contiene `isValid` y el resultado de cada fila. Las filas validas incluyen los ids y nombres resueltos de producto/presentacion; las invalidas incluyen `errors`. El backend valida el codigo del producto, que la presentacion pertenezca al producto, los tipos/valores y destinos repetidos.
+
+Despues de mostrar el resultado al usuario, guardar con:
+
+```http
+POST /api/v1/discountcampaigns/{id}/products/import
+```
+
+El endpoint vuelve a validar todo y reemplaza los destinos de la campania en una sola operacion. Si alguna fila es invalida, no modifica la campania y devuelve `400 ProblemDetails`; si todo es valido, devuelve `204 No Content`.
+
+### Finanzas: catalogo de tipos de movimiento
 
 Antes de crear o filtrar movimientos financieros, cargar `GET /api/v1/finances/movement-types`. Devuelve una lista de `{ id, name }`; la UI debe usar estos ids y nombres, no hardcodear tipos. Los movimientos automáticos —por ejemplo `SupplierRefund` o `WarehouseShippingPayment`— se muestran en el listado financiero, pero no deben crearse manualmente desde la pantalla de movimientos.
+
+#### Movimientos manuales
+
+La pantalla de movimientos puede crear, editar y eliminar únicamente estos tipos:
+
+- `Expense`: gasto operativo. Siempre usa dirección `Out` y requiere `expenseCategoryId`.
+- `OwnerInvestment`: inversión adicional del dueño en el negocio. Siempre usa dirección `In`.
+- `OwnerWithdrawal`: retiro del dueño. Siempre usa dirección `Out`.
+- `Adjustment`: ajuste manual. Requiere indicar explícitamente `movementDirectionId` como `In` o `Out`.
+
+Los movimientos manuales se registran con `POST /api/v1/finances/movements`, se editan con `PUT /api/v1/finances/movements/{id}` y se eliminan con `DELETE /api/v1/finances/movements/{id}`. El request usa estos campos:
+
+```json
+{
+  "description": "Compra de empaques",
+  "movementDate": "2026-10-11T00:00:00Z",
+  "financialMovementTypeId": 4,
+  "movementDirectionId": null,
+  "expenseCategoryId": 2,
+  "amount": 2500.00,
+  "comments": "Bolsas y cajas"
+}
+```
+
+Los valores `4` y `2` del ejemplo son ilustrativos. `financialMovementTypeId` debe obtenerse desde `GET /api/v1/finances/movement-types`; no asumir que los ids serán siempre los mismos. `movementDirectionId` se envía únicamente para `Adjustment`, y `expenseCategoryId` únicamente para `Expense`. El monto debe ser mayor que cero, la descripción es obligatoria y la fecha/comentarios son opcionales. El backend asigna la tasa de cambio vigente al registrar el movimiento.
+
+No crear manualmente desde esta pantalla `SalePayment`, `SupplierPayment`, `SupplierRefund`, `CustomerRefund`, `LoanReceived`, `LoanPayment`, `WarehouseShippingPayment` ni `DeliveryAgencyReconciliation`. Estos movimientos se generan o actualizan desde pagos de ventas, compras, reembolsos, préstamos, recepciones y conciliaciones. El frontend puede mostrarlos en el listado, pero no debe ofrecerlos como opciones de creación, edición o eliminación manual.
+
+Los préstamos tienen su propio flujo: `POST /api/v1/loans` registra el préstamo y crea `LoanReceived`; `POST /api/v1/loans/{id}/payments` registra un pago y crea `LoanPayment`. No simular esos movimientos usando `POST /api/v1/finances/movements`.
+
+Para `Expense`, cargar también `GET /api/v1/expensecategories` y mostrar las categorías disponibles. Para inversiones, retiros y ajustes no se debe mostrar selector de categoría de gasto.
+
 
 ### Ventas, pagos y envíos
 
@@ -510,7 +580,7 @@ Reglas de presentación:
 ### Incidencias de inventario
 | Flujo | Endpoint | Rol | Resultado |
 |---|---|---|---|
-| Listar / consultar | `GET /api/v1/product-inventory-issues`, `GET /api/v1/product-inventory-issues/{id}` | Admin, Vendedor | Filtros: producto, detalle, tipo y estado. |
+| Listar / consultar | `GET /api/v1/product-inventory-issues`, `GET /api/v1/product-inventory-issues/{id}` | Admin, Vendedor | Filtros: codigo de producto (`productCode`), tipo y estado. |
 | Abrir incidencia | `POST /api/v1/product-inventory-issues` | Admin | Devuelve `201` y el id; mueve la cantidad de disponible a no disponible. |
 | Resolver | `PATCH /api/v1/product-inventory-issues/{id}/resolution` | Admin | Devuelve la incidencia resuelta. |
 | Cancelar incidencia abierta | `DELETE /api/v1/product-inventory-issues/{id}` | Admin | La deja en estado `Cancelled` y repone disponibilidad. |
@@ -723,3 +793,48 @@ No existe todavía una ruta específica para cancelar una sola línea de venta. 
 - Devuelve ventas no canceladas, cobros registrados, reservas activas creadas en el período, entregas creadas en el período e incidencias de inventario abiertas registradas en el período. `payments.collectedNio` y cada elemento de `payments.byPaymentMethod` representan el monto financiero realmente recibido (`netReceivedAmount + exchangeDifferenceNio`), mientras el saldo pendiente de ventas continúa calculándose con el monto aplicado (`grossAmount`).
 - El bloque `financial` solo se devuelve a Admin e incluye ingresos, egresos y balance del período. El frontend de Vendedor no debe depender de ese campo.
 - Las listas `payments.byPaymentMethod` y `operations.deliveriesByStatus` pueden estar vacías; el frontend debe representarlas como cero, no como error.
+
+## Contrato del resumen financiero mensual
+
+- `GET /api/v1/finances/monthly-summary` requiere JWT de Admin.
+- Query opcional: `fromYear` y `toYear`, inclusivos. Se puede enviar solo uno; sin `toYear`, el período termina en el año actual de Nicaragua. Si no se envía ninguno, incluye los años con datos hasta el año actual. `fromYear > toYear` devuelve HTTP 400.
+- Cada año incluye los 12 meses, aun si alguno no tiene movimientos. El mes es numérico (`1`–`12`); el frontend debe mostrar su nombre localizado. `grandTotal` agrega los años seleccionados y su porcentaje se calcula sobre los totales, no como promedio de porcentajes mensuales.
+- Todos los montos están en NIO. `incomeNio` suma ventas no canceladas, resta reembolsos por su fecha efectiva y agrega el neto de cambios completados. `grossProfitNio` considera la ganancia de venta, el ajuste de devoluciones recibidas y el margen de prendas salientes en cambios completados. `expensesNio` suma movimientos de tipo `Expense` y el costo congelado de incidencias resueltas como `ConfirmedLost`.
+- `utilityNio = grossProfitNio - expensesNio`; `utilityPercentage = utilityNio / incomeNio * 100`, redondeado a dos decimales, o cero si el ingreso es cero. Los meses se asignan según la hora local de Nicaragua.
+- Si el período no contiene datos, `years` es una lista vacía y `grandTotal` contiene ceros.
+
+Ejemplo abreviado (la respuesta real incluye los 12 objetos de mes por cada año):
+
+```json
+{
+  "fromYear": 2025,
+  "toYear": 2026,
+  "years": [
+    {
+      "year": 2026,
+      "months": [
+        {
+          "month": 1,
+          "incomeNio": 125000.00,
+          "grossProfitNio": 51000.00,
+          "expensesNio": 12000.00,
+          "utilityNio": 39000.00,
+          "utilityPercentage": 31.20
+        }
+      ],
+      "incomeNio": 125000.00,
+      "grossProfitNio": 51000.00,
+      "expensesNio": 12000.00,
+      "utilityNio": 39000.00,
+      "utilityPercentage": 31.20
+    }
+  ],
+  "grandTotal": {
+    "incomeNio": 125000.00,
+    "grossProfitNio": 51000.00,
+    "expensesNio": 12000.00,
+    "utilityNio": 39000.00,
+    "utilityPercentage": 31.20
+  }
+}
+```

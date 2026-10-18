@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
 namespace PrettyWoman.Application.DTOs.Discounts;
 
@@ -9,5 +9,5 @@ public class UpdateDiscountCampaignDTO
 
     public DateTime StartDate { get; set; } = DateTime.UtcNow;
     public DateTime EndDate { get; set; }
-    public List<UpdateDiscountCampaignProductDTO> ProductVariants { get; set; } = [];
+    public List<UpdateDiscountCampaignTargetDTO> Targets { get; set; } = [];
 }

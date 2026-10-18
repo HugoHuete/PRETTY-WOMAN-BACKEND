@@ -156,7 +156,7 @@ public class ProductInventoryIssueServiceTests
     }
 
     [Fact]
-    public async Task GetAllAsync_FiltersByProductAndStatus()
+    public async Task GetAllAsync_FiltersByProductCodeAndStatus()
     {
         await using var context = CreateContext();
         await SeedAsync(context);
@@ -181,7 +181,7 @@ public class ProductInventoryIssueServiceTests
 
         var result = await service.GetAllAsync(new ProductInventoryIssueQueryDTO
         {
-            ProductId = 1,
+            ProductCode = 1001,
             ProductInventoryIssueStatusId = (int)ProductInventoryIssueStatusOption.Open
         });
 

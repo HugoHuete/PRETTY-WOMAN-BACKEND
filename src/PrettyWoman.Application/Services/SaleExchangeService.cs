@@ -294,7 +294,12 @@ public class SaleExchangeService(
     private static void UpdateCompletionStatus(SaleExchange exchange)
     {
         if (exchange.OutboundItems.All(item => item.Delivered) && exchange.ReturnItems.All(item => item.StatusId is (int)ExchangeReturnItemStatusOption.Received or (int)ExchangeReturnItemStatusOption.Missing))
+        {
+            if (exchange.StatusId != (int)SaleExchangeStatusOption.Completed)
+                exchange.CompletedAt = DateTime.UtcNow;
+
             exchange.StatusId = (int)SaleExchangeStatusOption.Completed;
+        }
         else if (exchange.OutboundItems.All(item => item.Delivered))
             exchange.StatusId = (int)SaleExchangeStatusOption.ReplacementDelivered;
     }

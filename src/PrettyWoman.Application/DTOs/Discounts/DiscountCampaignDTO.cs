@@ -12,5 +12,5 @@ public class DiscountCampaignDTO
     public DateTime? UpdatedAt { get; set; }
     public string? CreatedById { get; set; }
     public string? UpdatedById { get; set; }
-    public List<DiscountCampaignProductDTO> ProductVariants { get; set; } = [];
+    public List<DiscountCampaignTargetDTO> Targets { get; set; } = [];
 }

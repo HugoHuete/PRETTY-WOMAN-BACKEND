@@ -32,7 +32,7 @@ Configura estas variables en el servicio de API. Los nombres con `__` se convier
 | `R2Media__AccessKeyId` | Access key de R2. |
 | `R2Media__SecretAccessKey` | Secret access key de R2. |
 | `R2Media__PublicBucketName` | Bucket público de variantes de catálogo. |
-| `R2Media__PrivateBucketName` | Bucket privado para originales y evidencias. |
+| `R2Media__PrivateBucketName` | Bucket privado para evidencias. |
 | `R2Media__PublicBaseUrl` | Dominio HTTPS que expone exclusivamente el bucket público. |
 
 Railway proporciona `PORT` automáticamente. La aplicación lo usa para escuchar en `0.0.0.0`; no configures un valor fijo. `ASPNETCORE_URLS` es opcional porque el contenedor usa `http://+:8080` fuera de Railway y `PORT` tiene precedencia en Railway.
@@ -78,6 +78,6 @@ Railway termina TLS antes de reenviar la solicitud a la API. La aplicación proc
 
 ## Archivos e imágenes
 
-No uses el filesystem del contenedor para imágenes, comprobantes ni datos de negocio: Railway puede reemplazar el contenedor en cualquier despliegue o reinicio. La implementación actual envía originales y variantes a Cloudflare R2; los streams de subida y la exportación XLSX son temporales y no se persisten localmente.
+No uses el filesystem del contenedor para imágenes, comprobantes ni datos de negocio: Railway puede reemplazar el contenedor en cualquier despliegue o reinicio. La implementación actual envía únicamente las variantes generadas a Cloudflare R2; el original se procesa en memoria y el stream de subida, junto con la exportación XLSX, es temporal.
 
 ASP.NET Core Data Protection usa un key ring temporal en el contenedor. Esto no afecta los JWT emitidos, pero tokens basados en Data Protection (por ejemplo, recuperación de contraseña) se invalidan tras un redeploy y no se comparten entre réplicas. Si se habilitan esos flujos o se escala la API, persiste esas claves en un almacén compartido antes de hacerlo.

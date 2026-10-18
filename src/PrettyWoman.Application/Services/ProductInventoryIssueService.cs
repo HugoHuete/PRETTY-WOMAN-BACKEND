@@ -70,6 +70,7 @@ public class ProductInventoryIssueService(
             ProductInventoryIssueTypeId = createIssueDTO.ProductInventoryIssueTypeId,
             ProductInventoryIssueStatusId = (int)ProductInventoryIssueStatusOption.Open,
             Quantity = createIssueDTO.Quantity,
+            UnitCostNioAtIssue = productVariant.UnitCostNio,
             IssueDate = issueDate,
             Comments = createIssueDTO.Comments
         };
@@ -174,14 +175,11 @@ public class ProductInventoryIssueService(
 
     private static IQueryable<ProductInventoryIssue> ApplyFilters(IQueryable<ProductInventoryIssue> query, ProductInventoryIssueQueryDTO filters)
     {
-        if (filters.ProductId.HasValue)
+        if (filters.ProductCode.HasValue)
         {
-            query = query.Where(issue => issue.ProductVariant != null && issue.ProductVariant.ProductId == filters.ProductId.Value);
-        }
-
-        if (filters.ProductVariantId.HasValue)
-        {
-            query = query.Where(issue => issue.ProductId == filters.ProductVariantId.Value);
+            query = query.Where(issue => issue.ProductVariant != null &&
+                issue.ProductVariant.Product != null &&
+                issue.ProductVariant.Product.Code == filters.ProductCode.Value);
         }
 
         if (filters.ProductInventoryIssueTypeId.HasValue)

@@ -25,42 +25,104 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
 
         var totalCount = await productsQuery.CountAsync();
         var products = await productsQuery
-            .Include(product => product.Subcategory)
-                .ThenInclude(subcategory => subcategory!.Category)
-            .Include(product => product.ProductImages)
-                .ThenInclude(productImage => productImage.MediaAsset)
-                    .ThenInclude(mediaAsset => mediaAsset!.Variants)
-            .Include(product => product.DiscountCampaignProducts)
-                .ThenInclude(discount => discount.DiscountCampaign)
-            .Include(product => product.DiscountCampaignProducts)
-                .ThenInclude(discount => discount.ProductVariant)
-            .Include(product => product.ProductVariants)
-                .ThenInclude(productVariant => productVariant.Size)
-                    .ThenInclude(size => size!.SizeGroup)
-            .Include(product => product.ProductPresentations)
-                .ThenInclude(presentation => presentation.ProductImages)
-                    .ThenInclude(image => image.MediaAsset)
-                        .ThenInclude(asset => asset!.Variants)
-            .Include(product => product.ProductPresentations)
-                .ThenInclude(presentation => presentation.ProductVariants)
-                    .ThenInclude(productVariant => productVariant.Size)
-                        .ThenInclude(size => size!.SizeGroup)
-            .Include(product => product.ProductPresentations)
-                .ThenInclude(presentation => presentation.ProductVariants)
-                    .ThenInclude(productVariant => productVariant.DiscountCampaignProducts)
-                        .ThenInclude(discount => discount.DiscountCampaign)
-            .Include(product => product.ProductVariants)
-                .ThenInclude(productVariant => productVariant.DiscountCampaignProducts)
-                    .ThenInclude(discount => discount.DiscountCampaign)
             .OrderBy(product => product.Name)
             .ThenBy(product => product.Code)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
+            .Select(product => new ProductListProjection
+            {
+                Id = product.Id,
+                SupplierProductCode = product.SupplierProductCode,
+                Code = product.Code,
+                Name = product.Name,
+                SubcategoryId = product.SubcategoryId,
+                SubcategoryName = product.Subcategory != null ? product.Subcategory.Name : null,
+                CategoryId = product.Subcategory != null ? product.Subcategory.CategoryId : null,
+                CategoryName = product.Subcategory != null && product.Subcategory.Category != null
+                    ? product.Subcategory.Category.Name
+                    : null,
+                ProductImages = product.ProductImages
+                    .Select(image => new ProductListImageProjection
+                    {
+                        ProductPresentationId = image.ProductPresentationId,
+                        IsPrimary = image.IsPrimary,
+                        SortOrder = image.SortOrder,
+                        WebStorageKey = image.MediaAsset == null
+                            ? null
+                            : image.MediaAsset.Variants
+                                .Where(variant => variant.Type == MediaVariantType.Web)
+                                .Select(variant => variant.StorageKey)
+                                .FirstOrDefault()
+                    })
+                    .ToList(),
+                DiscountCampaigns = product.DiscountCampaignProducts
+                    .Select(discount => new ProductListDiscountProjection
+                    {
+                        CampaignId = discount.DiscountCampaignId,
+                        CampaignName = discount.DiscountCampaign!.Name,
+                        StartDate = discount.DiscountCampaign.StartDate,
+                        EndDate = discount.DiscountCampaign.EndDate,
+                        CancelledAt = discount.DiscountCampaign.CancelledAt,
+                        DiscountTypeId = discount.DiscountTypeId,
+                        DiscountValue = discount.DiscountValue
+                    })
+                    .ToList(),
+                Presentations = product.ProductPresentations
+                    .Select(presentation => new ProductListPresentationProjection
+                    {
+                        Id = presentation.Id,
+                        Name = presentation.Name,
+                        SortOrder = presentation.SortOrder,
+                        DiscountCampaigns = presentation.DiscountCampaignProducts
+                            .Select(discount => new ProductListDiscountProjection
+                            {
+                                CampaignId = discount.DiscountCampaignId,
+                                CampaignName = discount.DiscountCampaign!.Name,
+                                StartDate = discount.DiscountCampaign.StartDate,
+                                EndDate = discount.DiscountCampaign.EndDate,
+                                CancelledAt = discount.DiscountCampaign.CancelledAt,
+                                DiscountTypeId = discount.DiscountTypeId,
+                                DiscountValue = discount.DiscountValue
+                            })
+                            .ToList(),
+                        ProductImages = presentation.ProductImages
+                            .Select(image => new ProductListImageProjection
+                            {
+                                ProductPresentationId = image.ProductPresentationId,
+                                IsPrimary = image.IsPrimary,
+                                SortOrder = image.SortOrder,
+                                WebStorageKey = image.MediaAsset == null
+                                    ? null
+                                    : image.MediaAsset.Variants
+                                        .Where(variant => variant.Type == MediaVariantType.Web)
+                                        .Select(variant => variant.StorageKey)
+                                        .FirstOrDefault()
+                            })
+                            .ToList(),
+                        ProductVariants = presentation.ProductVariants
+                            .Select(productVariant => new ProductListVariantProjection
+                            {
+                                Id = productVariant.Id,
+                                SizeId = productVariant.SizeId,
+                                SizeName = productVariant.Size != null ? productVariant.Size.Name : null,
+                                DisplayOrder = productVariant.Size != null ? productVariant.Size.DisplayOrder : 0,
+                                Quantity = productVariant.Quantity,
+                                ReceivedQuantity = productVariant.ReceivedQuantity,
+                                AvailableQuantity = productVariant.AvailableQuantity,
+                                ReservedQuantity = productVariant.ReservedQuantity,
+                                UnavailableQuantity = productVariant.UnavailableQuantity,
+                                SalePrice = productVariant.SalePrice,
+                                UnitCostNio = productVariant.UnitCostNio,
+                            })
+                            .ToList()
+                    })
+                    .ToList()
+            })
             .ToListAsync();
 
         var now = DateTime.UtcNow;
         var items = products
-            .Select(product => MapProduct(product, query, now))
+            .Select(product => MapProjectedProduct(product, query, now))
             .ToList();
 
         return new PaginatedResult<ProductDTO>
@@ -86,9 +148,8 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             .Include(product => product.ProductPresentations)
                 .ThenInclude(presentation => presentation.ProductVariants)
                     .ThenInclude(productVariant => productVariant.Size)
-                        .ThenInclude(size => size!.SizeGroup)
-            .Include(product => product.ProductVariants)
-                .ThenInclude(productVariant => productVariant.DiscountCampaignProducts)
+            .Include(product => product.ProductPresentations)
+                .ThenInclude(presentation => presentation.DiscountCampaignProducts)
                     .ThenInclude(discount => discount.DiscountCampaign)
             .OrderBy(product => product.Name)
             .ThenBy(product => product.Code)
@@ -136,7 +197,8 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
                     .Select(presentation => presentation.Name)
                     .FirstOrDefault()))
             {
-                var discount = GetBestActiveDiscount(product, productVariant, now);
+                var presentation = product.ProductPresentations.Single(presentation => presentation.ProductVariants.Any(variant => variant.Id == productVariant.Id));
+                var discount = GetBestActiveDiscount(product, presentation, productVariant, now);
                 worksheet.Cell(row, 1).Value = product.Name;
                 worksheet.Cell(row, 2).Value = product.Code;
                 worksheet.Cell(row, 3).Value = product.SupplierProductCode;
@@ -177,11 +239,6 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
                     .ThenInclude(mediaAsset => mediaAsset!.Variants)
             .Include(product => product.DiscountCampaignProducts)
                 .ThenInclude(discount => discount.DiscountCampaign)
-            .Include(product => product.DiscountCampaignProducts)
-                .ThenInclude(discount => discount.ProductVariant)
-            .Include(product => product.ProductVariants)
-                .ThenInclude(productVariant => productVariant.Size)
-                    .ThenInclude(size => size!.SizeGroup)
             .Include(product => product.ProductPresentations)
                 .ThenInclude(presentation => presentation.ProductImages)
                     .ThenInclude(image => image.MediaAsset)
@@ -189,13 +246,8 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             .Include(product => product.ProductPresentations)
                 .ThenInclude(presentation => presentation.ProductVariants)
                     .ThenInclude(productVariant => productVariant.Size)
-                        .ThenInclude(size => size!.SizeGroup)
             .Include(product => product.ProductPresentations)
-                .ThenInclude(presentation => presentation.ProductVariants)
-                    .ThenInclude(productVariant => productVariant.DiscountCampaignProducts)
-                        .ThenInclude(discount => discount.DiscountCampaign)
-            .Include(product => product.ProductVariants)
-                .ThenInclude(productVariant => productVariant.DiscountCampaignProducts)
+                .ThenInclude(presentation => presentation.DiscountCampaignProducts)
                     .ThenInclude(discount => discount.DiscountCampaign)
             .FirstOrDefaultAsync(product => product.Id == id)
             ?? throw new AppNotFoundException($"El producto con id '{id}' no existe.");
@@ -210,6 +262,53 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             ?? throw new AppNotFoundException($"La variante con id '{productVariantId}' no existe para el producto con id '{productId}'.");
 
         productVariant.SalePrice = request.SalePrice;
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task UpdatePriceForProductAsync(int productId, UpdateProductPriceDTO request)
+    {
+        var productExists = await _context.Products
+            .AsNoTracking()
+            .AnyAsync(product => product.Id == productId);
+
+        if (!productExists)
+        {
+            throw new AppNotFoundException($"El producto con id '{productId}' no existe.");
+        }
+
+        var productVariants = await _context.ProductVariants
+            .Where(productVariant => productVariant.ProductId == productId)
+            .ToListAsync();
+
+        foreach (var productVariant in productVariants)
+        {
+            productVariant.SalePrice = request.SalePrice;
+        }
+
+        await _context.SaveChangesAsync();
+    }
+
+    public async Task UpdatePriceForPresentationAsync(int productId, int productPresentationId, UpdateProductPriceDTO request)
+    {
+        var presentationExists = await _context.ProductPresentations
+            .AsNoTracking()
+            .AnyAsync(presentation => presentation.Id == productPresentationId && presentation.ProductId == productId);
+
+        if (!presentationExists)
+        {
+            throw new AppNotFoundException($"La presentacion con id '{productPresentationId}' no existe para el producto con id '{productId}'.");
+        }
+
+        var productVariants = await _context.ProductVariants
+            .Where(productVariant => productVariant.ProductId == productId &&
+                productVariant.ProductPresentationId == productPresentationId)
+            .ToListAsync();
+
+        foreach (var productVariant in productVariants)
+        {
+            productVariant.SalePrice = request.SalePrice;
+        }
+
         await _context.SaveChangesAsync();
     }
 
@@ -288,7 +387,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
         {
             query = query.Where(product => product.DiscountCampaignProducts
                 .Any(discount => discount.DiscountCampaignId == filters.DiscountCampaignId.Value) ||
-                product.ProductVariants.Any(productVariant => productVariant.DiscountCampaignProducts
+                product.ProductPresentations.Any(presentation => presentation.DiscountCampaignProducts
                     .Any(discount => discount.DiscountCampaignId == filters.DiscountCampaignId.Value)));
         }
 
@@ -342,12 +441,157 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
                     Sizes = presentation.ProductVariants
                         .Where(productVariant => MatchesVariantFilters(productVariant, query))
                         .OrderBy(productVariant => productVariant.Size?.DisplayOrder ?? 0)
-                        .Select(productVariant => MapProductVariant(product, productVariant, now))
+                        .Select(productVariant => MapProductVariant(product, presentation, productVariant, now))
                         .ToList()
                 })
                 .Where(presentation => presentation.Sizes.Count > 0)
                 .ToList()
         };
+    }
+
+    private ProductDTO MapProjectedProduct(ProductListProjection product, ProductQueryDTO query, DateTime now)
+    {
+        return new ProductDTO
+        {
+            Id = product.Id,
+            SupplierProductCode = product.SupplierProductCode,
+            Code = product.Code,
+            Name = product.Name,
+            SubcategoryId = product.SubcategoryId,
+            SubcategoryName = product.SubcategoryName,
+            CategoryId = product.CategoryId,
+            CategoryName = product.CategoryName,
+            PrimaryImageUrl = GetProductPrimaryImageUrl(product),
+            Presentations = product.Presentations
+                .OrderBy(presentation => presentation.SortOrder)
+                .ThenBy(presentation => presentation.Name)
+                .Select(presentation =>
+                {
+                    var sizes = presentation.ProductVariants
+                        .Where(productVariant => MatchesVariantFilters(productVariant, query))
+                        .OrderBy(productVariant => productVariant.DisplayOrder)
+                        .Select(productVariant => MapProductVariant(product, presentation, productVariant, now))
+                        .ToList();
+
+                    return new ProductPresentationDTO
+                    {
+                        Id = presentation.Id,
+                        Name = presentation.Name,
+                        SortOrder = presentation.SortOrder,
+                        PrimaryImageUrl = GetPresentationPrimaryImageUrl(product, presentation),
+                        Sizes = sizes
+                    };
+                })
+                .Where(presentation => presentation.Sizes.Count > 0)
+                .ToList()
+        };
+    }
+
+    private string? GetProductPrimaryImageUrl(ProductListProjection product)
+    {
+        var primaryImage = product.ProductImages
+            .Where(image => image.IsPrimary && image.ProductPresentationId is null)
+            .OrderBy(image => image.SortOrder)
+            .FirstOrDefault();
+
+        primaryImage ??= product.Presentations
+            .OrderBy(presentation => presentation.SortOrder)
+            .SelectMany(presentation => presentation.ProductImages.Where(image => image.IsPrimary).OrderBy(image => image.SortOrder))
+            .FirstOrDefault();
+
+        return GetImageUrl(primaryImage?.WebStorageKey);
+    }
+
+    private string? GetPresentationPrimaryImageUrl(
+        ProductListProjection product,
+        ProductListPresentationProjection presentation)
+    {
+        var primaryImage = presentation.ProductImages
+            .Where(image => image.IsPrimary)
+            .OrderBy(image => image.SortOrder)
+            .FirstOrDefault();
+
+        primaryImage ??= product.ProductImages
+            .Where(image => image.IsPrimary && image.ProductPresentationId is null)
+            .OrderBy(image => image.SortOrder)
+            .FirstOrDefault();
+
+        return GetImageUrl(primaryImage?.WebStorageKey);
+    }
+
+    private ProductVariantDTO MapProductVariant(
+        ProductListProjection product,
+        ProductListPresentationProjection presentation,
+        ProductListVariantProjection productVariant,
+        DateTime now)
+    {
+        var discount = GetBestActiveDiscount(product, presentation, productVariant, now);
+
+        return new ProductVariantDTO
+        {
+            Id = productVariant.Id,
+            SizeId = productVariant.SizeId,
+            SizeName = productVariant.SizeName,
+            Quantity = productVariant.Quantity,
+            ReceivedQuantity = productVariant.ReceivedQuantity,
+            AvailableQuantity = productVariant.AvailableQuantity,
+            ReservedQuantity = productVariant.ReservedQuantity,
+            UnavailableQuantity = productVariant.UnavailableQuantity,
+            SalePrice = productVariant.SalePrice,
+            UnitCostNio = productVariant.UnitCostNio,
+            DiscountedSalePrice = discount?.DiscountedSalePrice,
+            DiscountCampaignId = discount?.CampaignId,
+            DiscountCampaignName = discount?.CampaignName
+        };
+    }
+
+    private static bool MatchesVariantFilters(ProductListVariantProjection productVariant, ProductQueryDTO query) =>
+        (!query.SizeId.HasValue || productVariant.SizeId == query.SizeId.Value) &&
+        (!query.Availability.HasValue ||
+            (query.Availability.Value == ProductAvailabilityFilter.Available && productVariant.AvailableQuantity > 0) ||
+            (query.Availability.Value == ProductAvailabilityFilter.Reserved && productVariant.ReservedQuantity > 0) ||
+            (query.Availability.Value == ProductAvailabilityFilter.Unavailable && productVariant.UnavailableQuantity > 0));
+
+    private static ActiveDiscountDTO? GetBestActiveDiscount(
+        ProductListProjection product,
+        ProductListPresentationProjection presentation,
+        ProductListVariantProjection productVariant,
+        DateTime now)
+    {
+        var presentationDiscounts = presentation.DiscountCampaigns
+            .Where(discount =>
+                discount.CancelledAt is null &&
+                discount.StartDate <= now &&
+                discount.EndDate >= now)
+            .Select(discount => new ActiveDiscountDTO(
+                discount.CampaignId,
+                discount.CampaignName,
+                CalculateDiscountedPrice(productVariant.SalePrice, discount.DiscountTypeId, discount.DiscountValue)))
+            .Where(discount => discount.DiscountedSalePrice < productVariant.SalePrice)
+            .ToList();
+
+        var candidateDiscounts = presentationDiscounts.Count > 0
+            ? presentationDiscounts
+            : product.DiscountCampaigns
+                .Where(discount =>
+                    discount.CancelledAt is null &&
+                    discount.StartDate <= now &&
+                    discount.EndDate >= now)
+                .Select(discount => new ActiveDiscountDTO(
+                    discount.CampaignId,
+                    discount.CampaignName,
+                    CalculateDiscountedPrice(productVariant.SalePrice, discount.DiscountTypeId, discount.DiscountValue)))
+                .Where(discount => discount.DiscountedSalePrice < productVariant.SalePrice)
+                .ToList();
+
+        return candidateDiscounts
+            .OrderBy(discount => discount.DiscountedSalePrice)
+            .ThenBy(discount => discount.CampaignId)
+            .FirstOrDefault();
+    }
+    private string? GetImageUrl(string? storageKey)
+    {
+        return storageKey is null ? null : mediaUrlResolver.GetPublicUrl(storageKey);
     }
 
     private string? GetProductPrimaryImageUrl(Product product)
@@ -397,17 +641,19 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             (query.Availability.Value == ProductAvailabilityFilter.Reserved && productVariant.ReservedQuantity > 0) ||
             (query.Availability.Value == ProductAvailabilityFilter.Unavailable && productVariant.UnavailableQuantity > 0));
 
-    private static ProductVariantDTO MapProductVariant(Product product, ProductVariant productVariant, DateTime now)
+    private static ProductVariantDTO MapProductVariant(
+        Product product,
+        ProductPresentation presentation,
+        ProductVariant productVariant,
+        DateTime now)
     {
-        var discount = GetBestActiveDiscount(product, productVariant, now);
+        var discount = GetBestActiveDiscount(product, presentation, productVariant, now);
 
         return new ProductVariantDTO
         {
             Id = productVariant.Id,
             SizeId = productVariant.SizeId,
             SizeName = productVariant.Size?.Name,
-            SizeGroupId = productVariant.Size?.SizeGroupId,
-            SizeGroupName = productVariant.Size?.SizeGroup?.Name,
             Quantity = productVariant.Quantity,
             ReceivedQuantity = productVariant.ReceivedQuantity,
             AvailableQuantity = productVariant.AvailableQuantity,
@@ -421,10 +667,13 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
         };
     }
 
-    private static ActiveDiscountDTO? GetBestActiveDiscount(Product product, ProductVariant productVariant, DateTime now)
+    private static ActiveDiscountDTO? GetBestActiveDiscount(
+        Product product,
+        ProductPresentation presentation,
+        ProductVariant productVariant,
+        DateTime now)
     {
-        return product.DiscountCampaignProducts
-            .Concat(productVariant.DiscountCampaignProducts)
+        var presentationDiscounts = presentation.DiscountCampaignProducts
             .Where(discount =>
                 discount.DiscountCampaign is { CancelledAt: null } &&
                 discount.DiscountCampaign.StartDate <= now &&
@@ -434,6 +683,23 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
                 discount.DiscountCampaign!.Name,
                 CalculateDiscountedPrice(productVariant.SalePrice, discount.DiscountTypeId, discount.DiscountValue)))
             .Where(discount => discount.DiscountedSalePrice < productVariant.SalePrice)
+            .ToList();
+
+        var candidateDiscounts = presentationDiscounts.Count > 0
+            ? presentationDiscounts
+            : product.DiscountCampaignProducts
+                .Where(discount =>
+                    discount.DiscountCampaign is { CancelledAt: null } &&
+                    discount.DiscountCampaign.StartDate <= now &&
+                    discount.DiscountCampaign.EndDate >= now)
+                .Select(discount => new ActiveDiscountDTO(
+                    discount.DiscountCampaignId,
+                    discount.DiscountCampaign!.Name,
+                    CalculateDiscountedPrice(productVariant.SalePrice, discount.DiscountTypeId, discount.DiscountValue)))
+                .Where(discount => discount.DiscountedSalePrice < productVariant.SalePrice)
+                .ToList();
+
+        return candidateDiscounts
             .OrderBy(discount => discount.DiscountedSalePrice)
             .ThenBy(discount => discount.CampaignId)
             .FirstOrDefault();
@@ -468,6 +734,65 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
         {
             query.PageSize = 100;
         }
+    }
+
+    private sealed class ProductListProjection
+    {
+        public int Id { get; init; }
+        public required string SupplierProductCode { get; init; }
+        public int Code { get; init; }
+        public required string Name { get; init; }
+        public int SubcategoryId { get; init; }
+        public string? SubcategoryName { get; init; }
+        public int? CategoryId { get; init; }
+        public string? CategoryName { get; init; }
+        public List<ProductListImageProjection> ProductImages { get; init; } = [];
+        public List<ProductListDiscountProjection> DiscountCampaigns { get; init; } = [];
+        public List<ProductListPresentationProjection> Presentations { get; init; } = [];
+    }
+
+    private sealed class ProductListPresentationProjection
+    {
+        public int Id { get; init; }
+        public string? Name { get; init; }
+        public int SortOrder { get; init; }
+        public List<ProductListImageProjection> ProductImages { get; init; } = [];
+        public List<ProductListDiscountProjection> DiscountCampaigns { get; init; } = [];
+        public List<ProductListVariantProjection> ProductVariants { get; init; } = [];
+    }
+
+    private sealed class ProductListVariantProjection
+    {
+        public int Id { get; init; }
+        public int SizeId { get; init; }
+        public string? SizeName { get; init; }
+        public int DisplayOrder { get; init; }
+        public int Quantity { get; init; }
+        public int ReceivedQuantity { get; init; }
+        public int AvailableQuantity { get; init; }
+        public int ReservedQuantity { get; init; }
+        public int UnavailableQuantity { get; init; }
+        public decimal SalePrice { get; init; }
+        public decimal UnitCostNio { get; init; }
+    }
+
+    private sealed class ProductListImageProjection
+    {
+        public int? ProductPresentationId { get; init; }
+        public bool IsPrimary { get; init; }
+        public int SortOrder { get; init; }
+        public string? WebStorageKey { get; init; }
+    }
+
+    private sealed class ProductListDiscountProjection
+    {
+        public int CampaignId { get; init; }
+        public required string CampaignName { get; init; }
+        public DateTime StartDate { get; init; }
+        public DateTime EndDate { get; init; }
+        public DateTime? CancelledAt { get; init; }
+        public int DiscountTypeId { get; init; }
+        public decimal DiscountValue { get; init; }
     }
 
     private sealed record ActiveDiscountDTO(int CampaignId, string CampaignName, decimal DiscountedSalePrice);

@@ -573,9 +573,9 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("product_id");
 
-                    b.Property<int?>("ProductVariantId")
+                    b.Property<int?>("ProductPresentationId")
                         .HasColumnType("integer")
-                        .HasColumnName("product_variant_id");
+                        .HasColumnName("product_presentation_id");
 
                     b.HasKey("Id")
                         .HasName("pk_discount_campaign_products");
@@ -586,22 +586,22 @@ namespace PrettyWoman.Infrastructure.Migrations
                     b.HasIndex("ProductId")
                         .HasDatabaseName("ix_discount_campaign_products_product_id");
 
-                    b.HasIndex("ProductVariantId")
-                        .HasDatabaseName("ix_discount_campaign_products_product_variant_id");
+                    b.HasIndex("ProductPresentationId")
+                        .HasDatabaseName("ix_discount_campaign_products_product_presentation_id");
 
                     b.HasIndex("DiscountCampaignId", "ProductId")
                         .IsUnique()
                         .HasDatabaseName("ix_discount_campaign_products_discount_campaign_id_product_id")
                         .HasFilter("product_id IS NOT NULL");
 
-                    b.HasIndex("DiscountCampaignId", "ProductVariantId")
+                    b.HasIndex("DiscountCampaignId", "ProductPresentationId")
                         .IsUnique()
-                        .HasDatabaseName("ix_discount_campaign_products_discount_campaign_id_product_var")
-                        .HasFilter("product_variant_id IS NOT NULL");
+                        .HasDatabaseName("ix_discount_campaign_products_discount_campaign_id_product_pre")
+                        .HasFilter("product_presentation_id IS NOT NULL");
 
                     b.ToTable("discount_campaign_products", null, t =>
                         {
-                            t.HasCheckConstraint("ck_discount_campaign_product_exactly_one_target", "(product_id IS NOT NULL) <> (product_variant_id IS NOT NULL)");
+                            t.HasCheckConstraint("ck_discount_campaign_product_exactly_one_target", "(product_id IS NOT NULL) <> (product_presentation_id IS NOT NULL)");
 
                             t.HasCheckConstraint("ck_discount_campaign_product_value_non_negative", "discount_value > 0");
                         });
@@ -1866,10 +1866,6 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("height");
 
-                    b.Property<int>("OriginalBucket")
-                        .HasColumnType("integer")
-                        .HasColumnName("original_bucket");
-
                     b.Property<string>("OriginalContentType")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -2690,6 +2686,11 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("resolved_at");
 
+                    b.Property<decimal>("UnitCostNioAtIssue")
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasColumnName("unit_cost_nio_at_issue");
+
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -3506,6 +3507,10 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("comments");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -4658,11 +4663,11 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_discount_campaign_products_products_product_id");
 
-                    b.HasOne("PrettyWoman.Domain.Entities.ProductVariant", "ProductVariant")
+                    b.HasOne("PrettyWoman.Domain.Entities.ProductPresentation", "ProductPresentation")
                         .WithMany("DiscountCampaignProducts")
-                        .HasForeignKey("ProductVariantId")
+                        .HasForeignKey("ProductPresentationId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("fk_discount_campaign_products_product_variants_product_variant");
+                        .HasConstraintName("fk_discount_campaign_products_product_presentations_product_pr");
 
                     b.Navigation("DiscountCampaign");
 
@@ -4670,7 +4675,7 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     b.Navigation("Product");
 
-                    b.Navigation("ProductVariant");
+                    b.Navigation("ProductPresentation");
                 });
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.ExchangeOutboundItem", b =>
@@ -5699,6 +5704,8 @@ namespace PrettyWoman.Infrastructure.Migrations
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.ProductPresentation", b =>
                 {
+                    b.Navigation("DiscountCampaignProducts");
+
                     b.Navigation("ProductImages");
 
                     b.Navigation("ProductVariants");
@@ -5715,8 +5722,6 @@ namespace PrettyWoman.Infrastructure.Migrations
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.ProductVariant", b =>
                 {
-                    b.Navigation("DiscountCampaignProducts");
-
                     b.Navigation("InventoryAdjustmentItems");
 
                     b.Navigation("InventoryMovements");

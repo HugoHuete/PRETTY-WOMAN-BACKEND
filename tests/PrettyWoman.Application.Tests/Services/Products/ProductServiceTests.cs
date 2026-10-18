@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using ClosedXML.Excel;
 using PrettyWoman.Application.DTOs.Products;
@@ -31,6 +32,20 @@ public class ProductServiceTests
             .Single(productVariant => productVariant.Id == variant.Id);
 
         Assert.Equal(425.75m, mappedVariant.UnitCostNio);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_DoesNotExposeSizeGroupInProductVariants()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var service = CreateService(context);
+
+        var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1001 });
+        var json = JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.DoesNotContain("\"sizeGroupId\"", json);
+        Assert.DoesNotContain("\"sizeGroupName\"", json);
     }
 
     [Fact]
@@ -108,7 +123,7 @@ public class ProductServiceTests
     }
 
     [Fact]
-    public async Task GetAllAsync_ReturnsOnlyActiveDiscountedPrice()
+    public async Task GetAllAsync_UsesProductDiscountWhenPresentationHasNoDiscount()
     {
         await using var context = CreateContext();
         await SeedProductsAsync(context);
@@ -127,23 +142,25 @@ public class ProductServiceTests
     }
 
     [Fact]
-    public async Task GetAllAsync_UsesBestDiscountBetweenProductAndSpecificVariantRules()
+    public async Task GetAllAsync_UsesPresentationDiscountBeforeProductDiscount()
     {
         await using var context = CreateContext();
         await SeedProductsAsync(context);
-        var variant = await context.ProductVariants.SingleAsync(productVariant => productVariant.Id == 1);
+        var presentation = await context.ProductPresentations
+            .SingleAsync(productPresentation => productPresentation.ProductId == 1);
         var now = DateTime.UtcNow;
+
         context.DiscountCampaigns.Add(new DiscountCampaign
         {
             Id = 4,
-            Name = "Promo variante específica",
+            Name = "Promo presentacion especifica",
             StartDate = now.AddDays(-1),
             EndDate = now.AddDays(1),
             DiscountCampaignProducts =
             [
                 new DiscountCampaignProduct
                 {
-                    ProductVariantId = variant.Id,
+                    ProductPresentationId = presentation.Id,
                     DiscountTypeId = (int)DiscountTypeOption.FixedPrice,
                     DiscountValue = 400m
                 }
@@ -154,13 +171,15 @@ public class ProductServiceTests
 
         var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1001 });
 
-        var specificVariant = result.Items.Single().Presentations.SelectMany(presentation => presentation.Sizes).Single(productVariant => productVariant.Id == variant.Id);
-        var otherVariant = result.Items.Single().Presentations.SelectMany(presentation => presentation.Sizes).Single(productVariant => productVariant.Id != variant.Id);
-        Assert.Equal(400m, specificVariant.DiscountedSalePrice);
-        Assert.Equal(585m, otherVariant.DiscountedSalePrice);
-        Assert.Equal(4, specificVariant.DiscountCampaignId);
+        var variants = result.Items.Single().Presentations.SelectMany(productPresentation => productPresentation.Sizes).ToList();
+        Assert.NotEmpty(variants);
+        Assert.All(variants, productVariant =>
+        {
+            Assert.Equal(400m, productVariant.DiscountedSalePrice);
+            Assert.Equal(4, productVariant.DiscountCampaignId);
+            Assert.Equal("Promo presentacion especifica", productVariant.DiscountCampaignName);
+        });
     }
-
     [Fact]
     public async Task ExportAsync_ReturnsExcelWithFilteredProductVariants()
     {
@@ -320,6 +339,50 @@ public class ProductServiceTests
             .SingleAsync());
         Assert.Equal(650m, await context.ProductVariants
             .Where(productVariant => productVariant.Id == 2)
+            .Select(productVariant => productVariant.SalePrice)
+            .SingleAsync());
+    }
+
+    [Fact]
+    public async Task UpdatePriceForProductAsync_UpdatesAllProductVariants()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var service = CreateService(context);
+
+        await service.UpdatePriceForProductAsync(1, new UpdateProductPriceDTO { SalePrice = 750m });
+
+        Assert.Equal([750m, 750m], await context.ProductVariants
+            .Where(productVariant => productVariant.ProductId == 1)
+            .OrderBy(productVariant => productVariant.Id)
+            .Select(productVariant => productVariant.SalePrice)
+            .ToArrayAsync());
+        Assert.Equal(500m, await context.ProductVariants
+            .Where(productVariant => productVariant.ProductId == 2)
+            .Select(productVariant => productVariant.SalePrice)
+            .SingleAsync());
+    }
+
+    [Fact]
+    public async Task UpdatePriceForPresentationAsync_UpdatesOnlyPresentationVariants()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var service = CreateService(context);
+        var presentationId = await context.ProductPresentations
+            .Where(presentation => presentation.ProductId == 1)
+            .Select(presentation => presentation.Id)
+            .SingleAsync();
+
+        await service.UpdatePriceForPresentationAsync(1, presentationId, new UpdateProductPriceDTO { SalePrice = 725m });
+
+        Assert.Equal([725m, 725m], await context.ProductVariants
+            .Where(productVariant => productVariant.ProductPresentationId == presentationId)
+            .OrderBy(productVariant => productVariant.Id)
+            .Select(productVariant => productVariant.SalePrice)
+            .ToArrayAsync());
+        Assert.Equal(500m, await context.ProductVariants
+            .Where(productVariant => productVariant.ProductId == 2)
             .Select(productVariant => productVariant.SalePrice)
             .SingleAsync());
     }
@@ -626,7 +689,6 @@ public class ProductServiceTests
     {
         Id = Guid.NewGuid(),
         StorageKey = $"productVariants/test/{Guid.NewGuid():N}",
-        OriginalBucket = MediaBucket.Private,
         Visibility = MediaVisibility.Public,
         OriginalContentType = "image/jpeg",
         OriginalSizeBytes = 1,
