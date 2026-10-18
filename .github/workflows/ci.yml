@@ -28,6 +28,8 @@ jobs:
         run: dotnet restore PrettyWoman.slnx
 
       - name: Build
+        env:
+          SIXLABORS_LICENSE_KEY: ${{ secrets.SIXLABORS_LICENSE_KEY }}
         run: dotnet build PrettyWoman.slnx --configuration Release --no-restore
 
       - name: Run unit and integration tests
