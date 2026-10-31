@@ -21,6 +21,7 @@ public class SaleDTO
     public string? MunicipalityName { get; set; }
     public int? LatestDeliveryStatusId { get; set; }
     public string? LatestDeliveryStatusName { get; set; }
+    public bool HasPendingSelection { get; set; }
     public List<SaleProductDTO> ProductVariants { get; set; } = [];
     public List<SaleSelectionHoldDTO> SelectionHolds { get; set; } = [];
     public List<SalePaymentMovementDTO> PaymentMovements { get; set; } = [];

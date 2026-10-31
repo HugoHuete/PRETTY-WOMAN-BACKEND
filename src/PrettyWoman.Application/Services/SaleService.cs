@@ -45,6 +45,14 @@ public class SaleService(
 
         var saleDTOs = sales.Select(MapSaleDTO).ToList();
         var saleIds = sales.Select(sale => sale.Id).ToList();
+        var salesWithPendingSelections = await _context.ProductHolds
+            .AsNoTracking()
+            .Where(hold => hold.SaleId.HasValue && saleIds.Contains(hold.SaleId.Value) &&
+                hold.ProductHoldStatusId == (int)ProductHoldStatusOption.Active)
+            .Select(hold => hold.SaleId!.Value)
+            .Distinct()
+            .ToListAsync();
+        var salesWithPendingSelectionIds = salesWithPendingSelections.ToHashSet();
         var latestDeliveryStatuses = await _context.SaleDeliveries
             .AsNoTracking()
             .Where(delivery => saleIds.Contains(delivery.SaleId))
@@ -64,6 +72,7 @@ public class SaleService(
 
         foreach (var saleDTO in saleDTOs)
         {
+            saleDTO.HasPendingSelection = salesWithPendingSelectionIds.Contains(saleDTO.Id);
             if (!latestDeliveryStatusBySaleId.TryGetValue(saleDTO.Id, out var latestDelivery)) continue;
 
             saleDTO.LatestDeliveryStatusId = latestDelivery.DeliveryStatusId;
@@ -1195,6 +1204,7 @@ public class SaleService(
             Comments = sale.Comments,
             ClientId = sale.ClientId,
             ClientName = sale.Client?.Name,
+            HasPendingSelection = sale.ProductHolds.Any(hold => hold.ProductHoldStatusId == (int)ProductHoldStatusOption.Active),
             ProductVariants = sale.ProductVariants.Select(productVariant => new SaleProductDTO
             {
                 Id = productVariant.Id,
