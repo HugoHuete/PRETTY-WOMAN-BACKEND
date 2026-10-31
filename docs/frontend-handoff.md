@@ -75,6 +75,7 @@ Puede trabajar con:
 | Catalogos | Tallas | Admin | Listar, crear, editar | Tallas | `GET /api/v1/sizes`, `POST /api/v1/sizes`, `PUT /api/v1/sizes/{id}` |
 | Clientes | Lista de clientes | Admin, Vendedor | Buscar, ver detalle, crear, editar | Clientes | `GET /api/v1/clients`, `POST /api/v1/clients`, `PUT /api/v1/clients/{id}` |
 | Clientes | Estado de cliente | Admin | Bloquear, desbloquear | Cliente, motivo de bloqueo | `PATCH /api/v1/clients/{id}/block`, `PATCH /api/v1/clients/{id}/unblock` |
+| Ventas | Crear envío | Admin, Vendedor | Seleccionar municipio y agencia, registrar dirección y costo de envío | Municipios, departamentos y agencias de envío | `GET /api/v1/municipalities`, `GET /api/v1/municipalities?departmentId={departmentId}`, `GET /api/v1/deliveryagencies`, `POST /api/v1/sales/{id}/deliveries` |
 | Compras | Ordenes | Admin | Listar, filtrar, crear, editar, ver detalle | Ordenes, proveedores, estados y tracking | `GET /api/v1/orders`, `GET /api/v1/orders/statuses`, `POST /api/v1/orders`, `PUT /api/v1/orders/{id}` |
 | Compras | Compañías de envío | Admin, Vendedor | Consultar compañías disponibles para registrar tracking | Compañías de envío | `GET /api/v1/shipping-companies` |
 | Compras | Tracking de orden | Admin | Agregar, editar, eliminar y consultar tracking | Orden, numeros de tracking | `GET /api/v1/orders/{id}/tracking-numbers`, `POST /api/v1/orders/{id}/tracking-numbers`, `PUT /api/v1/orders/{id}/tracking-numbers/{trackingId}`, `DELETE /api/v1/orders/{id}/tracking-numbers/{trackingId}` |
@@ -471,6 +472,22 @@ Para `Expense`, cargar también `GET /api/v1/expensecategories` y mostrar las ca
 ### Ventas, pagos y envíos
 
 El listado devuelve `latestDeliveryStatusId` y `latestDeliveryStatusName`, tomados del envío más reciente; ambos son `null` si la venta no tiene envíos.
+
+Para seleccionar la ubicación de un envío, consultar `GET /api/v1/municipalities`. Cada elemento devuelve `id`, `name`, `departmentId` y `departmentName`; la lista está ordenada por nombre. Se puede filtrar por departamento con `GET /api/v1/municipalities?departmentId={departmentId}`. El endpoint requiere JWT con rol Admin o Vendedor (`Employee`). En el request de creación del envío, enviar el `id` del municipio seleccionado como `municipalityId`.
+
+Ejemplo de respuesta:
+
+```json
+[
+  {
+    "id": 1,
+    "name": "Managua",
+    "departmentId": 1,
+    "departmentName": "Managua"
+  }
+]
+```
+
 | Flujo | Endpoint | Rol | Resultado |
 |---|---|---|---|
 | Listar / abrir venta | `GET /api/v1/sales`, `GET /api/v1/sales/{id}` | Admin, Vendedor | El listado acepta `deliveryStatusId` y lo compara con el estado del envío más reciente. La consulta individual incluye productos, pagos, prendas en selección y `deliveries`. |

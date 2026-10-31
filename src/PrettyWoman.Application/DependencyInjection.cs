@@ -12,6 +12,7 @@ public static class DependencyInjection
         services.AddScoped<IDashboardService, DashboardService>();
         services.AddScoped<ISupplierService, SupplierService>();
         services.AddScoped<IShippingCompanyService, ShippingCompanyService>();
+        services.AddScoped<IMunicipalityService, MunicipalityService>();
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<IProductImageService, ProductImageService>();
         services.AddScoped<IInventoryService, InventoryService>();
