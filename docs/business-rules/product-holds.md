@@ -86,6 +86,16 @@ Cuando la clienta escoge el producto enviado para seleccion:
 
 No se debe disminuir `available_quantity` en este paso porque ya fue disminuido al crear el hold.
 
+## Regla: revertir la resolución de un hold
+
+La resolución de un hold puede revertirse antes de que la venta se complete o se cancele. El hold debe estar en `AwaitingReturn`, `NotSelected` o `ConvertedToSale`; al revertirlo vuelve a `Active`.
+
+- Para `AwaitingReturn` o `NotSelected`, debe existir el movimiento `SelectionReturned`. La reversión mueve la cantidad de `available_quantity` a `unavailable_quantity`.
+- Para `ConvertedToSale`, debe existir un único movimiento `SelectionConvertedToSale` asociado a su línea de venta, y la línea y el movimiento deben coincidir con el producto y la cantidad del hold.
+- La línea convertida solo puede eliminarse si no tiene otros movimientos de inventario ni referencias desde ítems de devolución (`SaleReturnItems`) o de retorno de cambio (`ExchangeReturnItems`). Esas referencias se conservan con `DeleteBehavior.Restrict`; por eso el backend debe rechazar la reversión antes de intentar borrar la línea.
+- El total de la venta después de retirar la línea debe seguir siendo compatible con los pagos. Si no lo es, la reversión se rechaza.
+- Si se permite revertir la conversión, el movimiento original se conserva como historial y se desvincula de la línea eliminada; se registra `SelectionResolutionReversed`, se mueve la cantidad de `out_of_inventory` a `unavailable_quantity`, y se recalculan los totales de venta y cobro pendiente.
+
 ## Ejemplo: dos tallas enviadas para escoger una
 
 Situacion:

@@ -12,6 +12,7 @@ public interface ISaleService
     Task ReplaceProductsAsync(int id, ReplaceSaleProductsDTO replaceSaleProductsDTO);
     Task AddSelectionHoldsAsync(int saleId, List<CreateSaleSelectionProductDTO> selectionProducts);
     Task ResolveSelectionHoldAsync(int saleId, int holdId, ResolveSelectionHoldDTO resolution);
+    Task UndoSelectionHoldResolutionAsync(int saleId, int holdId);
     Task MarkSelectionHoldAsReturnedAsync(int saleId, int holdId);
     Task<int> AddPaymentMovementAsync(int saleId, CreateSalePaymentMovementDTO paymentMovement);
     Task UpdatePaymentMovementAsync(int saleId, int paymentMovementId, UpdateSalePaymentMovementDTO paymentMovement);

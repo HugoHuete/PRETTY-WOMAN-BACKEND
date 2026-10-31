@@ -574,6 +574,7 @@ La consulta de historial está disponible para Admin y Vendedor; las acciones de
 |---|---|---|---|
 | Enviar productos a selección | `POST /api/v1/sales/{id}/selection-holds` | Admin | Solo para ventas con canal distinto de `InStoreSale`; crea los holds y deja las prendas fuera de disponibilidad mientras estén activas. |
 | Resolver selección | `POST /api/v1/sales/{id}/selection-holds/{holdId}/resolve` | Admin | Registra la decisión de la clienta; las prendas no elegidas regresan a disponibilidad. |
+| Revertir resolución de selección | `POST /api/v1/sales/{id}/selection-holds/{holdId}/undo-resolution` | Admin | Reabre el hold y devuelve la prenda a no disponible. Solo antes de completar o cancelar la venta; puede rechazarse si hay otros movimientos de inventario, pagos incompatibles o devoluciones/cambios que referencian la línea de venta. Devuelve `204`; recargar el detalle de la venta. |
 | Marcar selección devuelta | `POST /api/v1/sales/{id}/selection-holds/{holdId}/return` | Admin | Devuelve la prenda de selección no comprada al flujo de inventario. |
 | Consultar / crear cambio | `GET`, `POST /api/v1/sales/{id}/exchanges` | Consulta: Admin, Vendedor. Crear: Admin | El cambio conserva retorno y salida como ítems independientes de la venta. |
 | Entrega física del cambio | `POST /api/v1/sales/{id}/exchanges/{exchangeId}/handover` | Admin | La agencia entrega reemplazos y recibe retornos. |

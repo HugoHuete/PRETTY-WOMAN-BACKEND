@@ -25,6 +25,7 @@ public enum InventoryMovementTypeOption
     ExchangeReplacementReservationReleased = 16,
     ExchangeReturnReceivedByAgency = 17,
     ExchangeReturnMissing = 18,
-    AdjustmentTransfer = 19
+    AdjustmentTransfer = 19,
+    SelectionResolutionReversed = 20
 
 }

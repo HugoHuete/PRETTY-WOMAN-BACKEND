@@ -413,6 +413,101 @@ public class SaleService(
         await _context.SaveChangesAsync();
     }
 
+    public async Task UndoSelectionHoldResolutionAsync(int saleId, int holdId)
+    {
+        var sale = await GetSaleWithDetailsAsync(saleId, asNoTracking: false);
+        if (sale.SaleStatusId is (int)SaleStatusOption.Cancelled or (int)SaleStatusOption.Completed)
+            throw new AppBadRequestException("No se puede revertir la selección de una venta cancelada o completada.");
+
+        var hold = sale.ProductHolds.SingleOrDefault(item => item.Id == holdId)
+            ?? throw new AppNotFoundException($"La prenda en seleccion con id {holdId} no existe para la venta indicada.");
+
+        if (hold.ProductHoldStatusId is (int)ProductHoldStatusOption.AwaitingReturn or (int)ProductHoldStatusOption.NotSelected)
+        {
+            var hasSelectionReturnMovement = await _context.InventoryMovements.AnyAsync(movement =>
+                movement.ProductHoldId == hold.Id &&
+                movement.InventoryMovementTypeId == (int)InventoryMovementTypeOption.SelectionReturned);
+
+            if (!hasSelectionReturnMovement)
+                throw new AppBadRequestException("No se encontró el movimiento de inventario de la prenda no seleccionada.");
+
+            var inventoryReversal = _inventoryService.Move(
+                hold.ProductVariant!,
+                InventoryStockBucketOption.Available,
+                InventoryStockBucketOption.Unavailable,
+                hold.Quantity,
+                InventoryMovementTypeOption.SelectionResolutionReversed,
+                DateTime.UtcNow,
+                "Se revirtió la decisión de no seleccionar la prenda.");
+
+            inventoryReversal.ProductHold = hold;
+            hold.ProductHoldStatusId = (int)ProductHoldStatusOption.Active;
+            hold.ResolvedAt = null;
+            hold.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return;
+        }
+
+        if (hold.ProductHoldStatusId != (int)ProductHoldStatusOption.ConvertedToSale)
+            throw new AppBadRequestException("Solo se puede revertir una prenda que ya fue resuelta como seleccionada o no seleccionada.");
+
+        var conversionMovements = await _context.InventoryMovements
+            .Where(movement => movement.ProductHoldId == hold.Id &&
+                movement.InventoryMovementTypeId == (int)InventoryMovementTypeOption.SelectionConvertedToSale &&
+                movement.SaleProductId.HasValue)
+            .ToListAsync();
+
+        if (conversionMovements.Count != 1)
+            throw new AppBadRequestException("No se encontró un único movimiento de conversión para revertir la selección.");
+
+        var conversionMovement = conversionMovements[0];
+
+        var saleProduct = sale.ProductVariants.SingleOrDefault(item => item.Id == conversionMovement.SaleProductId)
+            ?? throw new AppBadRequestException("No se encontró la prenda de venta asociada a la selección.");
+
+        if (saleProduct.ProductId != hold.ProductId || saleProduct.Quantity != hold.Quantity ||
+            conversionMovement.ProductId != hold.ProductId || conversionMovement.Quantity != hold.Quantity)
+            throw new AppBadRequestException("La prenda de venta ya no coincide con la selección original y no se puede revertir automáticamente.");
+
+        if (await _context.InventoryMovements.AnyAsync(movement =>
+                movement.SaleProductId == saleProduct.Id && movement.Id != conversionMovement.Id))
+            throw new AppBadRequestException("La prenda tiene otros movimientos de inventario y no se puede revertir automáticamente.");
+
+        if (await _context.SaleReturnItems.AnyAsync(item => item.OriginalSaleProductId == saleProduct.Id) ||
+            await _context.ExchangeReturnItems.AnyAsync(item => item.OriginalSaleProductId == saleProduct.Id))
+            throw new AppBadRequestException("La prenda tiene devoluciones o cambios asociados y no se puede revertir automáticamente.");
+
+        var remainingProducts = sale.ProductVariants.Where(item => item.Id != saleProduct.Id).ToList();
+        var updatedTotal = CalculateSaleTotals(remainingProducts).Total;
+        var paymentTotal = SalePaymentMovementRules.CalculateProductTotal(sale.PaymentMovements);
+        SalePaymentMovementRules.EnsureAllowedProductTotal(sale.SaleChannelId, updatedTotal, paymentTotal);
+
+        var conversionReversal = _inventoryService.Move(
+            hold.ProductVariant!,
+            InventoryStockBucketOption.OutOfInventory,
+            InventoryStockBucketOption.Unavailable,
+            hold.Quantity,
+            InventoryMovementTypeOption.SelectionResolutionReversed,
+            DateTime.UtcNow,
+            "Se revirtió la confirmación de que la clienta conserva la prenda.");
+        conversionReversal.ProductHold = hold;
+
+        // Keep the conversion movement as audit history while removing its sale-product link.
+        conversionMovement.SaleProduct = null;
+        conversionMovement.SaleProductId = null;
+        sale.ProductVariants.Remove(saleProduct);
+        _context.SaleProducts.Remove(saleProduct);
+
+        hold.ProductHoldStatusId = (int)ProductHoldStatusOption.Active;
+        hold.ResolvedAt = null;
+        hold.UpdatedAt = DateTime.UtcNow;
+
+        RecalculateSaleTotals(sale);
+        await _deliveryService.SyncActiveAmountToCollectAsync(sale.Id, sale.Total, sale.PaymentMovements);
+        await _context.SaveChangesAsync();
+    }
+
     public async Task MarkSelectionHoldAsReturnedAsync(int saleId, int holdId)
     {
         var sale = await GetSaleWithDetailsAsync(saleId, asNoTracking: false);
