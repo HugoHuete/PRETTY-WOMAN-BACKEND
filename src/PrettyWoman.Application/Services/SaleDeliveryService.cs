@@ -245,6 +245,7 @@ public class SaleDeliveryService(
             InventoryMovementTypeOption.ReservationCreated,
             "Entrega fallida; productos reservados para un nuevo intento.");
         delivery.DeliveryStatusId = (int)DeliveryStatusCode.Failed;
+        delivery.AmountToCollect = 0;
         delivery.Sale!.SaleStatusId = (int)SaleStatusOption.ReadyForDelivery;
         await _context.SaveChangesAsync();
         if (transaction is not null) await transaction.CommitAsync();
