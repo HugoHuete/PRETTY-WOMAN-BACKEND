@@ -13,11 +13,13 @@ namespace PrettyWoman.Api.Controllers;
 [Authorize(Policy = AppPolicies.RequireEmployeeRole)]
 public class SalesController(
     ISaleService saleService,
+    ISaleDeliveryService saleDeliveryService,
     ISaleExchangeService saleExchangeService,
     ISaleReturnService saleReturnService,
     ILogger<SalesController> logger) : ControllerBase
 {
     private readonly ISaleService _saleService = saleService;
+    private readonly ISaleDeliveryService _saleDeliveryService = saleDeliveryService;
     private readonly ISaleExchangeService _saleExchangeService = saleExchangeService;
     private readonly ISaleReturnService _saleReturnService = saleReturnService;
     private readonly ILogger<SalesController> _logger = logger;
@@ -29,6 +31,15 @@ public class SalesController(
     {
         var sales = await _saleService.GetAllAsync(query);
         return Ok(sales);
+    }
+
+    /// <summary>Consulta envíos paginados con filtros de estado, agencia y datos de la clienta.</summary>
+    [HttpGet("deliveries")]
+    [ProducesResponseType(typeof(PaginatedResult<SaleDeliveryListItemDTO>), StatusCodes.Status200OK)]
+    public async Task<ActionResult<PaginatedResult<SaleDeliveryListItemDTO>>> GetDeliveries([FromQuery] SaleDeliveryQueryDTO query)
+    {
+        var deliveries = await _saleDeliveryService.GetAllAsync(query);
+        return Ok(deliveries);
     }
 
     /// <summary>Obtiene el detalle de una venta cuando se necesita consultar o gestionar una venta específica.</summary>

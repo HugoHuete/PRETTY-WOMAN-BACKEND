@@ -491,6 +491,7 @@ Ejemplo de respuesta:
 | Flujo | Endpoint | Rol | Resultado |
 |---|---|---|---|
 | Listar / abrir venta | `GET /api/v1/sales`, `GET /api/v1/sales/{id}` | Admin, Vendedor | El listado acepta `deliveryStatusId` y lo compara con el estado del envío más reciente. La consulta individual incluye productos, pagos, prendas en selección, `deliveries` y `totalShippingChargedToClient`, suma del envío cobrado al cliente en todos los envíos no cancelados. |
+| Listar envíos | `GET /api/v1/sales/deliveries` | Admin, Vendedor | Paginado con `page` y `pageSize` (20 por defecto, máximo 100). Filtros opcionales: `deliveryStatusId`, `deliveryAgencyId`, `clientName`, `clientPhone`, `clientInstagramUser` y `clientMessengerUser`; los filtros de cliente buscan coincidencias parciales sin distinguir mayúsculas. |
 | Crear venta o reserva | `POST /api/v1/sales` | Admin, Vendedor | Devuelve `201` y el id. Para una reserva confirmada enviar `saleStatusId: 2` (`Reserved`). |
 | Registrar abono o pago | `POST /api/v1/sales/{id}/payment-movements` | Admin, Vendedor | Devuelve `201` y el id. El backend calcula el total y estado de pago. |
 | Crear envío | `POST /api/v1/sales/{id}/deliveries` | Admin, Vendedor | Devuelve `201` y el id; deja la venta `ReadyForDelivery` y reserva productos si estaba `Pending`. |
