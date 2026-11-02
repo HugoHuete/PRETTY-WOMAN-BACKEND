@@ -16,6 +16,7 @@ public class SaleDeliveryService(
     IInventoryService inventoryService) : ISaleDeliveryService
 {
     private const string ActiveDeliveryConstraintName = "ux_sale_deliveries_sale_id_active";
+    private static readonly TimeZoneInfo NicaraguaTimeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Managua");
     private readonly IApplicationDbContext _context = context;
     private readonly ICurrentUserService _currentUserService = currentUserService;
     private readonly IInventoryService _inventoryService = inventoryService;
@@ -26,10 +27,28 @@ public class SaleDeliveryService(
         query.PageSize = Math.Clamp(query.PageSize, 1, 100);
 
         var deliveriesQuery = _context.SaleDeliveries.AsNoTracking().AsQueryable();
+        if (query.Date.HasValue)
+        {
+            if (query.Date.Value == DateOnly.MaxValue)
+                throw new AppBadRequestException("La fecha no puede ser 9999-12-31.");
+
+            var fromUtc = TimeZoneInfo.ConvertTimeToUtc(query.Date.Value.ToDateTime(TimeOnly.MinValue), NicaraguaTimeZone);
+            var toUtc = TimeZoneInfo.ConvertTimeToUtc(query.Date.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), NicaraguaTimeZone);
+            deliveriesQuery = deliveriesQuery.Where(item => item.CreatedAt >= fromUtc && item.CreatedAt < toUtc);
+        }
         if (query.DeliveryStatusId.HasValue)
             deliveriesQuery = deliveriesQuery.Where(item => item.DeliveryStatusId == query.DeliveryStatusId.Value);
         if (query.DeliveryAgencyId.HasValue)
             deliveriesQuery = deliveriesQuery.Where(item => item.DeliveryAgencyId == query.DeliveryAgencyId.Value);
+        if (!string.IsNullOrWhiteSpace(query.ClientSearch))
+        {
+            var search = query.ClientSearch.Trim().ToLower();
+            deliveriesQuery = deliveriesQuery.Where(item => item.Client != null &&
+                (item.Client.Name.ToLower().Contains(search) ||
+                 (item.Client.PhoneNumber != null && item.Client.PhoneNumber.ToLower().Contains(search)) ||
+                 (item.Client.InstagramUser != null && item.Client.InstagramUser.ToLower().Contains(search)) ||
+                 (item.Client.MessengerUser != null && item.Client.MessengerUser.ToLower().Contains(search))));
+        }
         if (!string.IsNullOrWhiteSpace(query.ClientName))
         {
             var search = query.ClientName.Trim().ToLower();
@@ -77,7 +96,8 @@ public class SaleDeliveryService(
                 AmountToCollect = item.AmountToCollect,
                 ShippingChargedToClient = item.ShippingChargedToClient,
                 ShippingPaidToAgency = item.ShippingPaidToAgency,
-                DeliveryAddress = item.DeliveryAddress
+                DeliveryAddress = item.DeliveryAddress,
+                Comments = item.Comments
             })
             .ToListAsync();
 

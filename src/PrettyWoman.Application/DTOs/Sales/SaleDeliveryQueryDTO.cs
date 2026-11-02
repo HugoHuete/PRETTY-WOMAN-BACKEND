@@ -4,8 +4,10 @@ public class SaleDeliveryQueryDTO
 {
     public int Page { get; set; } = 1;
     public int PageSize { get; set; } = 20;
+    public DateOnly? Date { get; set; }
     public int? DeliveryStatusId { get; set; }
     public int? DeliveryAgencyId { get; set; }
+    public string? ClientSearch { get; set; }
     public string? ClientName { get; set; }
     public string? ClientPhone { get; set; }
     public string? ClientInstagramUser { get; set; }

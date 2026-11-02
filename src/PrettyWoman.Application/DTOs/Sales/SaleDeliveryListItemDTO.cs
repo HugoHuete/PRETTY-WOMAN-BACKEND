@@ -21,4 +21,5 @@ public class SaleDeliveryListItemDTO
     public decimal ShippingChargedToClient { get; set; }
     public decimal ShippingPaidToAgency { get; set; }
     public string? DeliveryAddress { get; set; }
+    public string? Comments { get; set; }
 }
