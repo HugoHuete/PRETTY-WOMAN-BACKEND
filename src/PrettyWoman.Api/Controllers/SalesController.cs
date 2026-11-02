@@ -88,6 +88,15 @@ public class SalesController(
         return NoContent();
     }
 
+    /// <summary>Revierte la confirmación de una prenda en selección antes de cerrar la venta.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
+    [HttpPost("{id:int}/selection-holds/{holdId:int}/undo-resolution")]
+    public async Task<IActionResult> UndoSelectionHoldResolution(int id, int holdId)
+    {
+        await _saleService.UndoSelectionHoldResolutionAsync(id, holdId);
+        return NoContent();
+    }
+
     /// <summary>Marca como devuelto un producto en selección cuando regresa sin ser comprado.</summary>
     [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/selection-holds/{holdId:int}/return")]
@@ -263,7 +272,7 @@ public class SalesController(
         return NoContent();
     }
 
-    /// <summary>Cancela un envío cuando deja de ser necesario o no debe continuar.</summary>
+    /// <summary>Registra el reembolso pendiente del envío y lo cancela en una sola operación.</summary>
     [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/deliveries/{deliveryId:int}/cancel")]
     public async Task<IActionResult> CancelDelivery(int id, int deliveryId)

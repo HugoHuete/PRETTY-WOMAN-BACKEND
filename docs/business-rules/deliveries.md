@@ -27,7 +27,9 @@ The sales listing returns that same delivery status in `latestDeliveryStatusId` 
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/send` transitions a delivery from `Pending` to `Sent`, moves the reserved quantities to `OutOfInventory`, and sets the sale to `SentForDelivery`.
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/complete` transitions a sent delivery to `Completed` only when los productos y el envio ya estan pagados completamente.
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/fail` transitions a sent delivery to `Failed`, returns only the quantities still outside to `Reserved`, and returns the sale to `ReadyForDelivery` for a new attempt. The transition is rejected while a return is requested or picked up but not received, or while an exchange remains requested before its physical handover.
-- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/cancel` transitions a pending delivery to `Cancelled` and returns the sale to `ReadyForDelivery`.
+- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/cancel` may cancel only a `Pending` delivery with no agency reconciliation. It records reversal movements for any remaining shipping amount paid, then transitions the delivery to `Cancelled`, sets `amount_to_collect`, `shipping_charged_to_client` and `shipping_paid_to_agency` to zero, and returns the sale to `ReadyForDelivery`. The refund and cancellation are atomic; a separate product refund may remain pending. Card or USD payments that include product value cannot be partially refunded under current rules, so cancellation is rejected for those payments.
+- Delivery changes, cancellation, and changes to sale payments are serialized per sale. A shipping payment cannot be applied to a cancelled delivery.
+- The sale detail response (`GET /api/v1/sales/{id}`) includes `totalShippingChargedToClient`, the sum of `shippingChargedToClient` for deliveries whose status is not `Cancelled`.
 - A completed or cancelled sale must not retain an active delivery.
 
 ## Collection amount

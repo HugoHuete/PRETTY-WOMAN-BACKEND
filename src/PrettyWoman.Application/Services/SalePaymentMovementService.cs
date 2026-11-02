@@ -43,6 +43,7 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
 
     public async Task<int> AddAsync(int saleId, CreateSalePaymentMovementDTO paymentMovement)
     {
+        await using var transaction = await _context.BeginSalePaymentTransactionAsync(saleId);
         var allocation = ResolveCreateAllocation(paymentMovement);
         var tender = ResolveCreateTender(paymentMovement, allocation);
         await ValidatePaymentDataAsync(paymentMovement.PaymentMethodId, paymentMovement.PaymentTerminalId, allocation.GrossAmount);
@@ -63,11 +64,14 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
         await CreateFinancialMovementsAsync([payment]);
         await SaveWithConcurrencyHandlingAsync();
 
+        if (transaction is not null) await transaction.CommitAsync();
+
         return payment.Id;
     }
 
     public async Task PatchAsync(int saleId, int paymentMovementId, UpdateSalePaymentMovementDTO paymentMovement)
     {
+        await using var transaction = await _context.BeginSalePaymentTransactionAsync(saleId);
         if (!paymentMovement.HasChanges)
             throw new AppBadRequestException("Debe enviar al menos un campo para actualizar el pago.");
 
@@ -101,10 +105,12 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
         await _deliveryService.SyncActiveAmountToCollectAsync(sale.Id, sale.Total, sale.PaymentMovements);
         await SyncFinancialMovementAsync(payment);
         await SaveWithConcurrencyHandlingAsync();
+        if (transaction is not null) await transaction.CommitAsync();
     }
 
     public async Task<int> RefundAsync(int saleId, int paymentMovementId, RefundSalePaymentMovementDTO refund)
     {
+        await using var transaction = await _context.BeginSalePaymentTransactionAsync(saleId);
         var sale = await GetSaleForPaymentChangesAsync(saleId);
         EnsureSaleIsNotCancelled(sale);
 
@@ -112,13 +118,15 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
         // El reembolso es un movimiento de salida enlazado al pago original; nunca se elimina el pago.
         var refundMovement = await CreateRefundPaymentMovementAsync(originalPayment, refund);
         RegisterRefund(sale, originalPayment, refundMovement);
-        // Cada cambio se valida contra los limites de productos y de cada envio antes de guardar.
-        await ValidatePaymentTotalsAsync(sale);
+        // Un reembolso no incrementa lo pagado por productos y puede dejar un exceso pendiente.
+        await ValidatePaymentTotalsAsync(sale, allowProductOverpayment: true);
 
         sale.SalePaymentStatusId = SalePaymentMovementRules.ResolveStatus(sale.Total, SalePaymentMovementRules.CalculateProductTotal(sale.PaymentMovements));
         await _deliveryService.SyncActiveAmountToCollectAsync(sale.Id, sale.Total, sale.PaymentMovements);
         await CreateFinancialMovementsAsync([refundMovement]);
         await SaveWithConcurrencyHandlingAsync();
+
+        if (transaction is not null) await transaction.CommitAsync();
 
         return refundMovement.Id;
     }
@@ -305,11 +313,11 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
         };
     }
 
-    private async Task ValidatePaymentTotalsAsync(Sale sale)
+    private async Task ValidatePaymentTotalsAsync(Sale sale, bool allowProductOverpayment = false)
     {
         // El estado de pago de la venta depende solo de productos; envio se valida por cada entrega.
         var productTotal = SalePaymentMovementRules.CalculateProductTotal(sale.PaymentMovements);
-        SalePaymentMovementRules.EnsureAllowedProductTotal(sale.SaleChannelId, sale.Total, productTotal);
+        SalePaymentMovementRules.EnsureAllowedProductTotal(sale.SaleChannelId, sale.Total, productTotal, allowProductOverpayment);
 
         if (sale.SaleChannelId == (int)SaleChannelOption.InStoreSale && sale.PaymentMovements.Any(payment => payment.ShippingAmount > 0))
             throw new AppBadRequestException("Las ventas en local no pueden tener pagos aplicados a envio.");
@@ -332,6 +340,8 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
             throw new AppBadRequestException("Los pagos aplicados a envio deben indicar el envio correspondiente.");
         if (allocation.SaleDeliveryId.HasValue && sale.Deliveries.All(delivery => delivery.Id != allocation.SaleDeliveryId.Value))
             throw new AppBadRequestException("El envio indicado no pertenece a la venta.");
+        if (allocation.SaleDeliveryId.HasValue && sale.Deliveries.Any(delivery => delivery.Id == allocation.SaleDeliveryId.Value && delivery.DeliveryStatusId == (int)DeliveryStatusCode.Cancelled))
+            throw new AppBadRequestException("No se pueden aplicar pagos a un envio cancelado.");
 
         return Task.CompletedTask;
     }

@@ -89,6 +89,7 @@ public interface IApplicationDbContext
     DbSet<InventoryAdjustmentItem> InventoryAdjustmentItems { get; }
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
+    Task<IDbContextTransaction?> BeginSalePaymentTransactionAsync(int saleId, CancellationToken cancellationToken = default);
     Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
     Task<IDbContextTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken = default);
 }

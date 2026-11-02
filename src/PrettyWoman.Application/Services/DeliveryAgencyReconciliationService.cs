@@ -73,6 +73,17 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
 
         var deliveryIds = request.Deliveries.Select(item => item.SaleDeliveryId).ToList();
         var returnIds = request.Returns.Select(item => item.SaleReturnId).ToList();
+        var saleIds = await _context.SaleDeliveries.AsNoTracking()
+            .Where(item => deliveryIds.Contains(item.Id))
+            .Select(item => item.SaleId)
+            .Distinct()
+            .OrderBy(id => id)
+            .ToListAsync();
+        await using var transaction = saleIds.Count > 0
+            ? await _context.BeginSalePaymentTransactionAsync(saleIds[0])
+            : null;
+        foreach (var saleId in saleIds.Skip(1))
+            await _context.BeginSalePaymentTransactionAsync(saleId);
         // Se cargan los pagos existentes para calcular el saldo real al momento de conciliar,
         // no el monto que tenia el envio cuando fue creado.
         var deliveries = await _context.SaleDeliveries
@@ -154,6 +165,7 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
         // Una liquidacion puede tener remesa, pago a la agencia, ambos, o ninguno.
         await AddFinancialMovementsAsync(reconciliation, agency.Name);
         await _context.SaveChangesAsync();
+        if (transaction is not null) await transaction.CommitAsync();
 
         return reconciliation.Id;
     }

@@ -1610,6 +1610,11 @@ namespace PrettyWoman.Infrastructure.Migrations
                         {
                             Id = 19,
                             Name = "AdjustmentTransfer"
+                        },
+                        new
+                        {
+                            Id = 20,
+                            Name = "SelectionResolutionReversed"
                         });
                 });
 

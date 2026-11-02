@@ -14,6 +14,7 @@ public class SaleDTO
     public decimal Subtotal { get; set; }
     public decimal TotalDiscount { get; set; }
     public decimal Total { get; set; }
+    public decimal TotalShippingChargedToClient { get; set; }
     public string? Comments { get; set; }
     public int? ClientId { get; set; }
     public string? ClientName { get; set; }
@@ -21,6 +22,7 @@ public class SaleDTO
     public string? MunicipalityName { get; set; }
     public int? LatestDeliveryStatusId { get; set; }
     public string? LatestDeliveryStatusName { get; set; }
+    public bool HasPendingSelection { get; set; }
     public List<SaleProductDTO> ProductVariants { get; set; } = [];
     public List<SaleSelectionHoldDTO> SelectionHolds { get; set; } = [];
     public List<SalePaymentMovementDTO> PaymentMovements { get; set; } = [];

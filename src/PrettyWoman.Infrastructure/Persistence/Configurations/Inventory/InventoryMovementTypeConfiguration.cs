@@ -35,7 +35,8 @@ public class InventoryMovementTypeConfiguration : IEntityTypeConfiguration<Inven
             new InventoryMovementType { Id = (int)InventoryMovementTypeOption.ExchangeReplacementReservationReleased, Name = nameof(InventoryMovementTypeOption.ExchangeReplacementReservationReleased) },
             new InventoryMovementType { Id = (int)InventoryMovementTypeOption.ExchangeReturnReceivedByAgency, Name = nameof(InventoryMovementTypeOption.ExchangeReturnReceivedByAgency) },
             new InventoryMovementType { Id = (int)InventoryMovementTypeOption.ExchangeReturnMissing, Name = nameof(InventoryMovementTypeOption.ExchangeReturnMissing) },
-            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.AdjustmentTransfer, Name = nameof(InventoryMovementTypeOption.AdjustmentTransfer) }
+            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.AdjustmentTransfer, Name = nameof(InventoryMovementTypeOption.AdjustmentTransfer) },
+            new InventoryMovementType { Id = (int)InventoryMovementTypeOption.SelectionResolutionReversed, Name = nameof(InventoryMovementTypeOption.SelectionResolutionReversed) }
         );
     }
 }

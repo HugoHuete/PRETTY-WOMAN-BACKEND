@@ -490,12 +490,12 @@ Ejemplo de respuesta:
 
 | Flujo | Endpoint | Rol | Resultado |
 |---|---|---|---|
-| Listar / abrir venta | `GET /api/v1/sales`, `GET /api/v1/sales/{id}` | Admin, Vendedor | El listado acepta `deliveryStatusId` y lo compara con el estado del envío más reciente. La consulta individual incluye productos, pagos, prendas en selección y `deliveries`. |
+| Listar / abrir venta | `GET /api/v1/sales`, `GET /api/v1/sales/{id}` | Admin, Vendedor | El listado acepta `deliveryStatusId` y lo compara con el estado del envío más reciente. La consulta individual incluye productos, pagos, prendas en selección, `deliveries` y `totalShippingChargedToClient`, suma del envío cobrado al cliente en todos los envíos no cancelados. |
 | Crear venta o reserva | `POST /api/v1/sales` | Admin, Vendedor | Devuelve `201` y el id. Para una reserva confirmada enviar `saleStatusId: 2` (`Reserved`). |
 | Registrar abono o pago | `POST /api/v1/sales/{id}/payment-movements` | Admin, Vendedor | Devuelve `201` y el id. El backend calcula el total y estado de pago. |
 | Crear envío | `POST /api/v1/sales/{id}/deliveries` | Admin, Vendedor | Devuelve `201` y el id; deja la venta `ReadyForDelivery` y reserva productos si estaba `Pending`. |
 | Despachar | `POST /api/v1/sales/{id}/deliveries/{deliveryId}/send` | Admin, Vendedor | Cambia el envío a `Sent` y mueve la reserva fuera de inventario. |
-| Completar, fallar o cancelar envío | `.../complete`, `.../fail`, `.../cancel` | Admin | Son transiciones posteriores o sensibles. |
+| Completar, fallar o cancelar envío | `.../complete`, `.../fail`, `.../cancel` | Admin | Cancelar solo está permitido para envíos pendientes sin conciliación. Antes de llamar a `.../cancel`, pedir confirmación e indicar el reembolso de envío que se registrará; confirmar únicamente después de devolver el dinero al cliente. El backend registra automáticamente el reembolso pendiente y cancela en una sola transacción; `amountToCollect`, `shippingChargedToClient` y `shippingPaidToAgency` pasan a `0`. Puede quedar pendiente un reembolso separado de productos. La API rechaza pagos en tarjeta o USD que mezclan envío y productos porque actualmente no admiten reembolsos parciales. |
 | Conciliar cobro COD | `GET /api/v1/deliveryagencyreconciliations/pending-deliveries`, `POST /api/v1/deliveryagencyreconciliations` | Admin | Un envío `Sent` solo se completa si la agencia recauda el saldo total. |
 | Corregir o cancelar venta | `PATCH /api/v1/sales/{id}`, `PUT /api/v1/sales/{id}/products`, `POST /api/v1/sales/{id}/cancel` | Admin | No mostrar estas acciones a Vendedor. |
 
@@ -574,6 +574,7 @@ La consulta de historial está disponible para Admin y Vendedor; las acciones de
 |---|---|---|---|
 | Enviar productos a selección | `POST /api/v1/sales/{id}/selection-holds` | Admin | Solo para ventas con canal distinto de `InStoreSale`; crea los holds y deja las prendas fuera de disponibilidad mientras estén activas. |
 | Resolver selección | `POST /api/v1/sales/{id}/selection-holds/{holdId}/resolve` | Admin | Registra la decisión de la clienta; las prendas no elegidas regresan a disponibilidad. |
+| Revertir resolución de selección | `POST /api/v1/sales/{id}/selection-holds/{holdId}/undo-resolution` | Admin | Reabre el hold y devuelve la prenda a no disponible. Solo antes de completar o cancelar la venta; puede rechazarse si hay otros movimientos de inventario, pagos incompatibles o devoluciones/cambios que referencian la línea de venta. Devuelve `204`; recargar el detalle de la venta. |
 | Marcar selección devuelta | `POST /api/v1/sales/{id}/selection-holds/{holdId}/return` | Admin | Devuelve la prenda de selección no comprada al flujo de inventario. |
 | Consultar / crear cambio | `GET`, `POST /api/v1/sales/{id}/exchanges` | Consulta: Admin, Vendedor. Crear: Admin | El cambio conserva retorno y salida como ítems independientes de la venta. |
 | Entrega física del cambio | `POST /api/v1/sales/{id}/exchanges/{exchangeId}/handover` | Admin | La agencia entrega reemplazos y recibe retornos. |

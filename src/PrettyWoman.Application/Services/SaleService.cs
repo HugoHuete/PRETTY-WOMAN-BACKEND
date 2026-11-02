@@ -45,6 +45,14 @@ public class SaleService(
 
         var saleDTOs = sales.Select(MapSaleDTO).ToList();
         var saleIds = sales.Select(sale => sale.Id).ToList();
+        var salesWithPendingSelections = await _context.ProductHolds
+            .AsNoTracking()
+            .Where(hold => hold.SaleId.HasValue && saleIds.Contains(hold.SaleId.Value) &&
+                hold.ProductHoldStatusId == (int)ProductHoldStatusOption.Active)
+            .Select(hold => hold.SaleId!.Value)
+            .Distinct()
+            .ToListAsync();
+        var salesWithPendingSelectionIds = salesWithPendingSelections.ToHashSet();
         var latestDeliveryStatuses = await _context.SaleDeliveries
             .AsNoTracking()
             .Where(delivery => saleIds.Contains(delivery.SaleId))
@@ -61,9 +69,22 @@ public class SaleService(
             .ToListAsync();
         var latestDeliveryStatusBySaleId = latestDeliveryStatuses
             .ToDictionary(delivery => delivery.SaleId);
+        var totalShippingChargedBySale = await _context.SaleDeliveries
+            .AsNoTracking()
+            .Where(delivery => saleIds.Contains(delivery.SaleId) &&
+                delivery.DeliveryStatusId != (int)DeliveryStatusCode.Cancelled)
+            .GroupBy(delivery => delivery.SaleId)
+            .Select(group => new
+            {
+                SaleId = group.Key,
+                TotalShippingChargedToClient = group.Sum(delivery => delivery.ShippingChargedToClient)
+            })
+            .ToDictionaryAsync(item => item.SaleId, item => item.TotalShippingChargedToClient);
 
         foreach (var saleDTO in saleDTOs)
         {
+            saleDTO.HasPendingSelection = salesWithPendingSelectionIds.Contains(saleDTO.Id);
+            saleDTO.TotalShippingChargedToClient = totalShippingChargedBySale.GetValueOrDefault(saleDTO.Id);
             if (!latestDeliveryStatusBySaleId.TryGetValue(saleDTO.Id, out var latestDelivery)) continue;
 
             saleDTO.LatestDeliveryStatusId = latestDelivery.DeliveryStatusId;
@@ -82,7 +103,11 @@ public class SaleService(
     public async Task<SaleDTO> GetByIdAsync(int id)
     {
         var sale = await GetSaleWithDetailsAsync(id, asNoTracking: true);
-        return MapSaleDTO(sale);
+        var saleDTO = MapSaleDTO(sale);
+        saleDTO.TotalShippingChargedToClient = sale.Deliveries
+            .Where(delivery => delivery.DeliveryStatusId != (int)DeliveryStatusCode.Cancelled)
+            .Sum(delivery => delivery.ShippingChargedToClient);
+        return saleDTO;
     }
 
     public async Task<int> CreateAsync(CreateSaleDTO createSaleDTO)
@@ -404,6 +429,101 @@ public class SaleService(
         await _context.SaveChangesAsync();
     }
 
+    public async Task UndoSelectionHoldResolutionAsync(int saleId, int holdId)
+    {
+        var sale = await GetSaleWithDetailsAsync(saleId, asNoTracking: false);
+        if (sale.SaleStatusId is (int)SaleStatusOption.Cancelled or (int)SaleStatusOption.Completed)
+            throw new AppBadRequestException("No se puede revertir la selección de una venta cancelada o completada.");
+
+        var hold = sale.ProductHolds.SingleOrDefault(item => item.Id == holdId)
+            ?? throw new AppNotFoundException($"La prenda en seleccion con id {holdId} no existe para la venta indicada.");
+
+        if (hold.ProductHoldStatusId is (int)ProductHoldStatusOption.AwaitingReturn or (int)ProductHoldStatusOption.NotSelected)
+        {
+            var hasSelectionReturnMovement = await _context.InventoryMovements.AnyAsync(movement =>
+                movement.ProductHoldId == hold.Id &&
+                movement.InventoryMovementTypeId == (int)InventoryMovementTypeOption.SelectionReturned);
+
+            if (!hasSelectionReturnMovement)
+                throw new AppBadRequestException("No se encontró el movimiento de inventario de la prenda no seleccionada.");
+
+            var inventoryReversal = _inventoryService.Move(
+                hold.ProductVariant!,
+                InventoryStockBucketOption.Available,
+                InventoryStockBucketOption.Unavailable,
+                hold.Quantity,
+                InventoryMovementTypeOption.SelectionResolutionReversed,
+                DateTime.UtcNow,
+                "Se revirtió la decisión de no seleccionar la prenda.");
+
+            inventoryReversal.ProductHold = hold;
+            hold.ProductHoldStatusId = (int)ProductHoldStatusOption.Active;
+            hold.ResolvedAt = null;
+            hold.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return;
+        }
+
+        if (hold.ProductHoldStatusId != (int)ProductHoldStatusOption.ConvertedToSale)
+            throw new AppBadRequestException("Solo se puede revertir una prenda que ya fue resuelta como seleccionada o no seleccionada.");
+
+        var conversionMovements = await _context.InventoryMovements
+            .Where(movement => movement.ProductHoldId == hold.Id &&
+                movement.InventoryMovementTypeId == (int)InventoryMovementTypeOption.SelectionConvertedToSale &&
+                movement.SaleProductId.HasValue)
+            .ToListAsync();
+
+        if (conversionMovements.Count != 1)
+            throw new AppBadRequestException("No se encontró un único movimiento de conversión para revertir la selección.");
+
+        var conversionMovement = conversionMovements[0];
+
+        var saleProduct = sale.ProductVariants.SingleOrDefault(item => item.Id == conversionMovement.SaleProductId)
+            ?? throw new AppBadRequestException("No se encontró la prenda de venta asociada a la selección.");
+
+        if (saleProduct.ProductId != hold.ProductId || saleProduct.Quantity != hold.Quantity ||
+            conversionMovement.ProductId != hold.ProductId || conversionMovement.Quantity != hold.Quantity)
+            throw new AppBadRequestException("La prenda de venta ya no coincide con la selección original y no se puede revertir automáticamente.");
+
+        if (await _context.InventoryMovements.AnyAsync(movement =>
+                movement.SaleProductId == saleProduct.Id && movement.Id != conversionMovement.Id))
+            throw new AppBadRequestException("La prenda tiene otros movimientos de inventario y no se puede revertir automáticamente.");
+
+        if (await _context.SaleReturnItems.AnyAsync(item => item.OriginalSaleProductId == saleProduct.Id) ||
+            await _context.ExchangeReturnItems.AnyAsync(item => item.OriginalSaleProductId == saleProduct.Id))
+            throw new AppBadRequestException("La prenda tiene devoluciones o cambios asociados y no se puede revertir automáticamente.");
+
+        var remainingProducts = sale.ProductVariants.Where(item => item.Id != saleProduct.Id).ToList();
+        var updatedTotal = CalculateSaleTotals(remainingProducts).Total;
+        var paymentTotal = SalePaymentMovementRules.CalculateProductTotal(sale.PaymentMovements);
+        SalePaymentMovementRules.EnsureAllowedProductTotal(sale.SaleChannelId, updatedTotal, paymentTotal);
+
+        var conversionReversal = _inventoryService.Move(
+            hold.ProductVariant!,
+            InventoryStockBucketOption.OutOfInventory,
+            InventoryStockBucketOption.Unavailable,
+            hold.Quantity,
+            InventoryMovementTypeOption.SelectionResolutionReversed,
+            DateTime.UtcNow,
+            "Se revirtió la confirmación de que la clienta conserva la prenda.");
+        conversionReversal.ProductHold = hold;
+
+        // Keep the conversion movement as audit history while removing its sale-product link.
+        conversionMovement.SaleProduct = null;
+        conversionMovement.SaleProductId = null;
+        sale.ProductVariants.Remove(saleProduct);
+        _context.SaleProducts.Remove(saleProduct);
+
+        hold.ProductHoldStatusId = (int)ProductHoldStatusOption.Active;
+        hold.ResolvedAt = null;
+        hold.UpdatedAt = DateTime.UtcNow;
+
+        RecalculateSaleTotals(sale);
+        await _deliveryService.SyncActiveAmountToCollectAsync(sale.Id, sale.Total, sale.PaymentMovements);
+        await _context.SaveChangesAsync();
+    }
+
     public async Task MarkSelectionHoldAsReturnedAsync(int saleId, int holdId)
     {
         var sale = await GetSaleWithDetailsAsync(saleId, asNoTracking: false);
@@ -435,8 +555,46 @@ public class SaleService(
     public Task MarkDeliveryAsFailedAsync(int saleId, int deliveryId)
         => _deliveryService.MarkAsFailedAsync(saleId, deliveryId);
 
-    public Task CancelDeliveryAsync(int saleId, int deliveryId)
-        => _deliveryService.CancelAsync(saleId, deliveryId);
+    public async Task CancelDeliveryAsync(int saleId, int deliveryId)
+    {
+        await using var transaction = await _context.BeginSalePaymentTransactionAsync(saleId);
+
+        var shippingPayments = await _context.SalePaymentMovements
+            .Where(payment => payment.SaleId == saleId &&
+                payment.SaleDeliveryId == deliveryId &&
+                payment.MovementDirectionId == (int)MovementDirectionOptions.In)
+            .Include(payment => payment.ReversalMovements)
+            .OrderBy(payment => payment.Id)
+            .ToListAsync();
+
+        var pendingShippingRefunds = shippingPayments
+            .Select(payment => new
+            {
+                Payment = payment,
+                RemainingProductAmount = payment.ProductAmount - payment.ReversalMovements.Sum(movement => movement.ProductAmount),
+                RemainingShippingAmount = payment.ShippingAmount - payment.ReversalMovements.Sum(movement => movement.ShippingAmount)
+            })
+            .Where(refund => refund.RemainingShippingAmount > 0)
+            .ToList();
+
+        if (pendingShippingRefunds.Any(refund =>
+            refund.RemainingProductAmount > 0 &&
+            (refund.Payment.PaymentMethodId == (int)PaymentMethodOption.Card || refund.Payment.AmountReceivedUsd > 0)))
+        {
+            throw new AppBadRequestException("No se puede cancelar el envio: un pago en tarjeta o dolares incluye productos y solo admite reembolso completo.");
+        }
+
+        foreach (var refund in pendingShippingRefunds)
+        {
+            await RefundPaymentMovementAsync(saleId, refund.Payment.Id, new RefundSalePaymentMovementDTO
+            {
+                ShippingAmount = refund.RemainingShippingAmount
+            });
+        }
+
+        await _deliveryService.CancelAsync(saleId, deliveryId);
+        if (transaction is not null) await transaction.CommitAsync();
+    }
 
     public async Task CancelAsync(int id)
     {
@@ -1195,6 +1353,7 @@ public class SaleService(
             Comments = sale.Comments,
             ClientId = sale.ClientId,
             ClientName = sale.Client?.Name,
+            HasPendingSelection = sale.ProductHolds.Any(hold => hold.ProductHoldStatusId == (int)ProductHoldStatusOption.Active),
             ProductVariants = sale.ProductVariants.Select(productVariant => new SaleProductDTO
             {
                 Id = productVariant.Id,
