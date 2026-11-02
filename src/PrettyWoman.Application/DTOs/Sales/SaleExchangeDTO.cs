@@ -11,6 +11,7 @@ public class SaleExchangeDTO
     public decimal BalanceToCollect { get; set; }
     public decimal NetGrossProfit { get; set; }
     public string? Comments { get; set; }
+    public PostSaleDeliveryDTO? PostSaleDelivery { get; set; }
     public List<SaleExchangeReturnItemDTO> ReturnItems { get; set; } = [];
     public List<SaleExchangeOutboundItemDTO> OutboundItems { get; set; } = [];
 }

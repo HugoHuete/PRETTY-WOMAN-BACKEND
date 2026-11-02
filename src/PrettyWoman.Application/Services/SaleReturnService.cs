@@ -19,6 +19,8 @@ public class SaleReturnService(
     {
         var returns = await _context.SaleReturns.AsNoTracking()
             .Include(item => item.Items)
+            .Include(item => item.PostSaleDelivery)
+                .ThenInclude(delivery => delivery!.DeliveryAgency)
             .Where(item => item.OriginalSaleId == saleId)
             .OrderByDescending(item => item.CreatedAt)
             .ToListAsync();
@@ -85,6 +87,18 @@ public class SaleReturnService(
             ReturnShippingPaidToAgency = request.ReturnShippingPaidToAgency,
             Comments = request.Comments.NormalizeOptional()
         };
+        if (method == SaleReturnMethodOption.DeliveryAgency)
+        {
+            result.PostSaleDelivery = new PostSaleDelivery
+            {
+                DeliveryAgencyId = request.DeliveryAgencyId!.Value,
+                Code = request.ReturnCode.NormalizeOptional(),
+                Address = request.DeliveryAddress.NormalizeOptional(),
+                StatusId = (int)PostSaleDeliveryStatusOption.Pending,
+                ShippingChargedToClient = request.ReturnShippingChargedToClient,
+                ShippingPaidToAgency = request.ReturnShippingPaidToAgency
+            };
+        }
         foreach (var item in request.Items)
         {
             var original = sale.ProductVariants.Single(productVariant => productVariant.Id == item.OriginalSaleProductId);
@@ -120,6 +134,11 @@ public class SaleReturnService(
             throw new AppBadRequestException("Solo una devolución por agencia solicitada puede marcarse como recogida.");
         await RegisterRefundAsync(result, request);
         result.PickedUpAt = request.ProcessedAt.NormalizeToUtc() ?? DateTime.UtcNow;
+        if (result.PostSaleDelivery is not null)
+        {
+            result.PostSaleDelivery.StatusId = (int)PostSaleDeliveryStatusOption.InTransit;
+            result.PostSaleDelivery.PickedUpAt = result.PickedUpAt;
+        }
         result.StatusId = (int)SaleReturnStatusOption.PickedUpAndRefunded;
         result.Comments = request.Comments.NormalizeOptional() ?? result.Comments;
         await _context.SaveChangesAsync();
@@ -155,6 +174,11 @@ public class SaleReturnService(
             await RegisterRefundAsync(result, new ProcessSaleReturnDTO { PaymentMethodId = paymentMethodId, ProcessedAt = receivedAt });
         }
         result.StatusId = (int)SaleReturnStatusOption.Completed;
+        if (result.PostSaleDelivery is not null)
+        {
+            result.PostSaleDelivery.StatusId = (int)PostSaleDeliveryStatusOption.Completed;
+            result.PostSaleDelivery.ReceivedAt = receivedAt;
+        }
         await _context.SaveChangesAsync();
     }
 
@@ -164,6 +188,8 @@ public class SaleReturnService(
         if (result.StatusId != (int)SaleReturnStatusOption.Requested)
             throw new AppBadRequestException("Solo se puede cancelar una devolución antes de recoger o recibir prendas.");
         result.StatusId = (int)SaleReturnStatusOption.Cancelled;
+        if (result.PostSaleDelivery is not null)
+            result.PostSaleDelivery.StatusId = (int)PostSaleDeliveryStatusOption.Cancelled;
         await _context.SaveChangesAsync();
     }
 
@@ -246,6 +272,8 @@ public class SaleReturnService(
     private async Task<SaleReturn> GetForUpdateAsync(int saleId, int returnId)
         => await _context.SaleReturns
             .Include(item => item.Items).ThenInclude(item => item.ProductVariant)
+            .Include(item => item.PostSaleDelivery)
+                .ThenInclude(delivery => delivery!.DeliveryAgency)
             .FirstOrDefaultAsync(item => item.Id == returnId && item.OriginalSaleId == saleId)
             ?? throw new AppNotFoundException("La devolución no existe para la venta indicada.");
 
@@ -283,6 +311,7 @@ public class SaleReturnService(
     private static SaleReturnDTO Map(SaleReturn item) => new()
     {
         Id = item.Id, OriginalSaleId = item.OriginalSaleId, ReasonId = item.ReasonId, ReasonName = ((SaleReturnReasonOption)item.ReasonId).ToString(), MethodId = item.MethodId, MethodName = ((SaleReturnMethodOption)item.MethodId).ToString(), StatusId = item.StatusId, StatusName = ((SaleReturnStatusOption)item.StatusId).ToString(), DeliveryAgencyId = item.DeliveryAgencyId, ReturnCode = item.ReturnCode, ProductRefundTotal = item.ProductRefundTotal, ReturnShippingChargedToClient = item.ReturnShippingChargedToClient, ReturnShippingPaidToAgency = item.ReturnShippingPaidToAgency, OriginalShippingRefund = item.OriginalShippingRefund, RefundTotal = item.RefundTotal, RefundPaymentMethodId = item.RefundPaymentMethodId, PickedUpAt = item.PickedUpAt, ReceivedAt = item.ReceivedAt, Comments = item.Comments,
+        PostSaleDelivery = item.PostSaleDelivery is null ? null : new PostSaleDeliveryDTO { Id = item.PostSaleDelivery.Id, SaleReturnId = item.PostSaleDelivery.SaleReturnId, SaleExchangeId = item.PostSaleDelivery.SaleExchangeId, DeliveryAgencyId = item.PostSaleDelivery.DeliveryAgencyId, DeliveryAgencyName = item.PostSaleDelivery.DeliveryAgency?.Name, StatusId = item.PostSaleDelivery.StatusId, StatusName = ((PostSaleDeliveryStatusOption)item.PostSaleDelivery.StatusId).ToString(), Code = item.PostSaleDelivery.Code, Address = item.PostSaleDelivery.Address, ShippingChargedToClient = item.PostSaleDelivery.ShippingChargedToClient, ShippingPaidToAgency = item.PostSaleDelivery.ShippingPaidToAgency, AmountToCollect = item.PostSaleDelivery.AmountToCollect, AmountCollectedNio = item.PostSaleDelivery.AmountCollectedNio, AmountCollectedUsd = item.PostSaleDelivery.AmountCollectedUsd, ChangeGivenNio = item.PostSaleDelivery.ChangeGivenNio, CollectionExchangeRate = item.PostSaleDelivery.CollectionExchangeRate, PickedUpAt = item.PostSaleDelivery.PickedUpAt, ReceivedAt = item.PostSaleDelivery.ReceivedAt },
         Items = item.Items.Select(detail => new SaleReturnItemDTO { Id = detail.Id, OriginalSaleProductId = detail.OriginalSaleProductId, ProductId = detail.ProductId, Quantity = detail.Quantity, RecognizedUnitAmount = detail.RecognizedUnitAmount, OriginalUnitCost = detail.OriginalUnitCost, ProductInventoryIssueId = detail.ProductInventoryIssueId, ReceivedAt = detail.ReceivedAt, Comments = detail.Comments }).ToList()
     };
 }

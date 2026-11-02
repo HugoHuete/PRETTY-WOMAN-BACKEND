@@ -1,10 +1,12 @@
 using PrettyWoman.Application.DTOs.Sales;
+using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Domain.Entities;
 
 namespace PrettyWoman.Application.Interfaces;
 
 public interface ISaleDeliveryService
 {
+    Task<PaginatedResult<SaleDeliveryListItemDTO>> GetAllAsync(SaleDeliveryQueryDTO query);
     Task<int> CreateAsync(int saleId, CreateSaleDeliveryDTO delivery);
     Task PatchAsync(int saleId, int deliveryId, PatchSaleDeliveryDTO delivery);
     Task MarkAsSentAsync(int saleId, int deliveryId);

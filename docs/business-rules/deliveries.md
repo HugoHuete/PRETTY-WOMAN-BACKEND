@@ -26,7 +26,7 @@ The sales listing returns that same delivery status in `latestDeliveryStatusId` 
 - A delivery can be edited only while it is `Pending`.
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/send` transitions a delivery from `Pending` to `Sent`, moves the reserved quantities to `OutOfInventory`, and sets the sale to `SentForDelivery`.
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/complete` transitions a sent delivery to `Completed` only when los productos y el envio ya estan pagados completamente.
-- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/fail` transitions a sent delivery to `Failed`, returns only the quantities still outside to `Reserved`, and returns the sale to `ReadyForDelivery` for a new attempt. The transition is rejected while a return is requested or picked up but not received, or while an exchange remains requested before its physical handover.
+- `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/fail` transitions a sent delivery to `Failed`, sets `amount_to_collect` to zero, returns only the quantities still outside to `Reserved`, and returns the sale to `ReadyForDelivery` for a new attempt. Shipping charge and agency cost remain on the failed delivery for reconciliation. The transition is rejected while a return is requested or picked up but not received, or while an exchange remains requested before its physical handover.
 - `POST /api/v1/sales/{saleId}/deliveries/{deliveryId}/cancel` may cancel only a `Pending` delivery with no agency reconciliation. It records reversal movements for any remaining shipping amount paid, then transitions the delivery to `Cancelled`, sets `amount_to_collect`, `shipping_charged_to_client` and `shipping_paid_to_agency` to zero, and returns the sale to `ReadyForDelivery`. The refund and cancellation are atomic; a separate product refund may remain pending. Card or USD payments that include product value cannot be partially refunded under current rules, so cancellation is rejected for those payments.
 - Delivery changes, cancellation, and changes to sale payments are serialized per sale. A shipping payment cannot be applied to a cancelled delivery.
 - The sale detail response (`GET /api/v1/sales/{id}`) includes `totalShippingChargedToClient`, the sum of `shippingChargedToClient` for deliveries whose status is not `Cancelled`.
@@ -75,7 +75,7 @@ net_customer_collection =
 ```
 
 - Completed deliveries can collect from zero up to `amount_to_collect`.
-- Failed deliveries cannot record a customer collection, but can record `shipping_paid_to_agency`.
+- Failed deliveries cannot record a customer collection (`amount_to_collect` is zero), but can record `shipping_paid_to_agency`.
 - USD collections require `collection_exchange_rate`, the actual rate applied by the agency for that delivery.
 - The reconciliation stores its own `settlement_exchange_rate` to value the USD remittance received. It is historical input, not a rate inferred from the rate catalog.
 - A collection payment is created for the amount actually collected. It settles products first and then the delivery charge, and does not create a direct financial movement.

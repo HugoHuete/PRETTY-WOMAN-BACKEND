@@ -20,6 +20,7 @@ public class SaleReturnDTO
     public int? RefundPaymentMethodId { get; set; }
     public DateTime? PickedUpAt { get; set; }
     public DateTime? ReceivedAt { get; set; }
+    public PostSaleDeliveryDTO? PostSaleDelivery { get; set; }
     public string? Comments { get; set; }
     public List<SaleReturnItemDTO> Items { get; set; } = [];
 }

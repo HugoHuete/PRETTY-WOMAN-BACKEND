@@ -66,6 +66,7 @@ public interface IApplicationDbContext
     DbSet<DeliveryAgency> DeliveryAgencies { get; }
     DbSet<DeliveryStatus> DeliveryStatuses { get; }
     DbSet<SaleDelivery> SaleDeliveries { get; }
+    DbSet<PostSaleDelivery> PostSaleDeliveries { get; }
     DbSet<DeliveryAgencyReconciliation> DeliveryAgencyReconciliations { get; }
     DbSet<Department> Departments { get; }
     DbSet<Municipality> Municipalities { get; }

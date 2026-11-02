@@ -20,6 +20,7 @@ public class SaleExchangeService(
         var exchanges = await _context.SaleExchanges.AsNoTracking()
             .Include(exchange => exchange.ReturnItems)
             .Include(exchange => exchange.OutboundItems)
+            .Include(exchange => exchange.PostSaleDelivery).ThenInclude(delivery => delivery!.DeliveryAgency)
             .Where(exchange => exchange.OriginalSaleId == saleId)
             .OrderByDescending(exchange => exchange.CreatedAt)
             .ToListAsync();
@@ -33,6 +34,18 @@ public class SaleExchangeService(
         request.Comments = request.Comments.NormalizeOptional();
         if (request.ReturnItems.Count == 0 || request.OutboundItems.Count == 0)
             throw new AppBadRequestException("Un cambio debe tener al menos una prenda retornada y una prenda de salida.");
+        if (request.ShippingChargedToClient < 0 || request.ShippingPaidToAgency < 0)
+            throw new AppBadRequestException("Los montos de envío no pueden ser negativos.");
+        bool? agencyCanCollectCashOnDelivery = null;
+        if (request.DeliveryAgencyId.HasValue)
+        {
+            agencyCanCollectCashOnDelivery = await _context.DeliveryAgencies
+                .Where(item => item.Id == request.DeliveryAgencyId.Value)
+                .Select(item => (bool?)item.CanCollectCashOnDelivery)
+                .FirstOrDefaultAsync();
+        }
+        if (request.DeliveryAgencyId.HasValue && !agencyCanCollectCashOnDelivery.HasValue)
+            throw new AppNotFoundException("La agencia de envío indicada no existe.");
 
         var sale = await _context.Sales
             .Include(sale => sale.ProductVariants).ThenInclude(item => item.ProductVariant)
@@ -74,6 +87,18 @@ public class SaleExchangeService(
         }
 
         var exchange = new SaleExchange { OriginalSaleId = saleId, Comments = request.Comments };
+        if (request.DeliveryAgencyId.HasValue)
+        {
+            exchange.PostSaleDelivery = new PostSaleDelivery
+            {
+                DeliveryAgencyId = request.DeliveryAgencyId.Value,
+                Code = request.DeliveryCode.NormalizeOptional(),
+                Address = request.DeliveryAddress.NormalizeOptional(),
+                StatusId = (int)PostSaleDeliveryStatusOption.Pending,
+                ShippingChargedToClient = request.ShippingChargedToClient,
+                ShippingPaidToAgency = request.ShippingPaidToAgency
+            };
+        }
         foreach (var item in request.ReturnItems)
         {
             var original = sale.ProductVariants.Single(productVariant => productVariant.Id == item.OriginalSaleProductId);
@@ -105,6 +130,13 @@ public class SaleExchangeService(
             });
         }
         RecalculateTotals(exchange);
+        if (exchange.PostSaleDelivery is not null)
+        {
+            exchange.PostSaleDelivery.AmountToCollect = Math.Round(
+                Math.Max(0, exchange.BalanceToCollect) + exchange.PostSaleDelivery.ShippingChargedToClient, 2);
+            if (exchange.PostSaleDelivery.AmountToCollect > 0 && !agencyCanCollectCashOnDelivery.GetValueOrDefault())
+                throw new AppBadRequestException("La agencia debe permitir cobro contra entrega para cobrar el saldo del cambio.");
+        }
         ReserveOutboundItems(exchange.OutboundItems);
         await _context.SaleExchanges.AddAsync(exchange);
         await _context.SaveChangesAsync();
@@ -123,6 +155,8 @@ public class SaleExchangeService(
         DeliverOutboundItems(exchange.OutboundItems);
         // La unica operacion pendiente es el retorno fisico de la agencia a la tienda.
         exchange.StatusId = (int)SaleExchangeStatusOption.AwaitingReturn;
+        if (exchange.PostSaleDelivery is not null)
+            exchange.PostSaleDelivery.StatusId = (int)PostSaleDeliveryStatusOption.InTransit;
         await _context.SaveChangesAsync();
     }
 
@@ -136,6 +170,11 @@ public class SaleExchangeService(
         item.StatusId = (int)ExchangeReturnItemStatusOption.Received;
         item.ReceivedAt = DateTime.UtcNow;
         UpdateCompletionStatus(exchange);
+        if (exchange.StatusId == (int)SaleExchangeStatusOption.Completed && exchange.PostSaleDelivery is not null)
+        {
+            exchange.PostSaleDelivery.StatusId = (int)PostSaleDeliveryStatusOption.Completed;
+            exchange.PostSaleDelivery.ReceivedAt = item.ReceivedAt;
+        }
         await _context.SaveChangesAsync();
     }
 
@@ -146,6 +185,8 @@ public class SaleExchangeService(
             throw new AppBadRequestException("Solo se puede cancelar un cambio antes de entregar o recibir prendas.");
         ReleaseOutboundReservations(exchange.OutboundItems);
         exchange.StatusId = (int)SaleExchangeStatusOption.Cancelled;
+        if (exchange.PostSaleDelivery is not null)
+            exchange.PostSaleDelivery.StatusId = (int)PostSaleDeliveryStatusOption.Cancelled;
         await _context.SaveChangesAsync();
     }
 
@@ -153,6 +194,7 @@ public class SaleExchangeService(
         => await _context.SaleExchanges
             .Include(exchange => exchange.ReturnItems).ThenInclude(item => item.ProductVariant)
             .Include(exchange => exchange.OutboundItems).ThenInclude(item => item.ProductVariant)
+            .Include(exchange => exchange.PostSaleDelivery).ThenInclude(delivery => delivery!.DeliveryAgency)
             .FirstOrDefaultAsync(exchange => exchange.Id == exchangeId && exchange.OriginalSaleId == saleId)
             ?? throw new AppNotFoundException("El cambio no existe para la venta indicada.");
 
@@ -320,6 +362,7 @@ public class SaleExchangeService(
             BalanceToCollect = exchange.BalanceToCollect,
             NetGrossProfit = Math.Round(exchange.OutboundItems.Sum(item => item.LineTotal - item.TotalCost) + returnReversal, 2),
             Comments = exchange.Comments,
+            PostSaleDelivery = exchange.PostSaleDelivery is null ? null : new PostSaleDeliveryDTO { Id = exchange.PostSaleDelivery.Id, SaleReturnId = exchange.PostSaleDelivery.SaleReturnId, SaleExchangeId = exchange.PostSaleDelivery.SaleExchangeId, DeliveryAgencyId = exchange.PostSaleDelivery.DeliveryAgencyId, DeliveryAgencyName = exchange.PostSaleDelivery.DeliveryAgency?.Name, StatusId = exchange.PostSaleDelivery.StatusId, StatusName = ((PostSaleDeliveryStatusOption)exchange.PostSaleDelivery.StatusId).ToString(), Code = exchange.PostSaleDelivery.Code, Address = exchange.PostSaleDelivery.Address, ShippingChargedToClient = exchange.PostSaleDelivery.ShippingChargedToClient, ShippingPaidToAgency = exchange.PostSaleDelivery.ShippingPaidToAgency, AmountToCollect = exchange.PostSaleDelivery.AmountToCollect, AmountCollectedNio = exchange.PostSaleDelivery.AmountCollectedNio, AmountCollectedUsd = exchange.PostSaleDelivery.AmountCollectedUsd, ChangeGivenNio = exchange.PostSaleDelivery.ChangeGivenNio, CollectionExchangeRate = exchange.PostSaleDelivery.CollectionExchangeRate, PickedUpAt = exchange.PostSaleDelivery.PickedUpAt, ReceivedAt = exchange.PostSaleDelivery.ReceivedAt },
             ReturnItems = exchange.ReturnItems.Select(item => new SaleExchangeReturnItemDTO { Id = item.Id, OriginalSaleProductId = item.OriginalSaleProductId, ProductId = item.ProductId, Quantity = item.Quantity, RecognizedUnitAmount = item.RecognizedUnitAmount, StatusId = item.StatusId, StatusName = ((ExchangeReturnItemStatusOption)item.StatusId).ToString() }).ToList(),
             OutboundItems = exchange.OutboundItems.Select(item => new SaleExchangeOutboundItemDTO { Id = item.Id, ProductId = item.ProductId, Quantity = item.Quantity, ItemTypeId = item.ItemTypeId, UnitPrice = item.UnitPrice, UnitCost = item.UnitCost, LineTotal = item.LineTotal, TotalCost = item.TotalCost, Delivered = item.Delivered }).ToList()
         };

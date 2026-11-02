@@ -20,6 +20,13 @@ public class DeliveryAgencyReconciliationsController(IDeliveryAgencyReconciliati
         return Ok(deliveries);
     }
 
+    [HttpGet("pending-post-sale-deliveries")]
+    public async Task<ActionResult<IEnumerable<PendingPostSaleDeliveryDTO>>> GetPendingPostSaleDeliveries([FromQuery] int? deliveryAgencyId)
+    {
+        var deliveries = await _reconciliationService.GetPendingPostSaleDeliveriesAsync(deliveryAgencyId);
+        return Ok(deliveries);
+    }
+
     [HttpPost]
     public async Task<ActionResult<int>> Create([FromBody] CreateDeliveryAgencyReconciliationDTO reconciliation)
     {

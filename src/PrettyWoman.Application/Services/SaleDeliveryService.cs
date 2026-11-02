@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.Common.Calculations;
 using PrettyWoman.Application.Common.Extensions;
+using PrettyWoman.Application.Common.Models;
 using PrettyWoman.Application.DTOs.Sales;
 using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Interfaces;
@@ -15,9 +16,99 @@ public class SaleDeliveryService(
     IInventoryService inventoryService) : ISaleDeliveryService
 {
     private const string ActiveDeliveryConstraintName = "ux_sale_deliveries_sale_id_active";
+    private static readonly TimeZoneInfo NicaraguaTimeZone = TimeZoneInfo.FindSystemTimeZoneById("America/Managua");
     private readonly IApplicationDbContext _context = context;
     private readonly ICurrentUserService _currentUserService = currentUserService;
     private readonly IInventoryService _inventoryService = inventoryService;
+
+    public async Task<PaginatedResult<SaleDeliveryListItemDTO>> GetAllAsync(SaleDeliveryQueryDTO query)
+    {
+        query.Page = Math.Max(1, query.Page);
+        query.PageSize = Math.Clamp(query.PageSize, 1, 100);
+
+        var deliveriesQuery = _context.SaleDeliveries.AsNoTracking().AsQueryable();
+        if (query.Date.HasValue)
+        {
+            if (query.Date.Value == DateOnly.MaxValue)
+                throw new AppBadRequestException("La fecha no puede ser 9999-12-31.");
+
+            var fromUtc = TimeZoneInfo.ConvertTimeToUtc(query.Date.Value.ToDateTime(TimeOnly.MinValue), NicaraguaTimeZone);
+            var toUtc = TimeZoneInfo.ConvertTimeToUtc(query.Date.Value.AddDays(1).ToDateTime(TimeOnly.MinValue), NicaraguaTimeZone);
+            deliveriesQuery = deliveriesQuery.Where(item => item.CreatedAt >= fromUtc && item.CreatedAt < toUtc);
+        }
+        if (query.DeliveryStatusId.HasValue)
+            deliveriesQuery = deliveriesQuery.Where(item => item.DeliveryStatusId == query.DeliveryStatusId.Value);
+        if (query.DeliveryAgencyId.HasValue)
+            deliveriesQuery = deliveriesQuery.Where(item => item.DeliveryAgencyId == query.DeliveryAgencyId.Value);
+        if (!string.IsNullOrWhiteSpace(query.ClientSearch))
+        {
+            var search = query.ClientSearch.Trim().ToLower();
+            deliveriesQuery = deliveriesQuery.Where(item => item.Client != null &&
+                (item.Client.Name.ToLower().Contains(search) ||
+                 (item.Client.PhoneNumber != null && item.Client.PhoneNumber.ToLower().Contains(search)) ||
+                 (item.Client.InstagramUser != null && item.Client.InstagramUser.ToLower().Contains(search)) ||
+                 (item.Client.MessengerUser != null && item.Client.MessengerUser.ToLower().Contains(search))));
+        }
+        if (!string.IsNullOrWhiteSpace(query.ClientName))
+        {
+            var search = query.ClientName.Trim().ToLower();
+            deliveriesQuery = deliveriesQuery.Where(item => item.Client != null && item.Client.Name.ToLower().Contains(search));
+        }
+        if (!string.IsNullOrWhiteSpace(query.ClientPhone))
+        {
+            var search = query.ClientPhone.Trim().ToLower();
+            deliveriesQuery = deliveriesQuery.Where(item => item.Client != null && item.Client.PhoneNumber != null && item.Client.PhoneNumber.ToLower().Contains(search));
+        }
+        if (!string.IsNullOrWhiteSpace(query.ClientInstagramUser))
+        {
+            var search = query.ClientInstagramUser.Trim().ToLower();
+            deliveriesQuery = deliveriesQuery.Where(item => item.Client != null && item.Client.InstagramUser != null && item.Client.InstagramUser.ToLower().Contains(search));
+        }
+        if (!string.IsNullOrWhiteSpace(query.ClientMessengerUser))
+        {
+            var search = query.ClientMessengerUser.Trim().ToLower();
+            deliveriesQuery = deliveriesQuery.Where(item => item.Client != null && item.Client.MessengerUser != null && item.Client.MessengerUser.ToLower().Contains(search));
+        }
+
+        var totalCount = await deliveriesQuery.CountAsync();
+        var items = await deliveriesQuery
+            .OrderByDescending(item => item.CreatedAt)
+            .ThenByDescending(item => item.Id)
+            .Skip((query.Page - 1) * query.PageSize)
+            .Take(query.PageSize)
+            .Select(item => new SaleDeliveryListItemDTO
+            {
+                Id = item.Id,
+                SaleId = item.SaleId,
+                CreatedAt = item.CreatedAt,
+                Code = item.Code,
+                DeliveryStatusId = item.DeliveryStatusId,
+                DeliveryStatusName = item.DeliveryStatus!.Name,
+                DeliveryAgencyId = item.DeliveryAgencyId,
+                DeliveryAgencyName = item.DeliveryAgency!.Name,
+                MunicipalityId = item.MunicipalityId,
+                MunicipalityName = item.Municipality!.Name,
+                ClientId = item.ClientId,
+                ClientName = item.Client!.Name,
+                ClientPhone = item.Client!.PhoneNumber,
+                ClientInstagramUser = item.Client!.InstagramUser,
+                ClientMessengerUser = item.Client!.MessengerUser,
+                AmountToCollect = item.AmountToCollect,
+                ShippingChargedToClient = item.ShippingChargedToClient,
+                ShippingPaidToAgency = item.ShippingPaidToAgency,
+                DeliveryAddress = item.DeliveryAddress,
+                Comments = item.Comments
+            })
+            .ToListAsync();
+
+        return new PaginatedResult<SaleDeliveryListItemDTO>
+        {
+            Items = items,
+            Page = query.Page,
+            PageSize = query.PageSize,
+            TotalCount = totalCount
+        };
+    }
 
     public async Task<int> CreateAsync(int saleId, CreateSaleDeliveryDTO deliveryRequest)
     {
@@ -154,6 +245,7 @@ public class SaleDeliveryService(
             InventoryMovementTypeOption.ReservationCreated,
             "Entrega fallida; productos reservados para un nuevo intento.");
         delivery.DeliveryStatusId = (int)DeliveryStatusCode.Failed;
+        delivery.AmountToCollect = 0;
         delivery.Sale!.SaleStatusId = (int)SaleStatusOption.ReadyForDelivery;
         await _context.SaveChangesAsync();
         if (transaction is not null) await transaction.CommitAsync();

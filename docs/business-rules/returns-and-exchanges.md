@@ -44,6 +44,7 @@ Una devolución es distinta de una cancelación y de un cambio: usa `SaleReturn`
 - Por preferencia, el envío de retorno puede descontarse del reembolso y no se devuelve el envío original.
 - Por defecto, error de tienda, la tienda asume el retorno; el envío original solo se devuelve si la venta tenía una sola prenda.
 - El costo del retorno de agencia se paga en su conciliación, no desde los pagos de la venta.
+- Cada devolución por agencia crea un `PostSaleDelivery` ligado a `SaleReturn`, con guía, agencia, costos y estado logístico; la recogida lo pasa a `InTransit` y la recepción a `Completed`.
 
 Ver `Docs/use-cases/return-products-after-sale.md`.
 
@@ -55,6 +56,7 @@ Si una clienta cambia talla:
 2. Reservar la prenda de salida y registrar los movimientos de inventario al entregarla y recibir el retorno.
 3. Mantener la venta y su línea original inmutables.
 4. Si no hay diferencia de precio, no crear movimiento financiero.
+5. Cuando el cambio requiere agencia, se registra un `PostSaleDelivery` ligado a `SaleExchange`; el `handover` lo pasa a `InTransit` y su costo se incluye en la conciliación de esa agencia.
 
 ## Regla: cambio por otro producto
 

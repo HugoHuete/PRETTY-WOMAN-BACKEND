@@ -146,6 +146,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public DbSet<ExchangeReturnItem> ExchangeReturnItems { get; set; }
     public DbSet<ExchangeOutboundItem> ExchangeOutboundItems { get; set; }
     public DbSet<SaleReturn> SaleReturns { get; set; }
+    public DbSet<PostSaleDelivery> PostSaleDeliveries { get; set; }
     public DbSet<SaleReturnItem> SaleReturnItems { get; set; }
 
     // Payments
