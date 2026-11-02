@@ -81,14 +81,20 @@ public class SaleServiceTests
             new SaleDelivery
             {
                 CreatedAt = olderDate, Code = "OLD-FAILED", SaleId = latestPendingSale.Id,
-                MunicipalityId = 1, DeliveryAgencyId = 1,
+                MunicipalityId = 1, DeliveryAgencyId = 1, ShippingChargedToClient = 5m,
                 DeliveryStatusId = (int)DeliveryStatusCode.Failed, UserId = "seller"
             },
             new SaleDelivery
             {
                 CreatedAt = newerDate, Code = "LATEST-PENDING", SaleId = latestPendingSale.Id,
-                MunicipalityId = 1, DeliveryAgencyId = 1,
+                MunicipalityId = 1, DeliveryAgencyId = 1, ShippingChargedToClient = 15m,
                 DeliveryStatusId = (int)DeliveryStatusCode.Pending, UserId = "seller"
+            },
+            new SaleDelivery
+            {
+                CreatedAt = olderDate.AddDays(-1), Code = "OLD-CANCELLED", SaleId = latestPendingSale.Id,
+                MunicipalityId = 1, DeliveryAgencyId = 1, ShippingChargedToClient = 100m,
+                DeliveryStatusId = (int)DeliveryStatusCode.Cancelled, UserId = "seller"
             },
             new SaleDelivery
             {
@@ -113,6 +119,7 @@ public class SaleServiceTests
         Assert.Equal(latestPendingSale.Id, sale.Id);
         Assert.Equal((int)DeliveryStatusCode.Pending, sale.LatestDeliveryStatusId);
         Assert.Equal(nameof(DeliveryStatusCode.Pending), sale.LatestDeliveryStatusName);
+        Assert.Equal(20m, sale.TotalShippingChargedToClient);
         Assert.Equal(1, result.TotalCount);
     }
 
@@ -1717,9 +1724,80 @@ public class SaleServiceTests
 
 
     [Fact]
-    public async Task DeliveryTransitions_CancelFailAndCompleteFollowTheirExpectedFlow()
+    public async Task CancelDeliveryAsync_RefundsShippingWhileProductRefundIsPending()
     {
         await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        await context.SaveChangesAsync();
+        var expensive = await AddProductAsync(context, 1, 500m, 200m);
+        var cheaper = await AddProductAsync(context, 1, 300m, 120m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = expensive.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Transfer, ProductAmount = 500m }]
+        });
+        var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "REFUND-PENDING", MunicipalityId = 1, DeliveryAgencyId = 1, ShippingChargedToClient = 50m
+        });
+        var paymentId = await service.AddPaymentMovementAsync(saleId, new CreateSalePaymentMovementDTO
+        {
+            PaymentMethodId = (int)PaymentMethodOption.Transfer, ShippingAmount = 50m, SaleDeliveryId = deliveryId
+        });
+        await service.ReplaceProductsAsync(saleId, new ReplaceSaleProductsDTO
+        {
+            ProductVariants = [new ReplaceSaleProductDTO { ProductId = cheaper.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+
+        await service.CancelDeliveryAsync(saleId, deliveryId);
+
+        var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
+        var refund = await context.SalePaymentMovements.SingleAsync(item => item.ReversedSalePaymentMovementId == paymentId);
+        Assert.Equal((int)SalePaymentStatusOption.RefundPending, sale.SalePaymentStatusId);
+        Assert.Equal((int)DeliveryStatusCode.Cancelled, delivery.DeliveryStatusId);
+        Assert.Equal(0m, delivery.AmountToCollect);
+        Assert.Equal(0m, refund.ProductAmount);
+        Assert.Equal(50m, refund.ShippingAmount);
+        Assert.True(await context.FinancialMovements.AnyAsync(item => item.SalePaymentMovementId == refund.Id));
+    }
+
+    [Fact]
+    public async Task CancelDeliveryAsync_ClearsOutstandingCollectionAmount()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        await context.SaveChangesAsync();
+        var product = await AddProductAsync(context, 1, 500m, 200m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+        var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "CLEAR-COLLECTION", MunicipalityId = 1, DeliveryAgencyId = 1, ShippingChargedToClient = 50m
+        });
+        Assert.True((await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId)).AmountToCollect > 0);
+
+        await service.CancelDeliveryAsync(saleId, deliveryId);
+
+        var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
+        Assert.Equal((int)DeliveryStatusCode.Cancelled, delivery.DeliveryStatusId);
+        Assert.Equal(0m, delivery.AmountToCollect);
+    }
+
+    [Fact]
+    public async Task DeliveryTransitions_CancelFailAndCompleteFollowTheirExpectedFlow()
+    {
+        await using var context = CreateContext(ignoreTransactionWarnings: true);
         await SeedCatalogAsync(context);
         context.Departments.Add(new Department { Id = 1, Name = "Managua" });
         context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
@@ -2918,13 +2996,18 @@ public class SaleServiceTests
         await context.SaveChangesAsync();
     }
 
-    private static ApplicationDbContext CreateContext()
+    private static ApplicationDbContext CreateContext(bool ignoreTransactionWarnings = false)
     {
-        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
-            .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .Options;
+        var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString());
 
-        return new ApplicationDbContext(options);
+        if (ignoreTransactionWarnings)
+        {
+            optionsBuilder.ConfigureWarnings(warnings => warnings.Ignore(
+                Microsoft.EntityFrameworkCore.Diagnostics.InMemoryEventId.TransactionIgnoredWarning));
+        }
+
+        return new ApplicationDbContext(optionsBuilder.Options);
     }
 
     private sealed class TestCurrentUserService : ICurrentUserService

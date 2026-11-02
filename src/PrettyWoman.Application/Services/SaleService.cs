@@ -69,10 +69,22 @@ public class SaleService(
             .ToListAsync();
         var latestDeliveryStatusBySaleId = latestDeliveryStatuses
             .ToDictionary(delivery => delivery.SaleId);
+        var totalShippingChargedBySale = await _context.SaleDeliveries
+            .AsNoTracking()
+            .Where(delivery => saleIds.Contains(delivery.SaleId) &&
+                delivery.DeliveryStatusId != (int)DeliveryStatusCode.Cancelled)
+            .GroupBy(delivery => delivery.SaleId)
+            .Select(group => new
+            {
+                SaleId = group.Key,
+                TotalShippingChargedToClient = group.Sum(delivery => delivery.ShippingChargedToClient)
+            })
+            .ToDictionaryAsync(item => item.SaleId, item => item.TotalShippingChargedToClient);
 
         foreach (var saleDTO in saleDTOs)
         {
             saleDTO.HasPendingSelection = salesWithPendingSelectionIds.Contains(saleDTO.Id);
+            saleDTO.TotalShippingChargedToClient = totalShippingChargedBySale.GetValueOrDefault(saleDTO.Id);
             if (!latestDeliveryStatusBySaleId.TryGetValue(saleDTO.Id, out var latestDelivery)) continue;
 
             saleDTO.LatestDeliveryStatusId = latestDelivery.DeliveryStatusId;
@@ -91,7 +103,11 @@ public class SaleService(
     public async Task<SaleDTO> GetByIdAsync(int id)
     {
         var sale = await GetSaleWithDetailsAsync(id, asNoTracking: true);
-        return MapSaleDTO(sale);
+        var saleDTO = MapSaleDTO(sale);
+        saleDTO.TotalShippingChargedToClient = sale.Deliveries
+            .Where(delivery => delivery.DeliveryStatusId != (int)DeliveryStatusCode.Cancelled)
+            .Sum(delivery => delivery.ShippingChargedToClient);
+        return saleDTO;
     }
 
     public async Task<int> CreateAsync(CreateSaleDTO createSaleDTO)
@@ -539,8 +555,46 @@ public class SaleService(
     public Task MarkDeliveryAsFailedAsync(int saleId, int deliveryId)
         => _deliveryService.MarkAsFailedAsync(saleId, deliveryId);
 
-    public Task CancelDeliveryAsync(int saleId, int deliveryId)
-        => _deliveryService.CancelAsync(saleId, deliveryId);
+    public async Task CancelDeliveryAsync(int saleId, int deliveryId)
+    {
+        await using var transaction = await _context.BeginSalePaymentTransactionAsync(saleId);
+
+        var shippingPayments = await _context.SalePaymentMovements
+            .Where(payment => payment.SaleId == saleId &&
+                payment.SaleDeliveryId == deliveryId &&
+                payment.MovementDirectionId == (int)MovementDirectionOptions.In)
+            .Include(payment => payment.ReversalMovements)
+            .OrderBy(payment => payment.Id)
+            .ToListAsync();
+
+        var pendingShippingRefunds = shippingPayments
+            .Select(payment => new
+            {
+                Payment = payment,
+                RemainingProductAmount = payment.ProductAmount - payment.ReversalMovements.Sum(movement => movement.ProductAmount),
+                RemainingShippingAmount = payment.ShippingAmount - payment.ReversalMovements.Sum(movement => movement.ShippingAmount)
+            })
+            .Where(refund => refund.RemainingShippingAmount > 0)
+            .ToList();
+
+        if (pendingShippingRefunds.Any(refund =>
+            refund.RemainingProductAmount > 0 &&
+            (refund.Payment.PaymentMethodId == (int)PaymentMethodOption.Card || refund.Payment.AmountReceivedUsd > 0)))
+        {
+            throw new AppBadRequestException("No se puede cancelar el envio: un pago en tarjeta o dolares incluye productos y solo admite reembolso completo.");
+        }
+
+        foreach (var refund in pendingShippingRefunds)
+        {
+            await RefundPaymentMovementAsync(saleId, refund.Payment.Id, new RefundSalePaymentMovementDTO
+            {
+                ShippingAmount = refund.RemainingShippingAmount
+            });
+        }
+
+        await _deliveryService.CancelAsync(saleId, deliveryId);
+        if (transaction is not null) await transaction.CommitAsync();
+    }
 
     public async Task CancelAsync(int id)
     {

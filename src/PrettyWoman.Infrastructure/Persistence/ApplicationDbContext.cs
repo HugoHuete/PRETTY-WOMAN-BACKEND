@@ -26,6 +26,27 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default) =>
         Database.BeginTransactionAsync(cancellationToken);
 
+    public async Task<IDbContextTransaction?> BeginSalePaymentTransactionAsync(int saleId, CancellationToken cancellationToken = default)
+    {
+        if (!Database.IsRelational()) return null;
+        if (Database.ProviderName != "Npgsql.EntityFrameworkCore.PostgreSQL")
+            throw new NotSupportedException("El bloqueo de pagos requiere PostgreSQL.");
+
+        var transaction = Database.CurrentTransaction is null
+            ? await Database.BeginTransactionAsync(cancellationToken)
+            : null;
+        try
+        {
+            await Database.ExecuteSqlInterpolatedAsync($"SELECT id FROM sales WHERE id = {saleId} FOR UPDATE", cancellationToken);
+            return transaction;
+        }
+        catch
+        {
+            if (transaction is not null) await transaction.DisposeAsync();
+            throw;
+        }
+    }
+
     public Task<IDbContextTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken = default) =>
         Database.BeginTransactionAsync(isolationLevel, cancellationToken);
 

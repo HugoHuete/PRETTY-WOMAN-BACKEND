@@ -1,12 +1,17 @@
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using PrettyWoman.Api.IntegrationTests.Infrastructure;
 using PrettyWoman.Application.DTOs.Auth;
 using PrettyWoman.Application.DTOs.DeliveryAgencyReconciliations;
 using PrettyWoman.Application.DTOs.Orders;
 using PrettyWoman.Application.DTOs.Sales;
+using PrettyWoman.Application.Exceptions;
+using PrettyWoman.Application.Interfaces;
 using PrettyWoman.Domain.Enums;
+using PrettyWoman.Infrastructure.Persistence;
 
 namespace PrettyWoman.Api.IntegrationTests;
 
@@ -14,6 +19,147 @@ namespace PrettyWoman.Api.IntegrationTests;
 public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
 {
     private readonly PrettyWomanApiFactory _factory = factory;
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public async Task DeliveryCancellation_AndDeliveryMutation_SerializeOnSale(bool cancellationFirst, bool send)
+    {
+        var product = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        var location = await _factory.SeedDeliveryLocationAsync();
+        using var admin = await CreateAdminClientAsync();
+        var saleResponse = await admin.PostAsJsonAsync("/api/v1/sales", new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = product.ProductVariantId, Quantity = 1 }]
+        });
+        Assert.Equal(HttpStatusCode.Created, saleResponse.StatusCode);
+        var saleId = await saleResponse.Content.ReadFromJsonAsync<int>();
+        var deliveryResponse = await admin.PostAsJsonAsync($"/api/v1/sales/{saleId}/deliveries", new CreateSaleDeliveryDTO
+        {
+            Code = $"RACE-{Guid.NewGuid():N}"[..20],
+            MunicipalityId = location.MunicipalityId,
+            DeliveryAgencyId = location.DeliveryAgencyId,
+            ShippingChargedToClient = 50m
+        });
+        Assert.Equal(HttpStatusCode.Created, deliveryResponse.StatusCode);
+        var deliveryId = await deliveryResponse.Content.ReadFromJsonAsync<int>();
+
+        await using var ownerScope = _factory.Services.CreateAsyncScope();
+        var ownerContext = ownerScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var ownerService = ownerScope.ServiceProvider.GetRequiredService<ISaleService>();
+        await using var transaction = await ownerContext.BeginSalePaymentTransactionAsync(saleId);
+        Assert.NotNull(transaction);
+        await using var waitingScope = _factory.Services.CreateAsyncScope();
+        var waitingService = waitingScope.ServiceProvider.GetRequiredService<ISaleService>();
+
+        Task MutateAsync(ISaleService service) => send
+            ? service.MarkDeliveryAsSentAsync(saleId, deliveryId)
+            : service.UpdateDeliveryAsync(saleId, deliveryId, new PatchSaleDeliveryDTO { ShippingChargedToClient = 75m });
+
+        var waitingOperation = cancellationFirst
+            ? MutateAsync(waitingService)
+            : waitingService.CancelDeliveryAsync(saleId, deliveryId);
+        await WaitForSaleLockAsync();
+        if (cancellationFirst)
+            await ownerService.CancelDeliveryAsync(saleId, deliveryId);
+        else
+            await MutateAsync(ownerService);
+        await transaction.CommitAsync();
+
+        if (cancellationFirst || send)
+            await Assert.ThrowsAsync<AppBadRequestException>(() => waitingOperation);
+        else
+            await waitingOperation;
+
+        await using var verificationScope = _factory.Services.CreateAsyncScope();
+        var context = verificationScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
+        Assert.Equal((int)(!cancellationFirst && send ? DeliveryStatusCode.Sent : DeliveryStatusCode.Cancelled), delivery.DeliveryStatusId);
+        Assert.Equal(!cancellationFirst && send ? 50m : 0m, delivery.ShippingChargedToClient);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task DeliveryCancellation_AndShippingPayment_SerializeOnSale(bool cancellationFirst)
+    {
+        var product = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        var location = await _factory.SeedDeliveryLocationAsync();
+        using var admin = await CreateAdminClientAsync();
+        var saleResponse = await admin.PostAsJsonAsync("/api/v1/sales", new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = product.ProductVariantId, Quantity = 1 }]
+        });
+        Assert.Equal(HttpStatusCode.Created, saleResponse.StatusCode);
+        var saleId = await saleResponse.Content.ReadFromJsonAsync<int>();
+        var deliveryResponse = await admin.PostAsJsonAsync($"/api/v1/sales/{saleId}/deliveries", new CreateSaleDeliveryDTO
+        {
+            Code = $"LOCK-{Guid.NewGuid():N}"[..20],
+            MunicipalityId = location.MunicipalityId,
+            DeliveryAgencyId = location.DeliveryAgencyId,
+            ShippingChargedToClient = 50m
+        });
+        Assert.Equal(HttpStatusCode.Created, deliveryResponse.StatusCode);
+        var deliveryId = await deliveryResponse.Content.ReadFromJsonAsync<int>();
+        var payment = new CreateSalePaymentMovementDTO
+        {
+            PaymentMethodId = (int)PaymentMethodOption.Transfer,
+            ShippingAmount = 50m,
+            SaleDeliveryId = deliveryId
+        };
+
+        await using var ownerScope = _factory.Services.CreateAsyncScope();
+        var ownerContext = ownerScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var ownerService = ownerScope.ServiceProvider.GetRequiredService<ISaleService>();
+        await using var transaction = await ownerContext.BeginSalePaymentTransactionAsync(saleId);
+        Assert.NotNull(transaction);
+        await using var waitingScope = _factory.Services.CreateAsyncScope();
+        var waitingService = waitingScope.ServiceProvider.GetRequiredService<ISaleService>();
+        Task waitingOperation = cancellationFirst
+            ? waitingService.AddPaymentMovementAsync(saleId, payment)
+            : waitingService.CancelDeliveryAsync(saleId, deliveryId);
+
+        await WaitForSaleLockAsync();
+        if (cancellationFirst)
+            await ownerService.CancelDeliveryAsync(saleId, deliveryId);
+        else
+            await ownerService.AddPaymentMovementAsync(saleId, payment);
+        await transaction.CommitAsync();
+
+        if (cancellationFirst)
+            await Assert.ThrowsAsync<AppBadRequestException>(() => waitingOperation);
+        else
+            await waitingOperation;
+
+        await using var verificationScope = _factory.Services.CreateAsyncScope();
+        var verificationContext = verificationScope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var delivery = await verificationContext.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
+        var movements = await verificationContext.SalePaymentMovements.Where(item => item.SaleDeliveryId == deliveryId).ToListAsync();
+        Assert.Equal((int)DeliveryStatusCode.Cancelled, delivery.DeliveryStatusId);
+        Assert.Equal(0m, movements.Sum(item => item.MovementDirectionId == (int)MovementDirectionOptions.In ? item.ShippingAmount : -item.ShippingAmount));
+        Assert.Equal(cancellationFirst ? 0 : 2, movements.Count);
+    }
+
+    private async Task WaitForSaleLockAsync()
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var deadline = DateTime.UtcNow.AddSeconds(10);
+        while (DateTime.UtcNow < deadline)
+        {
+            var waiting = await context.Database.SqlQueryRaw<int>(
+                "SELECT count(*)::int AS \"Value\" FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock' AND query LIKE '%FOR UPDATE%' AND pid <> pg_backend_pid()")
+                .SingleAsync();
+            if (waiting > 0) return;
+            await Task.Delay(50);
+        }
+
+        throw new TimeoutException("La operación concurrente no esperó el bloqueo de la venta.");
+    }
 
     [Fact]
     public async Task InStoreSale_WithPartialThenFullPayment_CompletesAndReducesInventory()

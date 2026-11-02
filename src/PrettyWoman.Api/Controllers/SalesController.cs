@@ -272,7 +272,7 @@ public class SalesController(
         return NoContent();
     }
 
-    /// <summary>Cancela un envío cuando deja de ser necesario o no debe continuar.</summary>
+    /// <summary>Registra el reembolso pendiente del envío y lo cancela en una sola operación.</summary>
     [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/deliveries/{deliveryId:int}/cancel")]
     public async Task<IActionResult> CancelDelivery(int id, int deliveryId)

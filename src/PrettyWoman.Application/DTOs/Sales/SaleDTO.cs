@@ -14,6 +14,7 @@ public class SaleDTO
     public decimal Subtotal { get; set; }
     public decimal TotalDiscount { get; set; }
     public decimal Total { get; set; }
+    public decimal TotalShippingChargedToClient { get; set; }
     public string? Comments { get; set; }
     public int? ClientId { get; set; }
     public string? ClientName { get; set; }

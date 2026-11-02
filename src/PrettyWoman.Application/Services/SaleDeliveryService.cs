@@ -21,6 +21,7 @@ public class SaleDeliveryService(
 
     public async Task<int> CreateAsync(int saleId, CreateSaleDeliveryDTO deliveryRequest)
     {
+        await using var transaction = await _context.BeginSalePaymentTransactionAsync(saleId);
         Normalize(deliveryRequest);
         ValidateAmounts(deliveryRequest);
 
@@ -87,11 +88,13 @@ public class SaleDeliveryService(
             throw new AppBadRequestException("La venta ya tiene un envio activo.");
         }
 
+        if (transaction is not null) await transaction.CommitAsync();
         return delivery.Id;
     }
 
     public async Task MarkAsSentAsync(int saleId, int deliveryId)
     {
+        await using var transaction = await _context.BeginSalePaymentTransactionAsync(saleId);
         var delivery = await _context.SaleDeliveries
             .Include(item => item.Sale)
                 .ThenInclude(sale => sale!.PaymentMovements)
@@ -118,10 +121,12 @@ public class SaleDeliveryService(
         sale.SaleStatusId = (int)SaleStatusOption.SentForDelivery;
 
         await _context.SaveChangesAsync();
+        if (transaction is not null) await transaction.CommitAsync();
     }
 
     public async Task MarkAsCompletedAsync(int saleId, int deliveryId)
     {
+        await using var transaction = await _context.BeginSalePaymentTransactionAsync(saleId);
         var delivery = await GetDeliveryWithSaleAsync(saleId, deliveryId);
         EnsureDeliveryCanBeCompleted(delivery);
         await EnsureSelectionHoldsAreResolvedAsync(saleId);
@@ -129,10 +134,12 @@ public class SaleDeliveryService(
         delivery.DeliveryStatusId = (int)DeliveryStatusCode.Completed;
         delivery.Sale!.SaleStatusId = (int)SaleStatusOption.Completed;
         await _context.SaveChangesAsync();
+        if (transaction is not null) await transaction.CommitAsync();
     }
 
     public async Task MarkAsFailedAsync(int saleId, int deliveryId)
     {
+        await using var transaction = await _context.BeginSalePaymentTransactionAsync(saleId);
         var delivery = await GetDeliveryWithSaleAsync(saleId, deliveryId);
         EnsureDeliveryIsSent(delivery, "marcar como fallido");
         await EnsureSelectionHoldsAreResolvedAsync(saleId);
@@ -149,6 +156,7 @@ public class SaleDeliveryService(
         delivery.DeliveryStatusId = (int)DeliveryStatusCode.Failed;
         delivery.Sale!.SaleStatusId = (int)SaleStatusOption.ReadyForDelivery;
         await _context.SaveChangesAsync();
+        if (transaction is not null) await transaction.CommitAsync();
     }
 
     private async Task EnsureNoPendingPhysicalReturnsAsync(int saleId)
@@ -177,6 +185,7 @@ public class SaleDeliveryService(
 
     public async Task MarkAsDeliveredPendingSelectionAsync(int saleId, int deliveryId)
     {
+        await using var transaction = await _context.BeginSalePaymentTransactionAsync(saleId);
         var delivery = await GetDeliveryWithSaleAsync(saleId, deliveryId);
         EnsureDeliveryIsSent(delivery, "marcar como entregado pendiente de seleccion");
         if (!await _context.ProductHolds.AnyAsync(hold =>
@@ -185,21 +194,34 @@ public class SaleDeliveryService(
 
         delivery.DeliveryStatusId = (int)DeliveryStatusCode.DeliveredPendingSelection;
         await _context.SaveChangesAsync();
+        if (transaction is not null) await transaction.CommitAsync();
     }
 
     public async Task CancelAsync(int saleId, int deliveryId)
     {
+        await using var transaction = await _context.BeginSalePaymentTransactionAsync(saleId);
         var delivery = await GetDeliveryWithSaleAsync(saleId, deliveryId);
         if (delivery.DeliveryStatusId != (int)DeliveryStatusCode.Pending)
             throw new AppBadRequestException("Solo se puede cancelar un envio pendiente.");
 
+        if (delivery.DeliveryAgencyReconciliationId.HasValue)
+            throw new AppBadRequestException("No se puede cancelar un envio que ya tiene conciliacion.");
+
+        if (SalePaymentMovementRules.CalculateShippingTotal(delivery.Sale!.PaymentMovements, delivery.Id) > 0)
+            throw new AppBadRequestException("No se puede cancelar un envio con pagos de envio pendientes de reembolso.");
+
         delivery.DeliveryStatusId = (int)DeliveryStatusCode.Cancelled;
+        delivery.AmountToCollect = 0;
+        delivery.ShippingChargedToClient = 0;
+        delivery.ShippingPaidToAgency = 0;
         delivery.Sale!.SaleStatusId = (int)SaleStatusOption.ReadyForDelivery;
         await _context.SaveChangesAsync();
+        if (transaction is not null) await transaction.CommitAsync();
     }
 
     public async Task PatchAsync(int saleId, int deliveryId, PatchSaleDeliveryDTO deliveryRequest)
     {
+        await using var transaction = await _context.BeginSalePaymentTransactionAsync(saleId);
         Normalize(deliveryRequest);
         ValidateAmounts(deliveryRequest);
 
@@ -251,6 +273,7 @@ public class SaleDeliveryService(
         delivery.AmountToCollect = amountToCollect;
 
         await _context.SaveChangesAsync();
+        if (transaction is not null) await transaction.CommitAsync();
     }
 
     public async Task SyncActiveAmountToCollectAsync(int saleId, decimal saleTotal, IEnumerable<SalePaymentMovement> paymentMovements)
