@@ -7,12 +7,16 @@ public class CreateDeliveryAgencyReconciliationDTO
     public decimal SettlementExchangeRate { get; set; }
     public string? Comments { get; set; }
     public List<ReconcileSaleDeliveryDTO> Deliveries { get; set; } = [];
-    public List<ReconcileSaleReturnDTO> Returns { get; set; } = [];
+    public List<ReconcilePostSaleDeliveryDTO> PostSaleDeliveries { get; set; } = [];
 }
 
-public class ReconcileSaleReturnDTO
+public class ReconcilePostSaleDeliveryDTO
 {
-    public int SaleReturnId { get; set; }
+    public int PostSaleDeliveryId { get; set; }
+    public decimal AmountCollectedNio { get; set; }
+    public decimal AmountCollectedUsd { get; set; }
+    public decimal ChangeGivenNio { get; set; }
+    public decimal? CollectionExchangeRate { get; set; }
 }
 
 public class ReconcileSaleDeliveryDTO

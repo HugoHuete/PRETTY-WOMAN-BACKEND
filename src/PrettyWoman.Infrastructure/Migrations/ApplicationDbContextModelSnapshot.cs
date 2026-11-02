@@ -2422,6 +2422,136 @@ namespace PrettyWoman.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("PrettyWoman.Domain.Entities.PostSaleDelivery", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Address")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("address");
+
+                    b.Property<decimal>("AmountCollectedNio")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("amount_collected_nio");
+
+                    b.Property<decimal>("AmountCollectedUsd")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("amount_collected_usd");
+
+                    b.Property<decimal>("AmountToCollect")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("amount_to_collect");
+
+                    b.Property<decimal>("ChangeGivenNio")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("change_given_nio");
+
+                    b.Property<string>("Code")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("code");
+
+                    b.Property<decimal?>("CollectionExchangeRate")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
+                        .HasColumnName("collection_exchange_rate");
+
+                    b.Property<string>("Comments")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("comments");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by_id");
+
+                    b.Property<int>("DeliveryAgencyId")
+                        .HasColumnType("integer")
+                        .HasColumnName("delivery_agency_id");
+
+                    b.Property<int?>("DeliveryAgencyReconciliationId")
+                        .HasColumnType("integer")
+                        .HasColumnName("delivery_agency_reconciliation_id");
+
+                    b.Property<DateTime?>("PickedUpAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("picked_up_at");
+
+                    b.Property<DateTime?>("ReceivedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("received_at");
+
+                    b.Property<int?>("SaleExchangeId")
+                        .HasColumnType("integer")
+                        .HasColumnName("sale_exchange_id");
+
+                    b.Property<int?>("SaleReturnId")
+                        .HasColumnType("integer")
+                        .HasColumnName("sale_return_id");
+
+                    b.Property<decimal>("ShippingChargedToClient")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("shipping_charged_to_client");
+
+                    b.Property<decimal>("ShippingPaidToAgency")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("shipping_paid_to_agency");
+
+                    b.Property<int>("StatusId")
+                        .HasColumnType("integer")
+                        .HasColumnName("status_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedById")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_post_sale_deliveries");
+
+                    b.HasIndex("DeliveryAgencyReconciliationId")
+                        .HasDatabaseName("ix_post_sale_deliveries_delivery_agency_reconciliation_id");
+
+                    b.HasIndex("SaleExchangeId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_post_sale_deliveries_sale_exchange_id")
+                        .HasFilter("sale_exchange_id IS NOT NULL");
+
+                    b.HasIndex("SaleReturnId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_post_sale_deliveries_sale_return_id")
+                        .HasFilter("sale_return_id IS NOT NULL");
+
+                    b.HasIndex("DeliveryAgencyId", "StatusId", "DeliveryAgencyReconciliationId")
+                        .HasDatabaseName("ix_post_sale_deliveries_delivery_agency_id_status_id_delivery_");
+
+                    b.ToTable("post_sale_deliveries", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_post_sale_deliveries_parent", "(sale_return_id IS NOT NULL AND sale_exchange_id IS NULL) OR (sale_return_id IS NULL AND sale_exchange_id IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_post_sale_deliveries_shipping_non_negative", "shipping_charged_to_client >= 0 AND shipping_paid_to_agency >= 0");
+                        });
+                });
+
             modelBuilder.Entity("PrettyWoman.Domain.Entities.Product", b =>
                 {
                     b.Property<int>("Id")
@@ -5071,6 +5201,42 @@ namespace PrettyWoman.Infrastructure.Migrations
                     b.Navigation("ShippingCompany");
                 });
 
+            modelBuilder.Entity("PrettyWoman.Domain.Entities.PostSaleDelivery", b =>
+                {
+                    b.HasOne("PrettyWoman.Domain.Entities.DeliveryAgency", "DeliveryAgency")
+                        .WithMany()
+                        .HasForeignKey("DeliveryAgencyId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_post_sale_deliveries_delivery_agencies_delivery_agency_id");
+
+                    b.HasOne("PrettyWoman.Domain.Entities.DeliveryAgencyReconciliation", "DeliveryAgencyReconciliation")
+                        .WithMany("PostSaleDeliveries")
+                        .HasForeignKey("DeliveryAgencyReconciliationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_post_sale_deliveries_delivery_agency_reconciliations_delive");
+
+                    b.HasOne("PrettyWoman.Domain.Entities.SaleExchange", "SaleExchange")
+                        .WithOne("PostSaleDelivery")
+                        .HasForeignKey("PrettyWoman.Domain.Entities.PostSaleDelivery", "SaleExchangeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_post_sale_deliveries_sale_exchanges_sale_exchange_id");
+
+                    b.HasOne("PrettyWoman.Domain.Entities.SaleReturn", "SaleReturn")
+                        .WithOne("PostSaleDelivery")
+                        .HasForeignKey("PrettyWoman.Domain.Entities.PostSaleDelivery", "SaleReturnId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_post_sale_deliveries_sale_returns_sale_return_id");
+
+                    b.Navigation("DeliveryAgency");
+
+                    b.Navigation("DeliveryAgencyReconciliation");
+
+                    b.Navigation("SaleExchange");
+
+                    b.Navigation("SaleReturn");
+                });
+
             modelBuilder.Entity("PrettyWoman.Domain.Entities.Product", b =>
                 {
                     b.HasOne("PrettyWoman.Domain.Entities.Subcategory", "Subcategory")
@@ -5638,6 +5804,8 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     b.Navigation("PaymentMovements");
 
+                    b.Navigation("PostSaleDeliveries");
+
                     b.Navigation("SaleReturns");
                 });
 
@@ -5764,6 +5932,8 @@ namespace PrettyWoman.Infrastructure.Migrations
                 {
                     b.Navigation("OutboundItems");
 
+                    b.Navigation("PostSaleDelivery");
+
                     b.Navigation("ReturnItems");
                 });
 
@@ -5777,6 +5947,8 @@ namespace PrettyWoman.Infrastructure.Migrations
                     b.Navigation("FinancialMovements");
 
                     b.Navigation("Items");
+
+                    b.Navigation("PostSaleDelivery");
                 });
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.SizeGroup", b =>

@@ -24,4 +24,5 @@ public class SaleExchange : IAuditableEntity
     public Sale? OriginalSale { get; set; }
     public List<ExchangeReturnItem> ReturnItems { get; set; } = [];
     public List<ExchangeOutboundItem> OutboundItems { get; set; } = [];
+    public PostSaleDelivery? PostSaleDelivery { get; set; }
 }

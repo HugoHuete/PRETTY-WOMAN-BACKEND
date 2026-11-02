@@ -6,6 +6,7 @@ public class CreateSaleReturnDTO
     public int MethodId { get; set; }
     public int? DeliveryAgencyId { get; set; }
     public string? ReturnCode { get; set; }
+    public string? DeliveryAddress { get; set; }
     public decimal ReturnShippingChargedToClient { get; set; }
     public decimal ReturnShippingPaidToAgency { get; set; }
     public string? Comments { get; set; }

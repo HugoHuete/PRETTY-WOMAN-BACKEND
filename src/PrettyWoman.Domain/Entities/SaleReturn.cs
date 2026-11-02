@@ -33,4 +33,5 @@ public class SaleReturn : IAuditableEntity
     public DeliveryAgencyReconciliation? DeliveryAgencyReconciliation { get; set; }
     public List<FinancialMovement> FinancialMovements { get; set; } = [];
     public List<SaleReturnItem> Items { get; set; } = [];
+    public PostSaleDelivery? PostSaleDelivery { get; set; }
 }

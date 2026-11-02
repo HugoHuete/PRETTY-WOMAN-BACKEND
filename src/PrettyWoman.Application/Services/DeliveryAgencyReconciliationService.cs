@@ -61,49 +61,41 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
         }).ToList();
     }
 
-    public async Task<IEnumerable<PendingReconciliationReturnDTO>> GetPendingReturnsAsync(int? deliveryAgencyId = null)
+    public async Task<IEnumerable<PendingPostSaleDeliveryDTO>> GetPendingPostSaleDeliveriesAsync(int? deliveryAgencyId = null)
     {
-        var query = _context.SaleReturns
+        var query = _context.PostSaleDeliveries
             .AsNoTracking()
             .Include(item => item.DeliveryAgency)
-            .Include(item => item.OriginalSale)
-                .ThenInclude(sale => sale!.Client)
-            .Where(item =>
-                !item.DeliveryAgencyReconciliationId.HasValue &&
-                item.DeliveryAgencyId.HasValue &&
-                (item.StatusId == (int)SaleReturnStatusOption.PickedUpAndRefunded ||
-                 item.StatusId == (int)SaleReturnStatusOption.Completed));
+            .Include(item => item.SaleReturn).ThenInclude(item => item!.OriginalSale).ThenInclude(sale => sale!.Client)
+            .Include(item => item.SaleExchange).ThenInclude(item => item!.OriginalSale).ThenInclude(sale => sale!.Client)
+            .Where(item => !item.DeliveryAgencyReconciliationId.HasValue &&
+                (item.StatusId == (int)PostSaleDeliveryStatusOption.InTransit || item.StatusId == (int)PostSaleDeliveryStatusOption.Completed));
 
         if (deliveryAgencyId.HasValue)
-        {
             query = query.Where(item => item.DeliveryAgencyId == deliveryAgencyId.Value);
-        }
 
-        var returns = await query
+        var deliveries = await query
             .OrderBy(item => item.DeliveryAgency!.Name)
             .ThenBy(item => item.CreatedAt)
             .ThenBy(item => item.Id)
             .ToListAsync();
 
-        return returns.Select(item => new PendingReconciliationReturnDTO
+        return deliveries.Select(item => new PendingPostSaleDeliveryDTO
         {
-            SaleReturnId = item.Id,
-            OriginalSaleId = item.OriginalSaleId,
-            StatusId = item.StatusId,
-            StatusName = ((SaleReturnStatusOption)item.StatusId).ToString(),
-            DeliveryAgencyId = item.DeliveryAgencyId!.Value,
+            Id = item.Id,
+            SaleReturnId = item.SaleReturnId,
+            SaleExchangeId = item.SaleExchangeId,
+            SaleId = item.SaleReturn?.OriginalSaleId ?? item.SaleExchange!.OriginalSaleId,
+            DeliveryAgencyId = item.DeliveryAgencyId,
             DeliveryAgencyName = item.DeliveryAgency?.Name,
-            ReturnCode = item.ReturnCode,
-            ClientName = item.OriginalSale?.Client?.Name,
-            ProductRefundTotal = item.ProductRefundTotal,
-            ReturnShippingChargedToClient = item.ReturnShippingChargedToClient,
-            ReturnShippingPaidToAgency = item.ReturnShippingPaidToAgency,
-            OriginalShippingRefund = item.OriginalShippingRefund,
-            RefundTotal = item.RefundTotal,
-            CreatedAt = item.CreatedAt,
-            PickedUpAt = item.PickedUpAt,
-            ReceivedAt = item.ReceivedAt,
-            Comments = item.Comments
+            StatusId = item.StatusId,
+            StatusName = ((PostSaleDeliveryStatusOption)item.StatusId).ToString(),
+            Code = item.Code,
+            ClientName = item.SaleReturn?.OriginalSale?.Client?.Name ?? item.SaleExchange?.OriginalSale?.Client?.Name,
+            ShippingChargedToClient = item.ShippingChargedToClient,
+            ShippingPaidToAgency = item.ShippingPaidToAgency,
+            AmountToCollect = item.AmountToCollect,
+            CreatedAt = item.CreatedAt
         }).ToList();
     }
 
@@ -111,20 +103,28 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
     {
         NormalizeAndValidateRequest(request);
         EnsureDistinctDeliveryIds(request.Deliveries);
-        EnsureDistinctReturnIds(request.Returns);
+        request.PostSaleDeliveries ??= [];
+        if (request.PostSaleDeliveries.Select(item => item.PostSaleDeliveryId).Distinct().Count() != request.PostSaleDeliveries.Count)
+            throw new AppBadRequestException("No se puede incluir el mismo envio postventa mas de una vez en una conciliacion.");
 
         var agency = await _context.DeliveryAgencies
             .FirstOrDefaultAsync(item => item.Id == request.DeliveryAgencyId)
             ?? throw new AppNotFoundException($"La agencia de envio con id {request.DeliveryAgencyId} no existe.");
 
         var deliveryIds = request.Deliveries.Select(item => item.SaleDeliveryId).ToList();
-        var returnIds = request.Returns.Select(item => item.SaleReturnId).ToList();
-        var saleIds = await _context.SaleDeliveries.AsNoTracking()
+        var postSaleDeliveryIds = request.PostSaleDeliveries.Select(item => item.PostSaleDeliveryId).ToList();
+        var deliverySaleIds = await _context.SaleDeliveries.AsNoTracking()
             .Where(item => deliveryIds.Contains(item.Id))
             .Select(item => item.SaleId)
             .Distinct()
             .OrderBy(id => id)
             .ToListAsync();
+        var postSaleSaleIds = await _context.PostSaleDeliveries.AsNoTracking()
+            .Where(item => postSaleDeliveryIds.Contains(item.Id))
+            .Select(item => item.SaleReturn != null ? item.SaleReturn.OriginalSaleId : item.SaleExchange!.OriginalSaleId)
+            .Distinct()
+            .ToListAsync();
+        var saleIds = deliverySaleIds.Concat(postSaleSaleIds).Distinct().OrderBy(id => id).ToList();
         await using var transaction = saleIds.Count > 0
             ? await _context.BeginSalePaymentTransactionAsync(saleIds[0])
             : null;
@@ -143,20 +143,49 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
         if (deliveries.Count != deliveryIds.Count)
             throw new AppNotFoundException("Uno o mas envios indicados no existen.");
 
-        var returns = await _context.SaleReturns.Where(item => returnIds.Contains(item.Id)).ToListAsync();
-        if (returns.Count != returnIds.Count)
-            throw new AppNotFoundException("Una o mas devoluciones indicadas no existen.");
-        foreach (var saleReturn in returns) ValidateReturnForReconciliation(saleReturn, agency.Id);
+        var postSaleDeliveries = await _context.PostSaleDeliveries
+            .Include(item => item.SaleReturn)
+            .Include(item => item.SaleExchange)
+            .Where(item => postSaleDeliveryIds.Contains(item.Id))
+            .ToListAsync();
+        if (postSaleDeliveries.Count != postSaleDeliveryIds.Count)
+            throw new AppNotFoundException("Uno o mas envios postventa indicados no existen.");
+        foreach (var postSaleDelivery in postSaleDeliveries)
+        {
+            if (postSaleDelivery.DeliveryAgencyId != agency.Id)
+                throw new AppBadRequestException("Todos los envios postventa de una conciliacion deben pertenecer a la misma agencia.");
+            if (postSaleDelivery.DeliveryAgencyReconciliationId.HasValue)
+                throw new AppBadRequestException("Un envio postventa no puede incluirse en mas de una conciliacion.");
+            if (postSaleDelivery.StatusId is not ((int)PostSaleDeliveryStatusOption.InTransit or (int)PostSaleDeliveryStatusOption.Completed))
+                throw new AppBadRequestException("Solo se pueden conciliar envios postventa recogidos o completados.");
+        }
+
+        var postSaleDeliveryRequests = request.PostSaleDeliveries.ToDictionary(item => item.PostSaleDeliveryId);
+        var postSaleTenders = new Dictionary<int, AgencyCollectionTender>();
+        foreach (var delivery in postSaleDeliveries)
+        {
+            var deliveryRequest = postSaleDeliveryRequests[delivery.Id];
+            ValidatePostSaleDeliveryAmounts(deliveryRequest);
+            var tender = ResolveAgencyCollectionTender(deliveryRequest);
+            if (delivery.SaleExchangeId.HasValue && tender.CollectedAmount != delivery.AmountToCollect)
+                throw new AppBadRequestException("La agencia debe recaudar el monto total indicado para el cambio.");
+            if (!delivery.SaleExchangeId.HasValue && tender.CollectedAmount != 0)
+                throw new AppBadRequestException("Un retorno postventa no puede registrar un cobro de la clienta.");
+            if (tender.CollectedAmount > delivery.AmountToCollect)
+                throw new AppBadRequestException("El monto cobrado no puede exceder el monto pendiente del envio postventa.");
+            postSaleTenders.Add(delivery.Id, tender);
+        }
 
         var reconciliation = new DeliveryAgencyReconciliation
         {
             DeliveryAgencyId = agency.Id,
             ReconciliationDate = request.ReconciliationDate ?? DateTime.UtcNow,
             SettlementExchangeRate = Math.Round(request.SettlementExchangeRate, 4, MidpointRounding.AwayFromZero),
-            AmountReceivedNio = request.Deliveries.Sum(item => RoundMoney(item.AmountCollectedNio)),
-            AmountReceivedUsd = request.Deliveries.Sum(item => RoundMoney(item.AmountCollectedUsd)),
+            AmountReceivedNio = request.Deliveries.Sum(item => RoundMoney(item.AmountCollectedNio)) + request.PostSaleDeliveries.Sum(item => RoundMoney(item.AmountCollectedNio)),
+            AmountReceivedUsd = request.Deliveries.Sum(item => RoundMoney(item.AmountCollectedUsd)) + request.PostSaleDeliveries.Sum(item => RoundMoney(item.AmountCollectedUsd)),
             AmountPaidToAgencyNio = request.Deliveries.Sum(item => RoundMoney(item.ChangeGivenNio) + RoundMoney(item.ShippingPaidToAgency)) +
-                                    returns.Sum(item => RoundMoney(item.ReturnShippingPaidToAgency)),
+                                    postSaleDeliveries.Sum(item => RoundMoney(item.ShippingPaidToAgency)) +
+                                    request.PostSaleDeliveries.Sum(item => RoundMoney(item.ChangeGivenNio)),
             Comments = request.Comments
         };
 
@@ -202,10 +231,18 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
         {
             delivery.DeliveryAgencyReconciliation = reconciliation;
         }
-        foreach (var saleReturn in returns)
+        foreach (var postSaleDelivery in postSaleDeliveries)
         {
-            saleReturn.DeliveryAgencyReconciliation = reconciliation;
+            var tender = postSaleTenders[postSaleDelivery.Id];
+            postSaleDelivery.AmountCollectedNio = tender.AmountReceivedNio;
+            postSaleDelivery.AmountCollectedUsd = tender.AmountReceivedUsd;
+            postSaleDelivery.ChangeGivenNio = tender.ChangeGivenNio;
+            postSaleDelivery.CollectionExchangeRate = tender.ExchangeRate;
+            postSaleDelivery.DeliveryAgencyReconciliation = reconciliation;
+            if (postSaleDelivery.SaleReturn is not null)
+                postSaleDelivery.SaleReturn.DeliveryAgencyReconciliation = reconciliation;
         }
+        reconciliation.PostSaleDeliveries.AddRange(postSaleDeliveries);
 
         await _context.DeliveryAgencyReconciliations.AddAsync(reconciliation);
         // Una liquidacion puede tener remesa, pago a la agencia, ambos, o ninguno.
@@ -366,6 +403,18 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             collectedAmount);
     }
 
+    private static AgencyCollectionTender ResolveAgencyCollectionTender(ReconcilePostSaleDeliveryDTO request)
+    {
+        var amountReceivedNio = RoundMoney(request.AmountCollectedNio);
+        var amountReceivedUsd = RoundMoney(request.AmountCollectedUsd);
+        var changeGivenNio = RoundMoney(request.ChangeGivenNio);
+        var exchangeRate = request.CollectionExchangeRate.HasValue
+            ? Math.Round(request.CollectionExchangeRate.Value, 4, MidpointRounding.AwayFromZero)
+            : (decimal?)null;
+        var collectedAmount = RoundMoney(amountReceivedNio + amountReceivedUsd * (exchangeRate ?? 0) - changeGivenNio);
+        return new AgencyCollectionTender(amountReceivedNio, amountReceivedUsd, changeGivenNio, exchangeRate, 0, collectedAmount);
+    }
+
     private static decimal RoundMoney(decimal amount)
         => Math.Round(amount, 2, MidpointRounding.AwayFromZero);
 
@@ -373,8 +422,8 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
     {
         request.Comments = request.Comments.NormalizeOptional();
         request.Deliveries ??= [];
-        request.Returns ??= [];
-        if (request.Deliveries.Count == 0 && request.Returns.Count == 0)
+        request.PostSaleDeliveries ??= [];
+        if (request.Deliveries.Count == 0 && request.PostSaleDeliveries.Count == 0)
             throw new AppBadRequestException("Debe indicar al menos un envío o devolución para conciliar.");
         if (request.SettlementExchangeRate <= 0)
             throw new AppBadRequestException("La tasa de cambio usada para la liquidacion debe ser mayor que cero.");
@@ -384,22 +433,6 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
     {
         if (deliveries.Select(item => item.SaleDeliveryId).Distinct().Count() != deliveries.Count())
             throw new AppBadRequestException("No se puede incluir el mismo envio mas de una vez en una conciliacion.");
-    }
-
-    private static void EnsureDistinctReturnIds(IEnumerable<ReconcileSaleReturnDTO> returns)
-    {
-        if (returns.Select(item => item.SaleReturnId).Distinct().Count() != returns.Count())
-            throw new AppBadRequestException("No se puede incluir la misma devolución más de una vez en una conciliación.");
-    }
-
-    private static void ValidateReturnForReconciliation(SaleReturn saleReturn, int deliveryAgencyId)
-    {
-        if (saleReturn.DeliveryAgencyId != deliveryAgencyId)
-            throw new AppBadRequestException("Todas las devoluciones de una conciliación deben pertenecer a la misma agencia.");
-        if (saleReturn.DeliveryAgencyReconciliationId.HasValue)
-            throw new AppBadRequestException("Una devolución no puede incluirse en más de una conciliación.");
-        if (saleReturn.StatusId is not ((int)SaleReturnStatusOption.PickedUpAndRefunded or (int)SaleReturnStatusOption.Completed))
-            throw new AppBadRequestException("Solo se pueden conciliar devoluciones recogidas por la agencia.");
     }
 
     private string ResolveUserId() => _currentUserService.UserId ?? "system";
@@ -423,6 +456,20 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
         var tender = ResolveAgencyCollectionTender(request);
         if (tender.AmountReceivedUsd == 0 && tender.ExchangeRate.HasValue)
             throw new AppBadRequestException("La tasa de cambio del cobro solo debe indicarse cuando se recolecten dolares.");
+        if (tender.AmountReceivedUsd > 0 && (!tender.ExchangeRate.HasValue || tender.ExchangeRate <= 0))
+            throw new AppBadRequestException("Los cobros en dolares deben indicar la tasa de cambio aplicada por la agencia.");
+        if (tender.ChangeGivenNio > tender.AmountReceivedNio + tender.AmountReceivedUsd * (tender.ExchangeRate ?? 0))
+            throw new AppBadRequestException("El vuelto entregado no puede exceder el monto recibido de la clienta.");
+    }
+
+    private static void ValidatePostSaleDeliveryAmounts(ReconcilePostSaleDeliveryDTO request)
+    {
+        if (request.AmountCollectedNio < 0 || request.AmountCollectedUsd < 0 || request.ChangeGivenNio < 0)
+            throw new AppBadRequestException("Los montos del envio postventa no pueden ser negativos.");
+
+        var tender = ResolveAgencyCollectionTender(request);
+        if (tender.AmountReceivedUsd == 0 && tender.ExchangeRate.HasValue)
+            throw new AppBadRequestException("La tasa de cambio solo debe indicarse cuando se recolecten dolares.");
         if (tender.AmountReceivedUsd > 0 && (!tender.ExchangeRate.HasValue || tender.ExchangeRate <= 0))
             throw new AppBadRequestException("Los cobros en dolares deben indicar la tasa de cambio aplicada por la agencia.");
         if (tender.ChangeGivenNio > tender.AmountReceivedNio + tender.AmountReceivedUsd * (tender.ExchangeRate ?? 0))
