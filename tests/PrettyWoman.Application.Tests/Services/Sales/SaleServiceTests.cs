@@ -2502,6 +2502,96 @@ public class SaleServiceTests
     }
 
     [Fact]
+    public async Task GetPendingReturnsAsync_ReturnsOnlyPickedUpOrCompletedUnreconciledReturnsAndFiltersByAgency()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.DeliveryAgencies.Add(new DeliveryAgency { Id = 2, Name = "Agencia dos", PhoneNumber = "88882222", CanCollectCashOnDelivery = true });
+        context.Clients.Add(new Client { Id = 1, Name = "Ana Perez" });
+        context.Sales.Add(new Sale
+        {
+            SaleDate = new DateTime(2026, 7, 11, 10, 0, 0, DateTimeKind.Utc),
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)SaleStatusOption.ReadyForDelivery,
+            ClientId = 1,
+            Total = 500m,
+            UserId = "test-user"
+        });
+        await context.SaveChangesAsync();
+        var saleId = await context.Sales.Select(item => item.Id).SingleAsync();
+        context.SaleReturns.AddRange(
+            new SaleReturn
+            {
+                OriginalSaleId = saleId,
+                MethodId = (int)SaleReturnMethodOption.DeliveryAgency,
+                StatusId = (int)SaleReturnStatusOption.PickedUpAndRefunded,
+                DeliveryAgencyId = 1,
+                ReturnCode = "RET-PICKED-UP",
+                RefundTotal = 120m,
+                ReturnShippingPaidToAgency = 35m,
+                PickedUpAt = new DateTime(2026, 7, 12, 10, 0, 0, DateTimeKind.Utc)
+            },
+            new SaleReturn
+            {
+                OriginalSaleId = saleId,
+                MethodId = (int)SaleReturnMethodOption.DeliveryAgency,
+                StatusId = (int)SaleReturnStatusOption.Completed,
+                DeliveryAgencyId = 1,
+                ReturnCode = "RET-COMPLETED",
+                RefundTotal = 80m,
+                ReturnShippingPaidToAgency = 25m
+            },
+            new SaleReturn
+            {
+                OriginalSaleId = saleId,
+                MethodId = (int)SaleReturnMethodOption.DeliveryAgency,
+                StatusId = (int)SaleReturnStatusOption.Requested,
+                DeliveryAgencyId = 1,
+                ReturnCode = "RET-REQUESTED"
+            },
+            new SaleReturn
+            {
+                OriginalSaleId = saleId,
+                MethodId = (int)SaleReturnMethodOption.DeliveryAgency,
+                StatusId = (int)SaleReturnStatusOption.Cancelled,
+                DeliveryAgencyId = 1,
+                ReturnCode = "RET-CANCELLED"
+            },
+            new SaleReturn
+            {
+                OriginalSaleId = saleId,
+                MethodId = (int)SaleReturnMethodOption.DeliveryAgency,
+                StatusId = (int)SaleReturnStatusOption.Completed,
+                DeliveryAgencyId = 1,
+                ReturnCode = "RET-RECONCILED",
+                DeliveryAgencyReconciliationId = 1
+            },
+            new SaleReturn
+            {
+                OriginalSaleId = saleId,
+                MethodId = (int)SaleReturnMethodOption.DeliveryAgency,
+                StatusId = (int)SaleReturnStatusOption.Completed,
+                DeliveryAgencyId = 2,
+                ReturnCode = "RET-OTHER-AGENCY"
+            });
+        await context.SaveChangesAsync();
+        var service = new DeliveryAgencyReconciliationService(context, new TestCurrentUserService());
+
+        var allPending = (await service.GetPendingReturnsAsync()).ToList();
+        var agencyOnePending = (await service.GetPendingReturnsAsync(1)).ToList();
+
+        Assert.Equal(3, allPending.Count);
+        Assert.Equal(2, agencyOnePending.Count);
+        Assert.All(agencyOnePending, item => Assert.Equal(1, item.DeliveryAgencyId));
+        var pickedUpReturn = Assert.Single(agencyOnePending, item => item.ReturnCode == "RET-PICKED-UP");
+        Assert.Equal("Agencia COD", pickedUpReturn.DeliveryAgencyName);
+        Assert.Equal("Ana Perez", pickedUpReturn.ClientName);
+        Assert.Equal(saleId, pickedUpReturn.OriginalSaleId);
+        Assert.Equal(120m, pickedUpReturn.RefundTotal);
+        Assert.Equal(35m, pickedUpReturn.ReturnShippingPaidToAgency);
+    }
+
+    [Fact]
     public async Task CreateAgencyReconciliationAsync_RecordsUsdCollectionChangeAndSettlementCashFlows()
     {
         await using var context = CreateContext();

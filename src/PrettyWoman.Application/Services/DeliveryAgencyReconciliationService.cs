@@ -61,6 +61,52 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
         }).ToList();
     }
 
+    public async Task<IEnumerable<PendingReconciliationReturnDTO>> GetPendingReturnsAsync(int? deliveryAgencyId = null)
+    {
+        var query = _context.SaleReturns
+            .AsNoTracking()
+            .Include(item => item.DeliveryAgency)
+            .Include(item => item.OriginalSale)
+                .ThenInclude(sale => sale!.Client)
+            .Where(item =>
+                !item.DeliveryAgencyReconciliationId.HasValue &&
+                item.DeliveryAgencyId.HasValue &&
+                (item.StatusId == (int)SaleReturnStatusOption.PickedUpAndRefunded ||
+                 item.StatusId == (int)SaleReturnStatusOption.Completed));
+
+        if (deliveryAgencyId.HasValue)
+        {
+            query = query.Where(item => item.DeliveryAgencyId == deliveryAgencyId.Value);
+        }
+
+        var returns = await query
+            .OrderBy(item => item.DeliveryAgency!.Name)
+            .ThenBy(item => item.CreatedAt)
+            .ThenBy(item => item.Id)
+            .ToListAsync();
+
+        return returns.Select(item => new PendingReconciliationReturnDTO
+        {
+            SaleReturnId = item.Id,
+            OriginalSaleId = item.OriginalSaleId,
+            StatusId = item.StatusId,
+            StatusName = ((SaleReturnStatusOption)item.StatusId).ToString(),
+            DeliveryAgencyId = item.DeliveryAgencyId!.Value,
+            DeliveryAgencyName = item.DeliveryAgency?.Name,
+            ReturnCode = item.ReturnCode,
+            ClientName = item.OriginalSale?.Client?.Name,
+            ProductRefundTotal = item.ProductRefundTotal,
+            ReturnShippingChargedToClient = item.ReturnShippingChargedToClient,
+            ReturnShippingPaidToAgency = item.ReturnShippingPaidToAgency,
+            OriginalShippingRefund = item.OriginalShippingRefund,
+            RefundTotal = item.RefundTotal,
+            CreatedAt = item.CreatedAt,
+            PickedUpAt = item.PickedUpAt,
+            ReceivedAt = item.ReceivedAt,
+            Comments = item.Comments
+        }).ToList();
+    }
+
     public async Task<int> CreateAsync(CreateDeliveryAgencyReconciliationDTO request)
     {
         NormalizeAndValidateRequest(request);
