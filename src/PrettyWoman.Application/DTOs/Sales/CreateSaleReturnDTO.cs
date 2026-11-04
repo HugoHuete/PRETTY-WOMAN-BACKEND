@@ -8,7 +8,6 @@ public class CreateSaleReturnDTO
     public string? ReturnCode { get; set; }
     public string? DeliveryAddress { get; set; }
     public decimal ReturnShippingChargedToClient { get; set; }
-    public decimal ReturnShippingPaidToAgency { get; set; }
     public string? Comments { get; set; }
     public List<CreateSaleReturnItemDTO> Items { get; set; } = [];
 }

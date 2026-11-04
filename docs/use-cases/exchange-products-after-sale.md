@@ -21,3 +21,5 @@ El intercambio físico se registra una sola vez con `handover`: la agencia entre
 La entrega de las prendas de salida convierte su reserva en salida de inventario. La ganancia neta del cambio combina la ganancia de esas prendas con la reversión económica de cada prenda retornada que la agencia aceptó. Los `SaleProducts` originales no se editan, por lo que se preserva la trazabilidad de la venta.
 
 La agencia registra el cobro del cambio en la conciliación usando `postSaleDeliveries[].amountCollectedNio`, `amountCollectedUsd`, `collectionExchangeRate` y `changeGivenNio`. Debe recaudar el `amountToCollect` completo. El cobro queda asociado al envío postventa y no se asigna a los pagos de la venta original.
+
+Al crear el cambio por agencia, solo se registra el envío cobrado a la clienta. `shippingPaidToAgency` se informa en `POST /api/v1/delivery-agency-reconciliations` dentro de `postSaleDeliveries`, cuando se conoce el costo real de la agencia.

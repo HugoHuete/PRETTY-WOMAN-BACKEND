@@ -34,7 +34,7 @@ public class SaleExchangeService(
         request.Comments = request.Comments.NormalizeOptional();
         if (request.ReturnItems.Count == 0 || request.OutboundItems.Count == 0)
             throw new AppBadRequestException("Un cambio debe tener al menos una prenda retornada y una prenda de salida.");
-        if (request.ShippingChargedToClient < 0 || request.ShippingPaidToAgency < 0)
+        if (request.ShippingChargedToClient < 0)
             throw new AppBadRequestException("Los montos de envío no pueden ser negativos.");
         bool? agencyCanCollectCashOnDelivery = null;
         if (request.DeliveryAgencyId.HasValue)
@@ -95,8 +95,7 @@ public class SaleExchangeService(
                 Code = request.DeliveryCode.NormalizeOptional(),
                 Address = request.DeliveryAddress.NormalizeOptional(),
                 StatusId = (int)PostSaleDeliveryStatusOption.Pending,
-                ShippingChargedToClient = request.ShippingChargedToClient,
-                ShippingPaidToAgency = request.ShippingPaidToAgency
+                ShippingChargedToClient = request.ShippingChargedToClient
             };
         }
         foreach (var item in request.ReturnItems)
