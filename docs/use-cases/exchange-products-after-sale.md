@@ -23,3 +23,22 @@ La entrega de las prendas de salida convierte su reserva en salida de inventario
 La agencia registra el cobro del cambio en la conciliación usando `postSaleDeliveries[].amountCollectedNio`, `amountCollectedUsd`, `collectionExchangeRate` y `changeGivenNio`. Debe recaudar el `amountToCollect` completo. El cobro queda asociado al envío postventa y no se asigna a los pagos de la venta original.
 
 Al crear el cambio por agencia, solo se registra el envío cobrado a la clienta. `shippingPaidToAgency` se informa en `POST /api/v1/delivery-agency-reconciliations` dentro de `postSaleDeliveries`, cuando se conoce el costo real de la agencia.
+
+## Liquidación de cambios en tienda
+
+`POST /api/v1/sales/{saleId}/exchanges/{exchangeId}/settlement` liquida el saldo completo después de registrar el intercambio físico. Si `balanceToCollect` es positivo, registra un cobro; si es negativo, registra un reembolso por su valor absoluto. Los cambios enviados por agencia continúan liquidándose mediante conciliación.
+
+La liquidación admite varias líneas en NIO, por ejemplo efectivo más tarjeta. La suma debe ser exactamente igual al saldo absoluto y se registra en `SaleExchangeSettlement` con los medios de pago y movimientos financieros. Una línea con tarjeta requiere una terminal habilitada; el personal realiza la operación en la terminal y luego la registra. Los cobros con tarjeta guardan la comisión e impuesto configurados para esa terminal. Ninguna línea modifica los pagos ni el saldo de la venta original.
+
+Ejemplo para cobrar un saldo de C$200, dividido entre efectivo y tarjeta:
+
+```json
+{
+  "movementDate": "2026-11-07T18:00:00Z",
+  "comments": "Diferencia del cambio",
+  "tenders": [
+    { "paymentMethodId": 1, "amount": 100.00 },
+    { "paymentMethodId": 3, "paymentTerminalId": 2, "amount": 100.00 }
+  ]
+}
+```

@@ -1013,6 +1013,10 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("product_receipt_id");
 
+                    b.Property<int?>("SaleExchangeSettlementTenderId")
+                        .HasColumnType("integer")
+                        .HasColumnName("sale_exchange_settlement_tender_id");
+
                     b.Property<int?>("SalePaymentMovementId")
                         .HasColumnType("integer")
                         .HasColumnName("sale_payment_movement_id");
@@ -1061,6 +1065,11 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     b.HasIndex("ProductReceiptId")
                         .HasDatabaseName("ix_financial_movements_product_receipt_id");
+
+                    b.HasIndex("SaleExchangeSettlementTenderId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_financial_movements_sale_exchange_settlement_tender_id")
+                        .HasFilter("sale_exchange_settlement_tender_id IS NOT NULL");
 
                     b.HasIndex("SalePaymentMovementId")
                         .IsUnique()
@@ -1167,6 +1176,11 @@ namespace PrettyWoman.Infrastructure.Migrations
                         {
                             Id = 12,
                             Name = "DeliveryAgencyReconciliation"
+                        },
+                        new
+                        {
+                            Id = 13,
+                            Name = "SaleExchangeSettlement"
                         });
                 });
 
@@ -3696,6 +3710,159 @@ namespace PrettyWoman.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("PrettyWoman.Domain.Entities.SaleExchangeSettlement", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<string>("Comments")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("comments");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by_id");
+
+                    b.Property<DateTime>("MovementDate")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("movement_date");
+
+                    b.Property<int>("MovementDirectionId")
+                        .HasColumnType("integer")
+                        .HasColumnName("movement_direction_id");
+
+                    b.Property<int>("SaleExchangeId")
+                        .HasColumnType("integer")
+                        .HasColumnName("sale_exchange_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedById")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sale_exchange_settlements");
+
+                    b.HasIndex("MovementDate")
+                        .HasDatabaseName("ix_sale_exchange_settlements_movement_date");
+
+                    b.HasIndex("SaleExchangeId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_sale_exchange_settlements_sale_exchange_id");
+
+                    b.ToTable("sale_exchange_settlements", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_sale_exchange_settlements_amount_positive", "amount > 0");
+
+                            t.HasCheckConstraint("ck_sale_exchange_settlements_direction_valid", "movement_direction_id IN (1, 2)");
+                        });
+                });
+
+            modelBuilder.Entity("PrettyWoman.Domain.Entities.SaleExchangeSettlementTender", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<decimal>("CommissionAmount")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("commission_amount");
+
+                    b.Property<decimal>("CommissionPercentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("commission_percentage");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("CreatedById")
+                        .HasColumnType("text")
+                        .HasColumnName("created_by_id");
+
+                    b.Property<decimal>("IncomeTaxAmount")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("income_tax_amount");
+
+                    b.Property<decimal>("IncomeTaxPercentage")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("income_tax_percentage");
+
+                    b.Property<int>("PaymentMethodId")
+                        .HasColumnType("integer")
+                        .HasColumnName("payment_method_id");
+
+                    b.Property<int?>("PaymentTerminalId")
+                        .HasColumnType("integer")
+                        .HasColumnName("payment_terminal_id");
+
+                    b.Property<int>("SaleExchangeSettlementId")
+                        .HasColumnType("integer")
+                        .HasColumnName("sale_exchange_settlement_id");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("UpdatedById")
+                        .HasColumnType("text")
+                        .HasColumnName("updated_by_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sale_exchange_settlement_tenders");
+
+                    b.HasIndex("PaymentMethodId")
+                        .HasDatabaseName("ix_sale_exchange_settlement_tenders_payment_method_id");
+
+                    b.HasIndex("PaymentTerminalId")
+                        .HasDatabaseName("ix_sale_exchange_settlement_tenders_payment_terminal_id");
+
+                    b.HasIndex("SaleExchangeSettlementId")
+                        .HasDatabaseName("ix_sale_exchange_settlement_tenders_sale_exchange_settlement_id");
+
+                    b.ToTable("sale_exchange_settlement_tenders", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_sale_exchange_settlement_tenders_amount_positive", "amount > 0");
+
+                            t.HasCheckConstraint("ck_sale_exchange_settlement_tenders_card_requires_terminal", "payment_method_id <> 3 OR payment_terminal_id IS NOT NULL");
+
+                            t.HasCheckConstraint("ck_sale_exchange_settlement_tenders_commission_non_negative", "commission_percentage >= 0 AND commission_amount >= 0");
+
+                            t.HasCheckConstraint("ck_sale_exchange_settlement_tenders_only_card_uses_terminal", "payment_method_id = 3 OR payment_terminal_id IS NULL");
+
+                            t.HasCheckConstraint("ck_sale_exchange_settlement_tenders_tax_non_negative", "income_tax_percentage >= 0 AND income_tax_amount >= 0");
+                        });
+                });
+
             modelBuilder.Entity("PrettyWoman.Domain.Entities.SalePaymentMovement", b =>
                 {
                     b.Property<int>("Id")
@@ -4916,6 +5083,12 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_financial_movements_product_receipts_product_receipt_id");
 
+                    b.HasOne("PrettyWoman.Domain.Entities.SaleExchangeSettlementTender", "SaleExchangeSettlementTender")
+                        .WithOne("FinancialMovement")
+                        .HasForeignKey("PrettyWoman.Domain.Entities.FinancialMovement", "SaleExchangeSettlementTenderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_financial_movements_sale_exchange_settlement_tenders_sale_e");
+
                     b.HasOne("PrettyWoman.Domain.Entities.SalePaymentMovement", "SalePaymentMovement")
                         .WithMany()
                         .HasForeignKey("SalePaymentMovementId")
@@ -4943,6 +5116,8 @@ namespace PrettyWoman.Infrastructure.Migrations
                     b.Navigation("Order");
 
                     b.Navigation("ProductReceipt");
+
+                    b.Navigation("SaleExchangeSettlementTender");
 
                     b.Navigation("SalePaymentMovement");
 
@@ -5548,6 +5723,47 @@ namespace PrettyWoman.Infrastructure.Migrations
                     b.Navigation("OriginalSale");
                 });
 
+            modelBuilder.Entity("PrettyWoman.Domain.Entities.SaleExchangeSettlement", b =>
+                {
+                    b.HasOne("PrettyWoman.Domain.Entities.SaleExchange", "SaleExchange")
+                        .WithOne("Settlement")
+                        .HasForeignKey("PrettyWoman.Domain.Entities.SaleExchangeSettlement", "SaleExchangeId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_sale_exchange_settlements_sale_exchanges_sale_exchange_id");
+
+                    b.Navigation("SaleExchange");
+                });
+
+            modelBuilder.Entity("PrettyWoman.Domain.Entities.SaleExchangeSettlementTender", b =>
+                {
+                    b.HasOne("PrettyWoman.Domain.Entities.PaymentMethod", "PaymentMethod")
+                        .WithMany()
+                        .HasForeignKey("PaymentMethodId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_sale_exchange_settlement_tenders_payment_methods_payment_me");
+
+                    b.HasOne("PrettyWoman.Domain.Entities.PaymentTerminal", "PaymentTerminal")
+                        .WithMany()
+                        .HasForeignKey("PaymentTerminalId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_sale_exchange_settlement_tenders_payment_terminals_payment_");
+
+                    b.HasOne("PrettyWoman.Domain.Entities.SaleExchangeSettlement", "Settlement")
+                        .WithMany("Tenders")
+                        .HasForeignKey("SaleExchangeSettlementId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_sale_exchange_settlement_tenders_sale_exchange_settlements_");
+
+                    b.Navigation("PaymentMethod");
+
+                    b.Navigation("PaymentTerminal");
+
+                    b.Navigation("Settlement");
+                });
+
             modelBuilder.Entity("PrettyWoman.Domain.Entities.SalePaymentMovement", b =>
                 {
                     b.HasOne("PrettyWoman.Domain.Entities.DeliveryAgencyReconciliation", "DeliveryAgencyReconciliation")
@@ -5935,6 +6151,18 @@ namespace PrettyWoman.Infrastructure.Migrations
                     b.Navigation("PostSaleDelivery");
 
                     b.Navigation("ReturnItems");
+
+                    b.Navigation("Settlement");
+                });
+
+            modelBuilder.Entity("PrettyWoman.Domain.Entities.SaleExchangeSettlement", b =>
+                {
+                    b.Navigation("Tenders");
+                });
+
+            modelBuilder.Entity("PrettyWoman.Domain.Entities.SaleExchangeSettlementTender", b =>
+                {
+                    b.Navigation("FinancialMovement");
                 });
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.SalePaymentMovement", b =>

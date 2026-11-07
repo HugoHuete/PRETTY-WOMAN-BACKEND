@@ -25,4 +25,5 @@ public class SaleExchange : IAuditableEntity
     public List<ExchangeReturnItem> ReturnItems { get; set; } = [];
     public List<ExchangeOutboundItem> OutboundItems { get; set; } = [];
     public PostSaleDelivery? PostSaleDelivery { get; set; }
+    public SaleExchangeSettlement? Settlement { get; set; }
 }

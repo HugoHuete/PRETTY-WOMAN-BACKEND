@@ -13,5 +13,6 @@ public enum FinancialMovementTypeOption
     LoanPayment = 9,
     WarehouseShippingPayment = 10,
     Adjustment = 11,
-    DeliveryAgencyReconciliation = 12
+    DeliveryAgencyReconciliation = 12,
+    SaleExchangeSettlement = 13
 }

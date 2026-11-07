@@ -578,6 +578,7 @@ La consulta de historial está disponible para Admin y Vendedor; las acciones de
 | Revertir resolución de selección | `POST /api/v1/sales/{id}/selection-holds/{holdId}/undo-resolution` | Admin | Reabre el hold y devuelve la prenda a no disponible. Solo antes de completar o cancelar la venta; puede rechazarse si hay otros movimientos de inventario, pagos incompatibles o devoluciones/cambios que referencian la línea de venta. Devuelve `204`; recargar el detalle de la venta. |
 | Marcar selección devuelta | `POST /api/v1/sales/{id}/selection-holds/{holdId}/return` | Admin | Devuelve la prenda de selección no comprada al flujo de inventario. |
 | Consultar / crear cambio | `GET`, `POST /api/v1/sales/{id}/exchanges` | Consulta: Admin, Vendedor. Crear: Admin | El cambio conserva retorno y salida como ítems independientes de la venta. |
+| Liquidar saldo de cambio en tienda | `POST /api/v1/sales/{id}/exchanges/{exchangeId}/settlement` | Admin | Una liquidación cubre el saldo completo según el signo de `balanceToCollect`: positivo cobra a la clienta, negativo reembolsa. `tenders` admite varias líneas en NIO y combinar efectivo, tarjeta o transferencia; deben sumar `abs(balanceToCollect)`. Tarjeta requiere terminal habilitada. Solo aplica a cambios sin envío por agencia después del `handover`; no modifica los pagos de la venta original. |
 | Entrega física del cambio | `POST /api/v1/sales/{id}/exchanges/{exchangeId}/handover` | Admin | La agencia entrega reemplazos y recibe retornos. |
 | Confirmar retorno de cambio | `POST /api/v1/sales/{id}/exchanges/{exchangeId}/return-items/{returnItemId}/received` | Admin | Confirma llegada física del artículo retornado. |
 | Cancelar cambio | `POST /api/v1/sales/{id}/exchanges/{exchangeId}/cancel` | Admin | Disponible solo mientras la regla de negocio permita cancelar el proceso. |
@@ -593,6 +594,7 @@ Reglas de presentación:
 - Para una devolución, el backend calcula el reembolso; la UI debe mostrar el resultado y no recalcularlo. El envío original no se reembolsa; el costo de retorno puede descontarse según el flujo elegido.
 - Una devolución por agencia permanece fuera de inventario después de `pickup` hasta su recepción física. Para una devolución local, `receive` hace recepción y reembolso en el mismo paso.
 - Un cambio registra el saldo como `balanceToCollect`; mostrarlo como monto calculado por backend. La creación reserva las prendas de salida y `handover` registra el intercambio físico.
+- `GET /api/v1/sales/{id}/exchanges` incluye `settlement` cuando un cambio local ya fue liquidado, con dirección, monto, fecha y líneas de pago.
 - Estas transiciones devuelven `204` cuando completan; después recargar `GET /api/v1/sales/{id}` y, cuando aplique, `GET .../exchanges` o `GET .../returns`.
 - Para payloads y campos específicos, consultar [cambios](use-cases/exchange-products-after-sale.md), [devoluciones](use-cases/return-products-after-sale.md) y [selección](use-cases/send-products-for-selection.md).
 

@@ -6,6 +6,7 @@ public interface ISaleExchangeService
 {
     Task<IEnumerable<SaleExchangeDTO>> GetBySaleIdAsync(int saleId);
     Task<int> CreateAsync(int saleId, CreateSaleExchangeDTO request);
+    Task<SaleExchangeSettlementDTO> SettleAsync(int saleId, int exchangeId, CreateSaleExchangeSettlementDTO request);
     Task CompleteHandoverAsync(int saleId, int exchangeId);
     Task MarkReturnReceivedAsync(int saleId, int exchangeId, int returnItemId);
     Task CancelAsync(int saleId, int exchangeId);

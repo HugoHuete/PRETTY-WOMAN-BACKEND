@@ -21,6 +21,9 @@ public class SaleExchangeService(
             .Include(exchange => exchange.ReturnItems)
             .Include(exchange => exchange.OutboundItems)
             .Include(exchange => exchange.PostSaleDelivery).ThenInclude(delivery => delivery!.DeliveryAgency)
+            .Include(exchange => exchange.Settlement).ThenInclude(settlement => settlement!.Tenders).ThenInclude(tender => tender.PaymentMethod)
+            .Include(exchange => exchange.Settlement).ThenInclude(settlement => settlement!.Tenders).ThenInclude(tender => tender.PaymentTerminal)
+            .Include(exchange => exchange.Settlement).ThenInclude(settlement => settlement!.Tenders).ThenInclude(tender => tender.FinancialMovement)
             .Where(exchange => exchange.OriginalSaleId == saleId)
             .OrderByDescending(exchange => exchange.CreatedAt)
             .ToListAsync();
@@ -142,6 +145,129 @@ public class SaleExchangeService(
         return exchange.Id;
     }
 
+    public async Task<SaleExchangeSettlementDTO> SettleAsync(int saleId, int exchangeId, CreateSaleExchangeSettlementDTO request)
+    {
+        request.Tenders ??= [];
+        request.Comments = request.Comments.NormalizeOptional();
+        if (request.Comments?.Length > 300)
+            throw new AppBadRequestException("Los comentarios de la liquidación no pueden exceder 300 caracteres.");
+        if (request.Tenders.Count == 0)
+            throw new AppBadRequestException("La liquidación debe incluir al menos una línea de pago.");
+
+        await using var transaction = await _context.BeginSalePaymentTransactionAsync(saleId);
+        var exchange = await GetExchangeAsync(saleId, exchangeId);
+        if (exchange.PostSaleDelivery is not null)
+            throw new AppBadRequestException("Los cambios enviados por agencia se liquidan en la conciliación de la agencia.");
+        if (exchange.StatusId is (int)SaleExchangeStatusOption.Requested or (int)SaleExchangeStatusOption.Cancelled)
+            throw new AppBadRequestException("El cambio debe haberse entregado antes de liquidar su saldo.");
+        if (exchange.Settlement is not null)
+            throw new AppBadRequestException("El saldo de este cambio ya fue liquidado.");
+
+        var expectedAmount = Math.Round(Math.Abs(exchange.BalanceToCollect), 2, MidpointRounding.AwayFromZero);
+        if (expectedAmount == 0)
+            throw new AppBadRequestException("No se puede liquidar un cambio sin saldo a favor de alguna de las partes.");
+        if (request.Tenders.Any(item => Math.Round(item.Amount, 2, MidpointRounding.AwayFromZero) <= 0) ||
+            request.Tenders.Sum(item => Math.Round(item.Amount, 2, MidpointRounding.AwayFromZero)) != expectedAmount)
+        {
+            throw new AppBadRequestException("La suma de las líneas de pago debe ser igual al saldo completo del cambio.");
+        }
+
+        var paymentMethodIds = request.Tenders.Select(item => item.PaymentMethodId).Distinct().ToList();
+        var paymentMethods = await _context.PaymentMethods
+            .Where(item => paymentMethodIds.Contains(item.Id))
+            .ToDictionaryAsync(item => item.Id);
+        if (paymentMethods.Count != paymentMethodIds.Count)
+            throw new AppBadRequestException("Uno o más métodos de pago no existen.");
+
+        foreach (var tender in request.Tenders)
+        {
+            var isCard = tender.PaymentMethodId == (int)PaymentMethodOption.Card;
+            if (isCard != tender.PaymentTerminalId.HasValue)
+                throw new AppBadRequestException(isCard
+                    ? "Los pagos con tarjeta deben asociarse a una terminal de pago."
+                    : "Solo los pagos con tarjeta pueden asociarse a una terminal de pago.");
+        }
+
+        var terminalIds = request.Tenders.Where(item => item.PaymentTerminalId.HasValue)
+            .Select(item => item.PaymentTerminalId!.Value).Distinct().ToList();
+        var terminals = await _context.PaymentTerminals
+            .Where(item => terminalIds.Contains(item.Id) && item.Enabled)
+            .ToDictionaryAsync(item => item.Id);
+        if (terminals.Count != terminalIds.Count)
+            throw new AppBadRequestException("Una o más terminales no existen o no están habilitadas.");
+
+        var directionId = exchange.BalanceToCollect > 0
+            ? (int)MovementDirectionOptions.In
+            : (int)MovementDirectionOptions.Out;
+        var movementDate = request.MovementDate.NormalizeToUtc() ?? DateTime.UtcNow;
+        var settlement = new SaleExchangeSettlement
+        {
+            SaleExchangeId = exchange.Id,
+            SaleExchange = exchange,
+            MovementDirectionId = directionId,
+            Amount = expectedAmount,
+            MovementDate = movementDate,
+            Comments = request.Comments
+        };
+        var exchangeRate = await GetExchangeRateAsync(movementDate);
+
+        foreach (var tenderRequest in request.Tenders)
+        {
+            var amount = Math.Round(tenderRequest.Amount, 2, MidpointRounding.AwayFromZero);
+            var terminal = tenderRequest.PaymentTerminalId.HasValue
+                ? terminals[tenderRequest.PaymentTerminalId.Value]
+                : null;
+            var commissionPercentage = directionId == (int)MovementDirectionOptions.In
+                ? terminal?.ComissionPercentage ?? 0
+                : 0;
+            var commissionAmount = Math.Round(amount * commissionPercentage / 100, 2, MidpointRounding.AwayFromZero);
+            var incomeTaxPercentage = directionId == (int)MovementDirectionOptions.In
+                ? terminal?.IncomeTaxPercentage ?? 0
+                : 0;
+            var incomeTaxAmount = Math.Round((amount - commissionAmount) * incomeTaxPercentage / 100, 2, MidpointRounding.AwayFromZero);
+            var financialAmount = directionId == (int)MovementDirectionOptions.In
+                ? amount - commissionAmount - incomeTaxAmount
+                : amount;
+            if (commissionPercentage < 0 || incomeTaxPercentage < 0 || financialAmount <= 0)
+                throw new AppBadRequestException("La configuración de la terminal genera un monto neto inválido.");
+
+            var tender = new SaleExchangeSettlementTender
+            {
+                Settlement = settlement,
+                PaymentMethodId = tenderRequest.PaymentMethodId,
+                PaymentMethod = paymentMethods[tenderRequest.PaymentMethodId],
+                PaymentTerminalId = tenderRequest.PaymentTerminalId,
+                PaymentTerminal = terminal,
+                Amount = amount,
+                CommissionPercentage = commissionPercentage,
+                CommissionAmount = commissionAmount,
+                IncomeTaxPercentage = incomeTaxPercentage,
+                IncomeTaxAmount = incomeTaxAmount
+            };
+            settlement.Tenders.Add(tender);
+            tender.FinancialMovement = new FinancialMovement
+            {
+                Description = directionId == (int)MovementDirectionOptions.In
+                    ? $"Cobro del cambio #{exchange.Id}."
+                    : $"Reembolso del cambio #{exchange.Id}.",
+                MovementDate = movementDate,
+                MovementDirectionId = directionId,
+                FinancialMovementTypeId = (int)FinancialMovementTypeOption.SaleExchangeSettlement,
+                Amount = financialAmount,
+                ExchangeRate = exchangeRate,
+                Comments = request.Comments,
+                SaleExchangeSettlementTender = tender
+            };
+        }
+
+        await _context.SaleExchangeSettlements.AddAsync(settlement);
+        await _context.SaveChangesAsync();
+        if (transaction is not null)
+            await transaction.CommitAsync();
+
+        return MapSettlement(settlement);
+    }
+
     public async Task CompleteHandoverAsync(int saleId, int exchangeId)
     {
         var exchange = await GetExchangeAsync(saleId, exchangeId);
@@ -194,8 +320,21 @@ public class SaleExchangeService(
             .Include(exchange => exchange.ReturnItems).ThenInclude(item => item.ProductVariant)
             .Include(exchange => exchange.OutboundItems).ThenInclude(item => item.ProductVariant)
             .Include(exchange => exchange.PostSaleDelivery).ThenInclude(delivery => delivery!.DeliveryAgency)
+            .Include(exchange => exchange.Settlement).ThenInclude(settlement => settlement!.Tenders).ThenInclude(tender => tender.PaymentMethod)
+            .Include(exchange => exchange.Settlement).ThenInclude(settlement => settlement!.Tenders).ThenInclude(tender => tender.PaymentTerminal)
+            .Include(exchange => exchange.Settlement).ThenInclude(settlement => settlement!.Tenders).ThenInclude(tender => tender.FinancialMovement)
             .FirstOrDefaultAsync(exchange => exchange.Id == exchangeId && exchange.OriginalSaleId == saleId)
             ?? throw new AppNotFoundException("El cambio no existe para la venta indicada.");
+
+    private async Task<decimal> GetExchangeRateAsync(DateTime movementDate)
+    {
+        var exchangeRate = await _context.DollarExchangeRates
+            .Where(item => item.Enabled && item.StartDate <= movementDate)
+            .OrderByDescending(item => item.StartDate)
+            .Select(item => (decimal?)item.StoreRate)
+            .FirstOrDefaultAsync();
+        return exchangeRate ?? throw new AppBadRequestException("No existe una tasa de cambio de tienda habilitada para la fecha de la liquidación.");
+    }
 
     private static ExchangeReturnItem GetReturnItem(SaleExchange exchange, int returnItemId)
         => exchange.ReturnItems.SingleOrDefault(item => item.Id == returnItemId)
@@ -362,8 +501,32 @@ public class SaleExchangeService(
             NetGrossProfit = Math.Round(exchange.OutboundItems.Sum(item => item.LineTotal - item.TotalCost) + returnReversal, 2),
             Comments = exchange.Comments,
             PostSaleDelivery = exchange.PostSaleDelivery is null ? null : new PostSaleDeliveryDTO { Id = exchange.PostSaleDelivery.Id, SaleReturnId = exchange.PostSaleDelivery.SaleReturnId, SaleExchangeId = exchange.PostSaleDelivery.SaleExchangeId, DeliveryAgencyId = exchange.PostSaleDelivery.DeliveryAgencyId, DeliveryAgencyName = exchange.PostSaleDelivery.DeliveryAgency?.Name, StatusId = exchange.PostSaleDelivery.StatusId, StatusName = ((PostSaleDeliveryStatusOption)exchange.PostSaleDelivery.StatusId).ToString(), Code = exchange.PostSaleDelivery.Code, Address = exchange.PostSaleDelivery.Address, ShippingChargedToClient = exchange.PostSaleDelivery.ShippingChargedToClient, ShippingPaidToAgency = exchange.PostSaleDelivery.ShippingPaidToAgency, AmountToCollect = exchange.PostSaleDelivery.AmountToCollect, AmountCollectedNio = exchange.PostSaleDelivery.AmountCollectedNio, AmountCollectedUsd = exchange.PostSaleDelivery.AmountCollectedUsd, ChangeGivenNio = exchange.PostSaleDelivery.ChangeGivenNio, CollectionExchangeRate = exchange.PostSaleDelivery.CollectionExchangeRate, PickedUpAt = exchange.PostSaleDelivery.PickedUpAt, ReceivedAt = exchange.PostSaleDelivery.ReceivedAt },
+            Settlement = exchange.Settlement is null ? null : MapSettlement(exchange.Settlement),
             ReturnItems = exchange.ReturnItems.Select(item => new SaleExchangeReturnItemDTO { Id = item.Id, OriginalSaleProductId = item.OriginalSaleProductId, ProductId = item.ProductId, Quantity = item.Quantity, RecognizedUnitAmount = item.RecognizedUnitAmount, StatusId = item.StatusId, StatusName = ((ExchangeReturnItemStatusOption)item.StatusId).ToString() }).ToList(),
             OutboundItems = exchange.OutboundItems.Select(item => new SaleExchangeOutboundItemDTO { Id = item.Id, ProductId = item.ProductId, Quantity = item.Quantity, ItemTypeId = item.ItemTypeId, UnitPrice = item.UnitPrice, UnitCost = item.UnitCost, LineTotal = item.LineTotal, TotalCost = item.TotalCost, Delivered = item.Delivered }).ToList()
         };
     }
+
+    private static SaleExchangeSettlementDTO MapSettlement(SaleExchangeSettlement settlement)
+        => new()
+        {
+            Id = settlement.Id,
+            MovementDirectionId = settlement.MovementDirectionId,
+            MovementDirectionName = ((MovementDirectionOptions)settlement.MovementDirectionId).ToString(),
+            Amount = settlement.Amount,
+            MovementDate = settlement.MovementDate,
+            Comments = settlement.Comments,
+            Tenders = settlement.Tenders.Select(item => new SaleExchangeSettlementTenderDTO
+            {
+                Id = item.Id,
+                PaymentMethodId = item.PaymentMethodId,
+                PaymentMethodName = item.PaymentMethod?.Name,
+                PaymentTerminalId = item.PaymentTerminalId,
+                PaymentTerminalName = item.PaymentTerminal?.Name,
+                Amount = item.Amount,
+                CommissionAmount = item.CommissionAmount,
+                IncomeTaxAmount = item.IncomeTaxAmount,
+                FinancialMovementId = item.FinancialMovement?.Id
+            }).ToList()
+        };
 }
