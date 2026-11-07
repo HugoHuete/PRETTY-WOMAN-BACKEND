@@ -174,7 +174,10 @@ public class FinancialService(IApplicationDbContext context) : IFinancialService
             GetAccumulator(item.Year, item.Month).SalesNio += item.Amount;
 
         var paymentFeesByMonth = await _context.SalePaymentMovements.AsNoTracking()
-            .Where(payment => payment.MovementDirectionId == (int)MovementDirectionOptions.In &&
+            .Where(payment => (payment.MovementDirectionId == (int)MovementDirectionOptions.In ||
+                               (payment.MovementDirectionId == (int)MovementDirectionOptions.Out &&
+                                payment.PaymentMethodId == (int)PaymentMethodOption.Card &&
+                                payment.ReversedSalePaymentMovementId != null)) &&
                              payment.Sale != null && payment.Sale.SaleStatusId != (int)SaleStatusOption.Cancelled &&
                              (!startUtc.HasValue || payment.MovementDate >= startUtc.Value) &&
                              (!endUtcExclusive.HasValue || payment.MovementDate < endUtcExclusive.Value))
@@ -188,16 +191,18 @@ public class FinancialService(IApplicationDbContext context) : IFinancialService
             {
                 group.Key.Year,
                 group.Key.Month,
-                CommissionAmount = group.Sum(item => item.Payment.CommissionAmount),
-                IncomeTaxAmount = group.Sum(item => item.Payment.IncomeTaxAmount)
+                CommissionAmount = group.Sum(item => item.Payment.MovementDirectionId == (int)MovementDirectionOptions.In
+                    ? -item.Payment.CommissionAmount : item.Payment.CommissionAmount),
+                IncomeTaxAmount = group.Sum(item => item.Payment.MovementDirectionId == (int)MovementDirectionOptions.In
+                    ? -item.Payment.IncomeTaxAmount : item.Payment.IncomeTaxAmount)
             })
             .ToListAsync();
 
         foreach (var item in paymentFeesByMonth)
         {
             var accumulator = GetAccumulator(item.Year, item.Month);
-            accumulator.CardCommissionNio -= item.CommissionAmount;
-            accumulator.CardIncomeTaxNio -= item.IncomeTaxAmount;
+            accumulator.CardCommissionNio += item.CommissionAmount;
+            accumulator.CardIncomeTaxNio += item.IncomeTaxAmount;
         }
 
         var saleProfitsByMonth = await _context.SaleProducts.AsNoTracking()
