@@ -21,6 +21,7 @@ public class FinancialMovementConfiguration : IEntityTypeConfiguration<Financial
         builder.HasOne(x => x.SalePaymentMovement).WithMany().HasForeignKey(x => x.SalePaymentMovementId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.DeliveryAgencyReconciliation).WithMany(x => x.FinancialMovements).HasForeignKey(x => x.DeliveryAgencyReconciliationId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.SaleReturn).WithMany(x => x.FinancialMovements).HasForeignKey(x => x.SaleReturnId).OnDelete(DeleteBehavior.Restrict);
+        builder.HasOne(x => x.SaleExchangeSettlementTender).WithOne(x => x.FinancialMovement).HasForeignKey<FinancialMovement>(x => x.SaleExchangeSettlementTenderId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Loan).WithMany(x => x.FinancialMovements).HasForeignKey(x => x.LoanId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.LoanPayment).WithMany(x => x.FinancialMovements).HasForeignKey(x => x.LoanPaymentId).OnDelete(DeleteBehavior.Restrict);
 
@@ -34,6 +35,7 @@ public class FinancialMovementConfiguration : IEntityTypeConfiguration<Financial
         builder.HasIndex(x => x.SalePaymentMovementId).IsUnique().HasFilter("sale_payment_movement_id IS NOT NULL");
         builder.HasIndex(x => x.DeliveryAgencyReconciliationId);
         builder.HasIndex(x => x.SaleReturnId).IsUnique().HasFilter("sale_return_id IS NOT NULL");
+        builder.HasIndex(x => x.SaleExchangeSettlementTenderId).IsUnique().HasFilter("sale_exchange_settlement_tender_id IS NOT NULL");
         builder.HasIndex(x => x.LoanId);
         builder.HasIndex(x => x.LoanPaymentId);
         builder.HasIndex(x => new { x.FinancialMovementTypeId, x.MovementDate });

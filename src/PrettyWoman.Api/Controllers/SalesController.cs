@@ -131,6 +131,15 @@ public class SalesController(
         return CreatedAtAction(nameof(GetExchanges), new { id }, exchangeId);
     }
 
+    /// <summary>Registra el cobro o reembolso del saldo de un cambio hecho en tienda, separado de los pagos de la venta original.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
+    [HttpPost("{id:int}/exchanges/{exchangeId:int}/settlement")]
+    public async Task<ActionResult<SaleExchangeSettlementDTO>> SettleExchange(int id, int exchangeId, [FromBody] CreateSaleExchangeSettlementDTO settlement)
+    {
+        var result = await _saleExchangeService.SettleAsync(id, exchangeId, settlement);
+        return CreatedAtAction(nameof(GetExchanges), new { id }, result);
+    }
+
     /// <summary>Registra el intercambio físico: la agencia entrega las prendas nuevas y recibe las retornadas en el mismo acto.</summary>
     [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/exchanges/{exchangeId:int}/handover")]

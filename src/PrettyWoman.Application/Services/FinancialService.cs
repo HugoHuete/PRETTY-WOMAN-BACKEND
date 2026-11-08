@@ -174,7 +174,10 @@ public class FinancialService(IApplicationDbContext context) : IFinancialService
             GetAccumulator(item.Year, item.Month).SalesNio += item.Amount;
 
         var paymentFeesByMonth = await _context.SalePaymentMovements.AsNoTracking()
-            .Where(payment => payment.MovementDirectionId == (int)MovementDirectionOptions.In &&
+            .Where(payment => (payment.MovementDirectionId == (int)MovementDirectionOptions.In ||
+                               (payment.MovementDirectionId == (int)MovementDirectionOptions.Out &&
+                                payment.PaymentMethodId == (int)PaymentMethodOption.Card &&
+                                payment.ReversedSalePaymentMovementId != null)) &&
                              payment.Sale != null && payment.Sale.SaleStatusId != (int)SaleStatusOption.Cancelled &&
                              (!startUtc.HasValue || payment.MovementDate >= startUtc.Value) &&
                              (!endUtcExclusive.HasValue || payment.MovementDate < endUtcExclusive.Value))
@@ -188,12 +191,41 @@ public class FinancialService(IApplicationDbContext context) : IFinancialService
             {
                 group.Key.Year,
                 group.Key.Month,
-                CommissionAmount = group.Sum(item => item.Payment.CommissionAmount),
-                IncomeTaxAmount = group.Sum(item => item.Payment.IncomeTaxAmount)
+                CommissionAmount = group.Sum(item => item.Payment.MovementDirectionId == (int)MovementDirectionOptions.In
+                    ? -item.Payment.CommissionAmount : item.Payment.CommissionAmount),
+                IncomeTaxAmount = group.Sum(item => item.Payment.MovementDirectionId == (int)MovementDirectionOptions.In
+                    ? -item.Payment.IncomeTaxAmount : item.Payment.IncomeTaxAmount)
             })
             .ToListAsync();
 
         foreach (var item in paymentFeesByMonth)
+        {
+            var accumulator = GetAccumulator(item.Year, item.Month);
+            accumulator.CardCommissionNio += item.CommissionAmount;
+            accumulator.CardIncomeTaxNio += item.IncomeTaxAmount;
+        }
+
+        var exchangeSettlementFeesByMonth = await _context.SaleExchangeSettlementTenders.AsNoTracking()
+            .Where(tender => tender.PaymentMethodId == (int)PaymentMethodOption.Card &&
+                             tender.Settlement!.MovementDirectionId == (int)MovementDirectionOptions.In &&
+                             (!startUtc.HasValue || tender.Settlement.MovementDate >= startUtc.Value) &&
+                             (!endUtcExclusive.HasValue || tender.Settlement.MovementDate < endUtcExclusive.Value))
+            .Select(tender => new
+            {
+                Tender = tender,
+                LocalDate = TimeZoneInfo.ConvertTimeBySystemTimeZoneId(tender.Settlement!.MovementDate, ManaguaTimeZoneId)
+            })
+            .GroupBy(item => new { item.LocalDate.Year, item.LocalDate.Month })
+            .Select(group => new
+            {
+                group.Key.Year,
+                group.Key.Month,
+                CommissionAmount = group.Sum(item => item.Tender.CommissionAmount),
+                IncomeTaxAmount = group.Sum(item => item.Tender.IncomeTaxAmount)
+            })
+            .ToListAsync();
+
+        foreach (var item in exchangeSettlementFeesByMonth)
         {
             var accumulator = GetAccumulator(item.Year, item.Month);
             accumulator.CardCommissionNio -= item.CommissionAmount;

@@ -184,8 +184,7 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             AmountReceivedNio = request.Deliveries.Sum(item => RoundMoney(item.AmountCollectedNio)) + request.PostSaleDeliveries.Sum(item => RoundMoney(item.AmountCollectedNio)),
             AmountReceivedUsd = request.Deliveries.Sum(item => RoundMoney(item.AmountCollectedUsd)) + request.PostSaleDeliveries.Sum(item => RoundMoney(item.AmountCollectedUsd)),
             AmountPaidToAgencyNio = request.Deliveries.Sum(item => RoundMoney(item.ChangeGivenNio) + RoundMoney(item.ShippingPaidToAgency)) +
-                                    postSaleDeliveries.Sum(item => RoundMoney(item.ShippingPaidToAgency)) +
-                                    request.PostSaleDeliveries.Sum(item => RoundMoney(item.ChangeGivenNio)),
+                                    request.PostSaleDeliveries.Sum(item => RoundMoney(item.ChangeGivenNio) + RoundMoney(item.ShippingPaidToAgency)),
             Comments = request.Comments
         };
 
@@ -238,9 +237,13 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             postSaleDelivery.AmountCollectedUsd = tender.AmountReceivedUsd;
             postSaleDelivery.ChangeGivenNio = tender.ChangeGivenNio;
             postSaleDelivery.CollectionExchangeRate = tender.ExchangeRate;
+            postSaleDelivery.ShippingPaidToAgency = RoundMoney(postSaleDeliveryRequests[postSaleDelivery.Id].ShippingPaidToAgency);
             postSaleDelivery.DeliveryAgencyReconciliation = reconciliation;
             if (postSaleDelivery.SaleReturn is not null)
+            {
+                postSaleDelivery.SaleReturn.ReturnShippingPaidToAgency = postSaleDelivery.ShippingPaidToAgency;
                 postSaleDelivery.SaleReturn.DeliveryAgencyReconciliation = reconciliation;
+            }
         }
         reconciliation.PostSaleDeliveries.AddRange(postSaleDeliveries);
 
@@ -464,7 +467,7 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
 
     private static void ValidatePostSaleDeliveryAmounts(ReconcilePostSaleDeliveryDTO request)
     {
-        if (request.AmountCollectedNio < 0 || request.AmountCollectedUsd < 0 || request.ChangeGivenNio < 0)
+        if (request.AmountCollectedNio < 0 || request.AmountCollectedUsd < 0 || request.ChangeGivenNio < 0 || request.ShippingPaidToAgency < 0)
             throw new AppBadRequestException("Los montos del envio postventa no pueden ser negativos.");
 
         var tender = ResolveAgencyCollectionTender(request);

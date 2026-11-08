@@ -281,18 +281,6 @@ public class FinancialServiceTests
                 CommissionAmount = 20m,
                 IncomeTaxAmount = 10m,
                 UserId = "user"
-            },
-            new SalePaymentMovement
-            {
-                Id = 2,
-                SaleId = 1,
-                MovementDate = juneDate,
-                MovementDirectionId = (int)MovementDirectionOptions.Out,
-                PaymentMethodId = 1,
-                GrossAmount = 1000m,
-                CommissionAmount = 20m,
-                IncomeTaxAmount = 10m,
-                UserId = "user"
             });
         context.LoanPayments.Add(new LoanPayment
         {
@@ -350,6 +338,58 @@ public class FinancialServiceTests
         Assert.Equal(470m, year.GrossProfitNio);
         Assert.Equal(125m, year.ExpensesNio);
         Assert.Equal(345m, year.UtilityNio);
+    }
+
+    [Fact]
+    public async Task GetMonthlySummaryAsync_ReversesCardFeesInTheRefundMonth()
+    {
+        await using var context = CreateContext();
+        var june = new DateTime(2026, 6, 15, 12, 0, 0, DateTimeKind.Utc);
+        var july = new DateTime(2026, 7, 15, 12, 0, 0, DateTimeKind.Utc);
+        context.Sales.Add(new Sale { Id = 1, SaleDate = june, SaleChannelId = 1, UserId = "user", Total = 1000m });
+        context.SaleProducts.Add(new SaleProduct { Id = 1, SaleId = 1, ProductId = 1, Quantity = 1, GrossProfit = 500m });
+        context.SalePaymentMovements.AddRange(
+            new SalePaymentMovement
+            {
+                Id = 1,
+                SaleId = 1,
+                MovementDate = june,
+                MovementDirectionId = (int)MovementDirectionOptions.In,
+                PaymentMethodId = (int)PaymentMethodOption.Card,
+                GrossAmount = 1000m,
+                CommissionAmount = 20m,
+                IncomeTaxAmount = 10m,
+                UserId = "user"
+            },
+            new SalePaymentMovement
+            {
+                Id = 2,
+                SaleId = 1,
+                MovementDate = july,
+                MovementDirectionId = (int)MovementDirectionOptions.Out,
+                PaymentMethodId = (int)PaymentMethodOption.Card,
+                ReversedSalePaymentMovementId = 1,
+                GrossAmount = 1000m,
+                CommissionAmount = 20m,
+                IncomeTaxAmount = 10m,
+                UserId = "user"
+            });
+        await context.SaveChangesAsync();
+
+        var result = await new FinancialService(context).GetMonthlySummaryAsync(2026, 2026);
+
+        var year = Assert.Single(result.Years);
+        var juneTotals = year.Months.Single(month => month.Month == 6);
+        var julyTotals = year.Months.Single(month => month.Month == 7);
+        Assert.Equal(970m, juneTotals.IncomeNio);
+        Assert.Equal(470m, juneTotals.GrossProfitNio);
+        Assert.Equal(470m, juneTotals.UtilityNio);
+        Assert.Equal(30m, julyTotals.IncomeNio);
+        Assert.Equal(30m, julyTotals.GrossProfitNio);
+        Assert.Equal(30m, julyTotals.UtilityNio);
+        Assert.Equal(1000m, year.IncomeNio);
+        Assert.Equal(500m, year.GrossProfitNio);
+        Assert.Equal(500m, year.UtilityNio);
     }
 
     [Fact]

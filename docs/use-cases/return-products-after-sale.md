@@ -31,7 +31,7 @@ El método es `InStore` o `DeliveryAgency`. El método por agencia exige agencia
 
 - Por preferencia de la clienta, se devuelve el valor reconocido de las prendas y, si la agencia retorna el producto, el envío de retorno puede descontarse del reembolso. El envío original no se devuelve.
 - Cuando la causa es de la tienda, la tienda asume el envío de retorno. Solo se devuelve también el envío original si la venta original contenía exactamente una prenda.
-- El costo que se pagará a la agencia se guarda en `returnShippingPaidToAgency`; no es un cobro adicional a la clienta.
+- Al crear la devolución solo se conoce y registra el envío cobrado a la clienta. El costo real de la agencia se informa durante la conciliación en `postSaleDeliveries[].shippingPaidToAgency`; no es un cobro adicional a la clienta.
 - La venta original conserva su estado de pago. El reembolso crea un `FinancialMovement` de salida `CustomerRefund`, ligado a la devolución, y guarda el método de pago usado.
 
 ## Recepción física e inventario
@@ -47,4 +47,4 @@ Una devolución solo puede cancelarse mientras esté `Requested`, antes de recog
 
 ## Conciliación de agencia
 
-Una devolución recogida por agencia (`PickedUpAndRefunded`) o ya recibida (`Completed`) puede incluirse una sola vez en `POST /api/v1/delivery-agency-reconciliations`, dentro de `returns`. Debe pertenecer a la misma agencia que la liquidación. Su `returnShippingPaidToAgency` se suma al monto pagado a la agencia y queda enlazada a la conciliación.
+El envío postventa de una devolución recogida (`InTransit`) o recibida (`Completed`) puede incluirse una sola vez en `POST /api/v1/delivery-agency-reconciliations`, dentro de `postSaleDeliveries`. Debe pertenecer a la misma agencia que la liquidación. El `shippingPaidToAgency` real se suma al monto pagado a la agencia y queda enlazado a la conciliación.

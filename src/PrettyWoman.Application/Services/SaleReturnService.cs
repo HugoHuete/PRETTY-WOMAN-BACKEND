@@ -34,7 +34,7 @@ public class SaleReturnService(
             throw new AppBadRequestException("Una devolución debe incluir al menos una prenda.");
         if (!Enum.IsDefined(typeof(SaleReturnReasonOption), request.ReasonId) || !Enum.IsDefined(typeof(SaleReturnMethodOption), request.MethodId))
             throw new AppBadRequestException("El motivo o método de devolución no es válido.");
-        if (request.ReturnShippingChargedToClient < 0 || request.ReturnShippingPaidToAgency < 0)
+        if (request.ReturnShippingChargedToClient < 0)
             throw new AppBadRequestException("Los montos de envío no pueden ser negativos.");
         if (request.ReasonId != (int)SaleReturnReasonOption.CustomerPreference && request.ReturnShippingChargedToClient > 0)
             throw new AppBadRequestException("La tienda asume el envío de retorno cuando la devolución es por defecto de producto o error de la tienda.");
@@ -45,7 +45,7 @@ public class SaleReturnService(
         if (method == SaleReturnMethodOption.DeliveryAgency && !request.DeliveryAgencyId.HasValue)
             throw new AppBadRequestException("La devolución por agencia requiere una agencia de envío.");
 
-        if (method == SaleReturnMethodOption.InStore && (request.DeliveryAgencyId.HasValue || request.ReturnShippingChargedToClient > 0 || request.ReturnShippingPaidToAgency > 0))
+        if (method == SaleReturnMethodOption.InStore && (request.DeliveryAgencyId.HasValue || request.ReturnShippingChargedToClient > 0))
             throw new AppBadRequestException("Una devolución en local no debe tener agencia ni costos de envío.");
 
         if (request.DeliveryAgencyId.HasValue && !await _context.DeliveryAgencies.AnyAsync(item => item.Id == request.DeliveryAgencyId.Value))
@@ -84,7 +84,7 @@ public class SaleReturnService(
             DeliveryAgencyId = request.DeliveryAgencyId,
             ReturnCode = request.ReturnCode.NormalizeOptional(),
             ReturnShippingChargedToClient = request.ReturnShippingChargedToClient,
-            ReturnShippingPaidToAgency = request.ReturnShippingPaidToAgency,
+            ReturnShippingPaidToAgency = 0,
             Comments = request.Comments.NormalizeOptional()
         };
         if (method == SaleReturnMethodOption.DeliveryAgency)
@@ -95,8 +95,7 @@ public class SaleReturnService(
                 Code = request.ReturnCode.NormalizeOptional(),
                 Address = request.DeliveryAddress.NormalizeOptional(),
                 StatusId = (int)PostSaleDeliveryStatusOption.Pending,
-                ShippingChargedToClient = request.ReturnShippingChargedToClient,
-                ShippingPaidToAgency = request.ReturnShippingPaidToAgency
+                ShippingChargedToClient = request.ReturnShippingChargedToClient
             };
         }
         foreach (var item in request.Items)

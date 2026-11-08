@@ -16,6 +16,7 @@ public class ReconcilePostSaleDeliveryDTO
     public decimal AmountCollectedNio { get; set; }
     public decimal AmountCollectedUsd { get; set; }
     public decimal ChangeGivenNio { get; set; }
+    public decimal ShippingPaidToAgency { get; set; }
     public decimal? CollectionExchangeRate { get; set; }
 }
 
