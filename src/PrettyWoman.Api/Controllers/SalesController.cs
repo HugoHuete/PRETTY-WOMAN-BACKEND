@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 using PrettyWoman.Application.Common.Models;
@@ -60,6 +60,15 @@ public class SalesController(
     {
         var id = await _saleService.CreateAsync(createSaleDTO);
         _logger.LogInformation("Venta creada {SaleId} por usuario {UserId}", id, GetUserId());
+        return CreatedAtAction(nameof(GetById), new { id }, id);
+    }
+
+    /// <summary>Importa una venta histórica con los precios unitarios efectivamente cobrados.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
+    [HttpPost("migration")]
+    public async Task<ActionResult<int>> CreateMigration([FromBody] CreateMigrationSaleDTO createSaleDTO)
+    {
+        var id = await _saleService.CreateMigrationAsync(createSaleDTO);
         return CreatedAtAction(nameof(GetById), new { id }, id);
     }
 

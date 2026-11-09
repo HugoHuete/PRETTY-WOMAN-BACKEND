@@ -13,6 +13,100 @@ namespace PrettyWoman.Application.Tests.Services.Sales;
 
 public class SaleServiceTests
 {
+    [Theory]
+    [InlineData(550, 550, 0)]
+    [InlineData(450, 500, 50)]
+    public async Task CreateMigrationAsync_UsesChargedPriceWithoutChangingCatalog(decimal charged, decimal original, decimal discount)
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var request = new CreateMigrationSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.InStoreSale,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            FinalUnitPrices = [charged],
+            PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Cash, ProductAmount = charged }]
+        };
+
+        var id = await CreateService(context).CreateMigrationAsync(request);
+
+        var sale = await context.Sales.Include(item => item.ProductVariants).SingleAsync(item => item.Id == id);
+        var line = Assert.Single(sale.ProductVariants);
+        Assert.Equal(original, line.OriginalUnitPrice);
+        Assert.Equal(discount, line.DiscountAmount);
+        Assert.Equal(charged, line.FinalUnitPrice);
+        Assert.Equal(charged, sale.Total);
+        Assert.Equal(500m, product.SalePrice);
+        Assert.Equal(1, product.AvailableQuantity);
+    }
+
+    [Fact]
+    public async Task CreateMigrationAsync_CompletesPaidOnlineSaleWithoutDeliveryAndMovesInventory()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var request = new CreateMigrationSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            FinalUnitPrices = [500m],
+            PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Cash, ProductAmount = 500m }]
+        };
+
+        var id = await CreateService(context).CreateMigrationAsync(request);
+
+        Assert.Equal((int)SaleStatusOption.Completed, (await context.Sales.SingleAsync(item => item.Id == id)).SaleStatusId);
+        Assert.Equal(1, product.AvailableQuantity);
+    }
+
+    [Fact]
+    public async Task CreateMigrationAsync_PaidDeliveryCanBeSentAndReconciledWithoutDuplicatePayment()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        await context.SaveChangesAsync();
+        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+        var saleId = await service.CreateMigrationAsync(new CreateMigrationSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            FinalUnitPrices = [550m],
+            Delivery = new CreateSaleDeliveryDTO { Code = "HIST-1", MunicipalityId = 1, DeliveryAgencyId = 1, ShippingChargedToClient = 50m },
+            PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Cash, ProductAmount = 550m, ShippingAmount = 50m }]
+        });
+        var delivery = await context.SaleDeliveries.SingleAsync(item => item.SaleId == saleId);
+        await service.MarkDeliveryAsSentAsync(saleId, delivery.Id);
+        var reconciliation = await new DeliveryAgencyReconciliationService(context, new TestCurrentUserService()).CreateAsync(new CreateDeliveryAgencyReconciliationDTO
+        {
+            DeliveryAgencyId = 1,
+            SettlementExchangeRate = 37.1m,
+            Deliveries = [new ReconcileSaleDeliveryDTO { SaleDeliveryId = delivery.Id, ShippingPaidToAgency = 50m }]
+        });
+        var sale = await context.Sales.Include(item => item.PaymentMovements).SingleAsync(item => item.Id == saleId);
+        Assert.Equal((int)SaleStatusOption.Completed, sale.SaleStatusId);
+        Assert.Equal((int)DeliveryStatusCode.Completed, delivery.DeliveryStatusId);
+        Assert.Single(sale.PaymentMovements);
+        Assert.Equal(1, product.AvailableQuantity);
+        var expense = await context.FinancialMovements.SingleAsync(item => item.DeliveryAgencyReconciliationId == reconciliation);
+        Assert.Equal(50m, expense.Amount);
+        Assert.Equal((int)MovementDirectionOptions.Out, expense.MovementDirectionId);
+    }
+
+    [Fact]
+    public async Task CreateMigrationAsync_RejectsMissingPriceBeforeCreatingSale()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var request = new CreateMigrationSaleDTO { ProductVariants = [new CreateSaleProductDTO { ProductId = 1, Quantity = 1 }] };
+        await Assert.ThrowsAsync<AppBadRequestException>(() => CreateService(context).CreateMigrationAsync(request));
+        Assert.Empty(await context.Sales.ToListAsync());
+    }
+
     [Fact]
     public async Task CreateAsync_CreatesDeliveryAndAppliesCombinedPayment()
     {

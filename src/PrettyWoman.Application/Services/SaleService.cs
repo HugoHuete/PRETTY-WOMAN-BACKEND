@@ -110,10 +110,22 @@ public class SaleService(
         return saleDTO;
     }
 
-    public async Task<int> CreateAsync(CreateSaleDTO createSaleDTO)
+    public Task<int> CreateAsync(CreateSaleDTO createSaleDTO) => CreateAsync(createSaleDTO, null);
+
+    public Task<int> CreateMigrationAsync(CreateMigrationSaleDTO createSaleDTO)
+    {
+        if (createSaleDTO.SelectionProducts.Count != 0 || createSaleDTO.FinalUnitPrices.Count != createSaleDTO.ProductVariants.Count ||
+            createSaleDTO.FinalUnitPrices.Any(price => price < 0 || decimal.Round(price, 2) != price) ||
+            createSaleDTO.ProductVariants.Any(product => product.DiscountAmount != 0 || product.DiscountSourceId != (int)DiscountSourceOption.None || product.DiscountCampaignId.HasValue))
+            throw new AppBadRequestException("La importacion requiere un precio unitario valido por producto y no admite descuentos ni seleccion en la solicitud.");
+
+        return CreateAsync(createSaleDTO, createSaleDTO.FinalUnitPrices);
+    }
+
+    private async Task<int> CreateAsync(CreateSaleDTO createSaleDTO, IReadOnlyList<decimal>? finalUnitPrices)
     {
         if (createSaleDTO.Delivery is null)
-            return await CreateSaleAsync(createSaleDTO);
+            return await CreateSaleAsync(createSaleDTO, finalUnitPrices, completeMigratedWithoutDelivery: finalUnitPrices is not null);
 
         NormalizeSaleFields(createSaleDTO);
         if (createSaleDTO.PaymentMovements.Any(payment => payment.SaleDeliveryId.HasValue))
@@ -130,7 +142,7 @@ public class SaleService(
             Comments = createSaleDTO.Comments,
             ProductVariants = createSaleDTO.ProductVariants,
             SelectionProducts = createSaleDTO.SelectionProducts
-        });
+        }, finalUnitPrices);
         var deliveryId = await _deliveryService.CreateAsync(saleId, createSaleDTO.Delivery);
         foreach (var payment in createSaleDTO.PaymentMovements)
         {
@@ -153,14 +165,14 @@ public class SaleService(
         return saleId;
     }
 
-    private async Task<int> CreateSaleAsync(CreateSaleDTO createSaleDTO)
+    private async Task<int> CreateSaleAsync(CreateSaleDTO createSaleDTO, IReadOnlyList<decimal>? finalUnitPrices = null, bool completeMigratedWithoutDelivery = false)
     {
         NormalizeSaleFields(createSaleDTO);
         await ValidateSaleRequestAsync(createSaleDTO);
 
         // Se congelan precios, costos y descuentos antes de persistir la venta.
         var productVariants = await LoadSaleProductsAsync(createSaleDTO.ProductVariants, createSaleDTO.SelectionProducts);
-        var saleProducts = CreateSaleProducts(createSaleDTO.ProductVariants, productVariants);
+        var saleProducts = CreateSaleProducts(createSaleDTO.ProductVariants, productVariants, finalUnitPrices);
         var payments = await _paymentMovementService.CreateInitialAsync(createSaleDTO.PaymentMovements);
         // Los nuevos totales se validan contra pagos ya aplicados; un exceso queda como reembolso pendiente.
         var totals = CalculateSaleTotals(saleProducts);
@@ -185,6 +197,8 @@ public class SaleService(
         };
 
         CompleteInStoreSaleWhenPaid(sale);
+        if (completeMigratedWithoutDelivery && sale.SalePaymentStatusId == (int)SalePaymentStatusOption.Paid)
+            sale.SaleStatusId = (int)SaleStatusOption.Completed;
 
         ApplyInventoryForSaleStatus(sale);
 
@@ -918,14 +932,17 @@ public class SaleService(
         return productVariants;
     }
 
-    private static List<SaleProduct> CreateSaleProducts(List<CreateSaleProductDTO> requests, List<ProductVariant> productVariants)
+    private static List<SaleProduct> CreateSaleProducts(List<CreateSaleProductDTO> requests, List<ProductVariant> productVariants, IReadOnlyList<decimal>? finalUnitPrices = null)
     {
-        return requests.Select(request =>
+        return requests.Select((request, index) =>
         {
             var productVariant = productVariants.First(item => item.Id == request.ProductId);
-            if (request.DiscountAmount > productVariant.SalePrice) throw new AppBadRequestException("El descuento no puede ser mayor que el precio de venta.");
+            var originalUnitPrice = finalUnitPrices is null ? productVariant.SalePrice : Math.Max(productVariant.SalePrice, finalUnitPrices[index]);
+            var discountAmount = finalUnitPrices is null ? request.DiscountAmount : originalUnitPrice - finalUnitPrices[index];
+            var discountSourceId = finalUnitPrices is null ? request.DiscountSourceId : (int)(discountAmount > 0 ? DiscountSourceOption.Manual : DiscountSourceOption.None);
+            if (discountAmount > originalUnitPrice) throw new AppBadRequestException("El descuento no puede ser mayor que el precio de venta.");
 
-            var finalUnitPrice = Math.Round(productVariant.SalePrice - request.DiscountAmount, 2);
+            var finalUnitPrice = Math.Round(originalUnitPrice - discountAmount, 2);
             var lineTotal = Math.Round(finalUnitPrice * request.Quantity, 2);
             var totalCostAtSale = Math.Round(productVariant.UnitCostNio * request.Quantity, 6);
             return new SaleProduct
@@ -934,10 +951,10 @@ public class SaleService(
                 ProductVariant = productVariant,
                 Quantity = request.Quantity,
                 UnitCostAtSale = productVariant.UnitCostNio,
-                OriginalUnitPrice = productVariant.SalePrice,
-                DiscountSourceId = request.DiscountSourceId,
+                OriginalUnitPrice = originalUnitPrice,
+                DiscountSourceId = discountSourceId,
                 DiscountCampaignId = request.DiscountCampaignId,
-                DiscountAmount = request.DiscountAmount,
+                DiscountAmount = discountAmount,
                 FinalUnitPrice = finalUnitPrice,
                 LineTotal = lineTotal,
                 TotalCostAtSale = totalCostAtSale,

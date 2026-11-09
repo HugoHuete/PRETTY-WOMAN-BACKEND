@@ -8,6 +8,7 @@ public interface ISaleService
     Task<PaginatedResult<SaleDTO>> GetAllAsync(SaleQueryDTO query);
     Task<SaleDTO> GetByIdAsync(int id);
     Task<int> CreateAsync(CreateSaleDTO createSaleDTO);
+    Task<int> CreateMigrationAsync(CreateMigrationSaleDTO createSaleDTO);
     Task PatchHeaderAsync(int id, PatchSaleHeaderDTO patchSaleHeaderDTO);
     Task ReplaceProductsAsync(int id, ReplaceSaleProductsDTO replaceSaleProductsDTO);
     Task AddSelectionHoldsAsync(int saleId, List<CreateSaleSelectionProductDTO> selectionProducts);
