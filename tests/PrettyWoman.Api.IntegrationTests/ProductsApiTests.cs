@@ -18,6 +18,43 @@ public class ProductsApiTests(PrettyWomanApiFactory factory)
     private readonly PrettyWomanApiFactory _factory = factory;
 
     [Fact]
+    public async Task EmployeeCanFilterProductsByMultipleVariantIds()
+    {
+        var first = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        var second = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        using var client = await CreateEmployeeClientAsync();
+
+        var response = await client.GetAsync($"/api/v1/products?productVariantIds={first.ProductVariantId}&productVariantIds={second.ProductVariantId}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<PaginatedResult<ProductDTO>>();
+        Assert.NotNull(result);
+        Assert.Equal(new[] { first.ProductVariantId, second.ProductVariantId }.Order().ToArray(),
+            result.Items.SelectMany(product => product.Presentations).SelectMany(presentation => presentation.Sizes)
+                .Select(variant => variant.Id).Order().ToArray());
+    }
+
+    [Fact]
+    public async Task EmployeeCanFilterProductsByMultipleCodes()
+    {
+        var first = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        var second = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var codes = await context.Products.Where(product => product.Id == first.ProductId || product.Id == second.ProductId)
+            .Select(product => product.Code).ToArrayAsync();
+        Assert.Equal(2, codes.Length);
+        using var client = await CreateEmployeeClientAsync();
+
+        var response = await client.GetAsync($"/api/v1/products?code={codes[0]}&code={codes[1]}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var result = await response.Content.ReadFromJsonAsync<PaginatedResult<ProductDTO>>();
+        Assert.NotNull(result);
+        Assert.Equal(codes.Order().ToArray(), result.Items.Select(product => product.Code).Order().ToArray());
+    }
+
+    [Fact]
     public async Task EmployeeCanUpdateVariantPriceWithoutChangingProductHistory()
     {
         var productVariant = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);

@@ -2166,7 +2166,7 @@ public class SaleServiceTests
     }
 
     [Fact]
-    public async Task CreateDeliveryAsync_RequiresFullPaymentWhenAgencyCannotCollectCash()
+    public async Task CreateDeliveryAsync_AllowsSinglePaymentBeforeSendingWithAgencyThatCannotCollectCash()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -2182,31 +2182,28 @@ public class SaleServiceTests
             ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
 
-        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
-        {
-            Code = "DEL-002",
-            MunicipalityId = 1,
-            DeliveryAgencyId = 2
-        }));
-
-        Assert.Contains("pagada completamente", exception.Message, StringComparison.OrdinalIgnoreCase);
-
-        await service.AddPaymentMovementAsync(saleId, new CreateSalePaymentMovementDTO
-        {
-            PaymentMethodId = (int)PaymentMethodOption.Cash,
-            ProductAmount = 500m
-        });
         var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
         {
-            Code = "DEL-PAID-002",
+            Code = "DEL-002",
             MunicipalityId = 1,
             DeliveryAgencyId = 2,
             ShippingChargedToClient = 50m
         });
-
         var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
         Assert.Equal(0m, delivery.AmountToCollect);
-        Assert.Equal(50m, delivery.ShippingChargedToClient);
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.MarkDeliveryAsSentAsync(saleId, deliveryId));
+
+        var paymentId = await service.AddPaymentMovementAsync(saleId, new CreateSalePaymentMovementDTO
+        {
+            PaymentMethodId = (int)PaymentMethodOption.Cash,
+            ProductAmount = 500m,
+            ShippingAmount = 50m,
+            SaleDeliveryId = deliveryId
+        });
+        await service.MarkDeliveryAsSentAsync(saleId, deliveryId);
+
+        Assert.Equal(550m, (await context.SalePaymentMovements.SingleAsync(item => item.Id == paymentId)).GrossAmount);
+        Assert.Equal((int)DeliveryStatusCode.Sent, delivery.DeliveryStatusId);
     }
 
     [Fact]
@@ -2290,7 +2287,7 @@ public class SaleServiceTests
     }
 
     [Fact]
-    public async Task UpdateDeliveryAsync_RejectsAgencyWithoutCashCollectionWhenSaleIsNotFullyPaid()
+    public async Task UpdateDeliveryAsync_AllowsAgencyWithoutCashCollectionWhenSaleIsNotFullyPaid()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -2312,14 +2309,15 @@ public class SaleServiceTests
             DeliveryAgencyId = 1
         });
 
-        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.UpdateDeliveryAsync(saleId, deliveryId, new PatchSaleDeliveryDTO
+        await service.UpdateDeliveryAsync(saleId, deliveryId, new PatchSaleDeliveryDTO
         {
             DeliveryAgencyId = 2
-        }));
+        });
 
-        Assert.Contains("pagada completamente", exception.Message, StringComparison.OrdinalIgnoreCase);
         var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
-        Assert.Equal(1, delivery.DeliveryAgencyId);
+        Assert.Equal(2, delivery.DeliveryAgencyId);
+        Assert.Equal(0m, delivery.AmountToCollect);
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.MarkDeliveryAsSentAsync(saleId, deliveryId));
     }
     [Fact]
     public async Task AddPaymentMovementAsync_AppliesPaymentToProductsAndShippingAndClearsAmountToCollect()
@@ -2399,6 +2397,38 @@ public class SaleServiceTests
 
         Assert.Contains("envio", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
+    [Fact]
+    public async Task MarkDeliveryAsSentAsync_AcceptsUsdConversionDifferenceForAgencyWithoutCashCollection()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        context.DeliveryAgencies.Add(new DeliveryAgency { Id = 2, Name = "Agencia prepago", PhoneNumber = "88881111", CanCollectCashOnDelivery = false });
+        await context.SaveChangesAsync();
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+        var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "PREPAID-USD", MunicipalityId = 1, DeliveryAgencyId = 2, ShippingChargedToClient = 50m
+        });
+        var paymentId = await service.AddPaymentMovementAsync(saleId, new CreateSalePaymentMovementDTO
+        {
+            PaymentMethodId = (int)PaymentMethodOption.Cash, ProductAmount = 500m, ShippingAmount = 50m,
+            SaleDeliveryId = deliveryId, AmountReceivedUsd = 549.50m, ExchangeRate = 1m
+        });
+
+        await service.MarkDeliveryAsSentAsync(saleId, deliveryId);
+
+        Assert.Equal((int)DeliveryStatusCode.Sent, (await context.SaleDeliveries.SingleAsync()).DeliveryStatusId);
+        Assert.Equal(-0.50m, (await context.SalePaymentMovements.SingleAsync(item => item.Id == paymentId)).ExchangeDifferenceNio);
+    }
+
     [Fact]
     public async Task MarkDeliveryAsSentAsync_RequiresShippingPaymentForAgencyWithoutCashCollection()
     {
@@ -2608,6 +2638,87 @@ public class SaleServiceTests
         Assert.Equal(saleId, pickedUpDelivery.SaleId);
         Assert.Equal(pickedUpReturn.Id, pickedUpDelivery.SaleReturnId);
         Assert.Equal(35m, pickedUpDelivery.ShippingPaidToAgency);
+    }
+
+    [Theory]
+    [InlineData(499.50, true)]
+    [InlineData(500.50, true)]
+    [InlineData(499.49, false)]
+    [InlineData(500.51, false)]
+    public async Task CreateAgencyReconciliationAsync_UsesUsdTolerance(decimal collectedNio, bool accepted)
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        await context.SaveChangesAsync();
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var sales = CreateService(context);
+        var saleId = await sales.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+        var deliveryId = await sales.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO { Code = "USD-TOL", MunicipalityId = 1, DeliveryAgencyId = 1 });
+        await sales.MarkDeliveryAsSentAsync(saleId, deliveryId);
+        var reconciliations = new DeliveryAgencyReconciliationService(context, new TestCurrentUserService());
+        var request = new CreateDeliveryAgencyReconciliationDTO
+        {
+            DeliveryAgencyId = 1,
+            SettlementExchangeRate = 1m,
+            Deliveries = [new ReconcileSaleDeliveryDTO { SaleDeliveryId = deliveryId, AmountCollectedUsd = collectedNio, CollectionExchangeRate = 1m }]
+        };
+
+        if (!accepted)
+        {
+            await Assert.ThrowsAsync<AppBadRequestException>(() => reconciliations.CreateAsync(request));
+            return;
+        }
+
+        var reconciliationId = await reconciliations.CreateAsync(request);
+        var sale = await context.Sales.Include(item => item.PaymentMovements).SingleAsync(item => item.Id == saleId);
+        var payment = Assert.Single(sale.PaymentMovements);
+        Assert.Equal((int)SalePaymentStatusOption.Paid, sale.SalePaymentStatusId);
+        Assert.Equal(500m, payment.GrossAmount);
+        Assert.Equal(collectedNio - 500m, payment.ExchangeDifferenceNio);
+        Assert.Equal((int)DeliveryStatusCode.Completed, (await context.SaleDeliveries.SingleAsync()).DeliveryStatusId);
+        Assert.Equal(collectedNio, (await context.FinancialMovements.SingleAsync(item => item.DeliveryAgencyReconciliationId == reconciliationId)).Amount);
+    }
+
+    [Theory]
+    [InlineData(100.50, true)]
+    [InlineData(99.50, true)]
+    [InlineData(100.51, false)]
+    [InlineData(99.49, false)]
+    public async Task CreateAgencyReconciliationAsync_UsesUsdToleranceForPostSaleExchange(decimal collected, bool accepted)
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var sale = new Sale { SaleChannelId = (int)SaleChannelOption.Whatsapp, UserId = "test-user" };
+        var exchange = new SaleExchange { OriginalSale = sale };
+        var delivery = new PostSaleDelivery
+        {
+            SaleExchange = exchange, DeliveryAgencyId = 1,
+            StatusId = (int)PostSaleDeliveryStatusOption.InTransit, AmountToCollect = 100m
+        };
+        context.PostSaleDeliveries.Add(delivery);
+        await context.SaveChangesAsync();
+        var service = new DeliveryAgencyReconciliationService(context, new TestCurrentUserService());
+        var request = new CreateDeliveryAgencyReconciliationDTO
+        {
+            DeliveryAgencyId = 1, SettlementExchangeRate = 1m,
+            PostSaleDeliveries = [new ReconcilePostSaleDeliveryDTO { PostSaleDeliveryId = delivery.Id, AmountCollectedUsd = collected, CollectionExchangeRate = 1m }]
+        };
+
+        if (!accepted)
+        {
+            await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(request));
+            return;
+        }
+
+        var id = await service.CreateAsync(request);
+        Assert.Equal(id, delivery.DeliveryAgencyReconciliationId);
+        Assert.Equal(collected, delivery.AmountCollectedUsd);
     }
 
     [Fact]

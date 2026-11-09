@@ -6,6 +6,8 @@ namespace PrettyWoman.Application.Common.Calculations;
 
 public static class SalePaymentMovementRules
 {
+    public const decimal UsdConversionToleranceNio = 0.50m;
+
     public static decimal CalculateProductTotal(IEnumerable<SalePaymentMovement> payments)
         => payments.Sum(payment => SignedAmount(payment, payment.ProductAmount));
 

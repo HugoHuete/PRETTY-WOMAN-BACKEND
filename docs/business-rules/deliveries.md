@@ -48,13 +48,15 @@ The amount is recalculated when payments, refunds, grouped payment adjustments, 
 
 For an agency with `can_collect_cash_on_delivery = false`:
 
-- The sale product total must be fully paid; an overpayment also satisfies this rule.
+- A pending delivery can be created or updated before products and shipping are paid. Before the delivery is sent, both the sale product total and the delivery shipping charge must be fully paid; a product overpayment also satisfies the product requirement.
 - `shipping_charged_to_client` remains the price charged to the customer for the delivery.
 - `amount_to_collect` is zero because the agency cannot collect on delivery.
 
 The amount collected by the agency is not a sale payment until its delivery is included in an agency reconciliation.
 
 For cash-on-delivery deliveries, a `Sent` delivery is reconciled only when the agency reports the full outstanding amount. The reconciliation records that payment and completes both the delivery and the sale. If the client cannot pay the full amount, the agency must not deliver the products: the delivery is marked `Failed` and no partial collection is recorded.
+
+When the collection includes USD and the converted net differs from a positive outstanding amount by at most C$0.50, reconciliation applies the full outstanding amount and stores the difference in the sale payment's `exchangeDifferenceNio`. The agency settlement records the amounts actually received. The same tolerance applies to positive collections for post-sale exchanges; it does not apply to NIO-only collections or failed deliveries.
 
 ## Roles operativos
 

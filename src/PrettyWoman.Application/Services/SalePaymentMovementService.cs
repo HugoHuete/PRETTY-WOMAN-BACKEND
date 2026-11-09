@@ -393,7 +393,7 @@ public class SalePaymentMovementService(IApplicationDbContext context, ICurrentU
 
             var convertedAmount = RoundMoney(netAmount);
             var difference = RoundMoney(convertedAmount - allocation.GrossAmount);
-            if (Math.Abs(difference) > 0.50m)
+            if (Math.Abs(difference) > SalePaymentMovementRules.UsdConversionToleranceNio)
                 throw new AppBadRequestException("El monto neto recibido difiere demasiado del pago aplicado. Registre el cambio correspondiente.");
             if (convertedAmount <= 0)
                 throw new AppBadRequestException("El monto convertido del pago debe generar un movimiento financiero mayor que cero.");
