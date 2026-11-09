@@ -2166,7 +2166,7 @@ public class SaleServiceTests
     }
 
     [Fact]
-    public async Task CreateDeliveryAsync_RequiresFullPaymentWhenAgencyCannotCollectCash()
+    public async Task CreateDeliveryAsync_AllowsSinglePaymentBeforeSendingWithAgencyThatCannotCollectCash()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -2182,31 +2182,28 @@ public class SaleServiceTests
             ProductVariants = [new CreateSaleProductDTO { ProductId = productVariant.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
         });
 
-        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
-        {
-            Code = "DEL-002",
-            MunicipalityId = 1,
-            DeliveryAgencyId = 2
-        }));
-
-        Assert.Contains("pagada completamente", exception.Message, StringComparison.OrdinalIgnoreCase);
-
-        await service.AddPaymentMovementAsync(saleId, new CreateSalePaymentMovementDTO
-        {
-            PaymentMethodId = (int)PaymentMethodOption.Cash,
-            ProductAmount = 500m
-        });
         var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
         {
-            Code = "DEL-PAID-002",
+            Code = "DEL-002",
             MunicipalityId = 1,
             DeliveryAgencyId = 2,
             ShippingChargedToClient = 50m
         });
-
         var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
         Assert.Equal(0m, delivery.AmountToCollect);
-        Assert.Equal(50m, delivery.ShippingChargedToClient);
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.MarkDeliveryAsSentAsync(saleId, deliveryId));
+
+        var paymentId = await service.AddPaymentMovementAsync(saleId, new CreateSalePaymentMovementDTO
+        {
+            PaymentMethodId = (int)PaymentMethodOption.Cash,
+            ProductAmount = 500m,
+            ShippingAmount = 50m,
+            SaleDeliveryId = deliveryId
+        });
+        await service.MarkDeliveryAsSentAsync(saleId, deliveryId);
+
+        Assert.Equal(550m, (await context.SalePaymentMovements.SingleAsync(item => item.Id == paymentId)).GrossAmount);
+        Assert.Equal((int)DeliveryStatusCode.Sent, delivery.DeliveryStatusId);
     }
 
     [Fact]
@@ -2290,7 +2287,7 @@ public class SaleServiceTests
     }
 
     [Fact]
-    public async Task UpdateDeliveryAsync_RejectsAgencyWithoutCashCollectionWhenSaleIsNotFullyPaid()
+    public async Task UpdateDeliveryAsync_AllowsAgencyWithoutCashCollectionWhenSaleIsNotFullyPaid()
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
@@ -2312,14 +2309,15 @@ public class SaleServiceTests
             DeliveryAgencyId = 1
         });
 
-        var exception = await Assert.ThrowsAsync<AppBadRequestException>(() => service.UpdateDeliveryAsync(saleId, deliveryId, new PatchSaleDeliveryDTO
+        await service.UpdateDeliveryAsync(saleId, deliveryId, new PatchSaleDeliveryDTO
         {
             DeliveryAgencyId = 2
-        }));
+        });
 
-        Assert.Contains("pagada completamente", exception.Message, StringComparison.OrdinalIgnoreCase);
         var delivery = await context.SaleDeliveries.SingleAsync(item => item.Id == deliveryId);
-        Assert.Equal(1, delivery.DeliveryAgencyId);
+        Assert.Equal(2, delivery.DeliveryAgencyId);
+        Assert.Equal(0m, delivery.AmountToCollect);
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.MarkDeliveryAsSentAsync(saleId, deliveryId));
     }
     [Fact]
     public async Task AddPaymentMovementAsync_AppliesPaymentToProductsAndShippingAndClearsAmountToCollect()

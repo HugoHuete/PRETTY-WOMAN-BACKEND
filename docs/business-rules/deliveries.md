@@ -48,7 +48,7 @@ The amount is recalculated when payments, refunds, grouped payment adjustments, 
 
 For an agency with `can_collect_cash_on_delivery = false`:
 
-- The sale product total must be fully paid; an overpayment also satisfies this rule.
+- A pending delivery can be created or updated before products and shipping are paid. Before the delivery is sent, both the sale product total and the delivery shipping charge must be fully paid; a product overpayment also satisfies the product requirement.
 - `shipping_charged_to_client` remains the price charged to the customer for the delivery.
 - `amount_to_collect` is zero because the agency cannot collect on delivery.
 

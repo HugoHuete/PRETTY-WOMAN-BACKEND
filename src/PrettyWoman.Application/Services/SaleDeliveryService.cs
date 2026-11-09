@@ -581,12 +581,7 @@ public class SaleDeliveryService(
     private static decimal CalculateAmountToCollect(decimal saleTotal, decimal productPaymentTotal, decimal shippingChargedToClient, decimal shippingPaymentTotal, DeliveryAgency agency)
     {
         if (!agency.CanCollectCashOnDelivery)
-        {
-            if (productPaymentTotal < saleTotal)
-                throw new AppBadRequestException("La venta debe estar pagada completamente antes de crear un envio con una agencia que no recauda efectivo.");
-
             return 0;
-        }
 
         return Math.Round(Math.Max(0, saleTotal - productPaymentTotal) + Math.Max(0, shippingChargedToClient - shippingPaymentTotal), 2);
     }

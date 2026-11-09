@@ -67,4 +67,4 @@ The creation request does not accept `amountCollectedNio`, `amountCollectedUsd`,
 }
 ```
 
-The endpoint validates the updated municipality, client, and enabled agency. It recalculates `amountToCollect`, including the rule that a non-COD agency requires the sale to be fully paid. A delivery can only be updated while it is pending.
+The endpoint validates the updated municipality, client, and enabled agency. It recalculates `amountToCollect`, which is zero for a non-COD agency. A delivery can only be updated while it is pending. Products and shipping must be fully paid before sending with a non-COD agency.
