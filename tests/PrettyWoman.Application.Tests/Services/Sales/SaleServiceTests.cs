@@ -14,6 +14,51 @@ namespace PrettyWoman.Application.Tests.Services.Sales;
 public class SaleServiceTests
 {
     [Fact]
+    public async Task CreateAsync_CreatesDeliveryAndAppliesCombinedPayment()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        await context.SaveChangesAsync();
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var request = new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            Delivery = new CreateSaleDeliveryDTO { Code = "SALE-DELIVERY", MunicipalityId = 1, DeliveryAgencyId = 1, ShippingChargedToClient = 50m },
+            PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Transfer, ProductAmount = 500m, ShippingAmount = 50m }]
+        };
+
+        var saleId = await CreateService(context).CreateAsync(request);
+
+        var sale = await context.Sales.Include(item => item.Deliveries).Include(item => item.PaymentMovements).SingleAsync(item => item.Id == saleId);
+        var delivery = Assert.Single(sale.Deliveries);
+        var payment = Assert.Single(sale.PaymentMovements);
+        Assert.Equal((int)SaleStatusOption.ReadyForDelivery, sale.SaleStatusId);
+        Assert.Equal(0m, delivery.AmountToCollect);
+        Assert.Equal(delivery.Id, payment.SaleDeliveryId);
+        Assert.Equal(550m, payment.GrossAmount);
+        Assert.Equal(550m, (await context.FinancialMovements.SingleAsync(item => item.SalePaymentMovementId == payment.Id)).Amount);
+    }
+
+    [Fact]
+    public async Task CreateAsync_RejectsExistingDeliveryIdForNewDeliveryBeforeCreatingSale()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var request = new CreateSaleDTO
+        {
+            Delivery = new CreateSaleDeliveryDTO { Code = "NEW" },
+            PaymentMovements = [new CreateSalePaymentMovementDTO { SaleDeliveryId = 9 }]
+        };
+
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(request));
+        Assert.Empty(await context.Sales.ToListAsync());
+    }
+
+    [Fact]
     public async Task GetAllAsync_PaginatesAndFiltersSales()
     {
         await using var context = CreateContext();

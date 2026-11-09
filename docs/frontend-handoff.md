@@ -515,7 +515,18 @@ Al crear o editar una agencia, el formulario de configuración debe permitir def
 
 En la conciliación COD, cada entrega puede registrar `amountCollectedNio`, `amountCollectedUsd`, `changeGivenNio` y `collectionExchangeRate`; una agencia sí puede reportar NIO y USD juntos. Si se recibieron dólares, se acepta una diferencia de hasta ±C$0.50 entre el saldo y el neto convertido y redondeado a 2 decimales. El pago aplica el saldo completo como `grossAmount` y guarda la diferencia como `exchangeDifferenceNio`; conserva las monedas originales y se vincula a `deliveryAgencyReconciliationId`. La liquidación refleja los montos realmente recibidos con su propia tasa. Esta tolerancia también aplica a la cobranza de cambios postventa. Los pagos registrados directamente continúan usando una sola moneda por movimiento.
 
-Para crear una venta, `products` y `selectionProducts` son listas distintas. Cada elemento de `products` requiere `productId`, `quantity`, `discountAmount` y `discountSourceId`. `selectionProducts` solo se admite para canales destinados a envío: debe estar vacío cuando `saleChannelId` sea `1` (`InStoreSale`). El envío puede crearse después, por lo que no se exige un `delivery` previo para registrar la selección. El pago inicial es opcional en `paymentMovements`; cada pago requiere `paymentMethodId`, `productAmount` y `shippingAmount`.
+Para crear una venta, `productVariants` y `selectionProducts` son listas distintas. Cada elemento de `productVariants` requiere `productId`, `quantity`, `discountAmount` y `discountSourceId`. `selectionProducts` solo se admite para canales destinados a envío: debe estar vacío cuando `saleChannelId` sea `1` (`InStoreSale`). El pago inicial es opcional en `paymentMovements`; cada pago requiere `paymentMethodId`, `productAmount` y `shippingAmount`.
+
+También se puede incluir un objeto `delivery` opcional en la creación de una venta por envío, con los mismos campos que `POST /api/v1/sales/{id}/deliveries`. En ese caso los pagos iniciales pueden incluir `shippingAmount`; el backend los vincula al nuevo envío, por lo que no se debe enviar `saleDeliveryId`. La creación de la venta, la reserva, el envío y los pagos es atómica. Si se omite `delivery`, el envío se crea después y los pagos iniciales no pueden cubrirlo. El endpoint sigue devolviendo el ID de la venta; consultar `GET /api/v1/sales/{id}` para obtener el ID del envío.
+
+```json
+{
+  "saleChannelId": 2,
+  "productVariants": [{ "productId": 12450, "quantity": 1, "discountSourceId": 1, "discountAmount": 0 }],
+  "delivery": { "code": "C01", "municipalityId": 1, "deliveryAgencyId": 3, "shippingChargedToClient": 200 },
+  "paymentMovements": [{ "paymentMethodId": 2, "productAmount": 950, "shippingAmount": 200 }]
+}
+```
 
 Cada movimiento de pago aplica `productAmount` y `shippingAmount` a la deuda de la venta siempre en córdobas. Los campos de moneda recibida son independientes:
 

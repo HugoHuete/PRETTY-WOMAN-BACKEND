@@ -112,6 +112,49 @@ public class SaleService(
 
     public async Task<int> CreateAsync(CreateSaleDTO createSaleDTO)
     {
+        if (createSaleDTO.Delivery is null)
+            return await CreateSaleAsync(createSaleDTO);
+
+        NormalizeSaleFields(createSaleDTO);
+        if (createSaleDTO.PaymentMovements.Any(payment => payment.SaleDeliveryId.HasValue))
+            throw new AppBadRequestException("Los pagos de una venta nueva no deben indicar un id de envio.");
+
+        // La venta aún no tiene id; se abre una transacción que los servicios anidados reutilizan.
+        await using var transaction = await _context.BeginSaleCreationTransactionAsync();
+        var saleId = await CreateSaleAsync(new CreateSaleDTO
+        {
+            SaleDate = createSaleDTO.SaleDate,
+            SaleChannelId = createSaleDTO.SaleChannelId,
+            SaleStatusId = createSaleDTO.SaleStatusId,
+            ClientId = createSaleDTO.ClientId,
+            Comments = createSaleDTO.Comments,
+            ProductVariants = createSaleDTO.ProductVariants,
+            SelectionProducts = createSaleDTO.SelectionProducts
+        });
+        var deliveryId = await _deliveryService.CreateAsync(saleId, createSaleDTO.Delivery);
+        foreach (var payment in createSaleDTO.PaymentMovements)
+        {
+            await _paymentMovementService.AddAsync(saleId, new CreateSalePaymentMovementDTO
+            {
+                MovementDate = payment.MovementDate,
+                PaymentMethodId = payment.PaymentMethodId,
+                PaymentTerminalId = payment.PaymentTerminalId,
+                ProductAmount = payment.ProductAmount,
+                ShippingAmount = payment.ShippingAmount,
+                SaleDeliveryId = payment.ShippingAmount > 0 ? deliveryId : null,
+                AmountReceivedNio = payment.AmountReceivedNio,
+                AmountReceivedUsd = payment.AmountReceivedUsd,
+                ChangeGivenNio = payment.ChangeGivenNio,
+                ExchangeRate = payment.ExchangeRate
+            });
+        }
+
+        if (transaction is not null) await transaction.CommitAsync();
+        return saleId;
+    }
+
+    private async Task<int> CreateSaleAsync(CreateSaleDTO createSaleDTO)
+    {
         NormalizeSaleFields(createSaleDTO);
         await ValidateSaleRequestAsync(createSaleDTO);
 

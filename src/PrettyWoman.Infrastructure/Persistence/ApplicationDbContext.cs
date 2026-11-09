@@ -26,6 +26,9 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default) =>
         Database.BeginTransactionAsync(cancellationToken);
 
+    public async Task<IDbContextTransaction?> BeginSaleCreationTransactionAsync(CancellationToken cancellationToken = default) =>
+        Database.IsRelational() ? await Database.BeginTransactionAsync(cancellationToken) : null;
+
     public async Task<IDbContextTransaction?> BeginSalePaymentTransactionAsync(int saleId, CancellationToken cancellationToken = default)
     {
         if (!Database.IsRelational()) return null;

@@ -93,6 +93,7 @@ public interface IApplicationDbContext
 
     Task<int> SaveChangesAsync(CancellationToken cancellationToken = default);
     Task<IDbContextTransaction?> BeginSalePaymentTransactionAsync(int saleId, CancellationToken cancellationToken = default);
+    Task<IDbContextTransaction?> BeginSaleCreationTransactionAsync(CancellationToken cancellationToken = default);
     Task<IDbContextTransaction> BeginTransactionAsync(CancellationToken cancellationToken = default);
     Task<IDbContextTransaction> BeginTransactionAsync(IsolationLevel isolationLevel, CancellationToken cancellationToken = default);
 }
