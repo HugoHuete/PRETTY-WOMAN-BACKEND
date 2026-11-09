@@ -53,6 +53,6 @@ In this example, the customer owed C$400. The agency collected $20, applied C$36
 - All monetary input is non-negative. `shippingPaidToAgency` is supplied at reconciliation time for both sale and post-sale deliveries.
 - USD collection requires `collectionExchangeRate`; when no USD is collected, that field must be omitted.
 - An agency collection may combine NIO and USD in the same delivery. This exception is limited to agency reconciliation payments; direct sale payments still use one currency per movement.
-- Customer collection cannot exceed the delivery's `amountToCollect`.
-- A post-sale delivery for an exchange must collect exactly its `amountToCollect`; return deliveries cannot collect from the customer.
+- Customer collection must cover a sent delivery's outstanding total and cannot exceed `amountToCollect`. If a positive collection includes USD, a difference of up to C$0.50 in either direction is accepted; the outstanding amount is applied to the sale and the difference is recorded separately.
+- A post-sale delivery for an exchange must collect its `amountToCollect`, with the same USD tolerance for positive amounts; return deliveries cannot collect from the customer.
 - Failed deliveries cannot record customer collections, but may have a shipping cost.

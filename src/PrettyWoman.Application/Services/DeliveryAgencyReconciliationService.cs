@@ -167,11 +167,13 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             var deliveryRequest = postSaleDeliveryRequests[delivery.Id];
             ValidatePostSaleDeliveryAmounts(deliveryRequest);
             var tender = ResolveAgencyCollectionTender(deliveryRequest);
-            if (delivery.SaleExchangeId.HasValue && tender.CollectedAmount != delivery.AmountToCollect)
+            var allowedDifference = tender.AmountReceivedUsd > 0 && delivery.AmountToCollect > 0 && tender.CollectedAmount > 0
+                ? SalePaymentMovementRules.UsdConversionToleranceNio : 0m;
+            if (delivery.SaleExchangeId.HasValue && Math.Abs(tender.CollectedAmount - delivery.AmountToCollect) > allowedDifference)
                 throw new AppBadRequestException("La agencia debe recaudar el monto total indicado para el cambio.");
             if (!delivery.SaleExchangeId.HasValue && tender.CollectedAmount != 0)
                 throw new AppBadRequestException("Un retorno postventa no puede registrar un cobro de la clienta.");
-            if (tender.CollectedAmount > delivery.AmountToCollect)
+            if (tender.CollectedAmount > delivery.AmountToCollect + allowedDifference)
                 throw new AppBadRequestException("El monto cobrado no puede exceder el monto pendiente del envio postventa.");
             postSaleTenders.Add(delivery.Id, tender);
         }
@@ -308,12 +310,13 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
         var outstandingProductAmount = Math.Max(0, sale.Total - SalePaymentMovementRules.CalculateProductTotal(sale.PaymentMovements));
         var outstandingShippingAmount = Math.Max(0, delivery.ShippingChargedToClient - SalePaymentMovementRules.CalculateShippingTotal(sale.PaymentMovements, delivery.Id));
         var outstandingTotal = outstandingProductAmount + outstandingShippingAmount;
-        if (collectedAmount > outstandingTotal)
+        var appliedAmount = delivery.DeliveryStatusId == (int)DeliveryStatusCode.Sent ? outstandingTotal : collectedAmount;
+        if (appliedAmount > outstandingTotal)
             throw new AppBadRequestException("El monto recolectado no puede exceder el saldo pendiente de la venta y su envio.");
 
         // El cobro contra entrega cubre primero productos y luego el envio pendiente.
-        var productAmount = Math.Min(collectedAmount, outstandingProductAmount);
-        var shippingAmount = collectedAmount - productAmount;
+        var productAmount = Math.Min(appliedAmount, outstandingProductAmount);
+        var shippingAmount = appliedAmount - productAmount;
 
         return new SalePaymentMovement
         {
@@ -321,17 +324,17 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             SaleId = sale.Id,
             MovementDirectionId = (int)MovementDirectionOptions.In,
             PaymentMethodId = (int)PaymentMethodOption.Transfer,
-            GrossAmount = collectedAmount,
+            GrossAmount = appliedAmount,
             ProductAmount = productAmount,
             ShippingAmount = shippingAmount,
             SaleDeliveryId = shippingAmount > 0 ? delivery.Id : null,
             DeliveryAgencyReconciliation = reconciliation,
-            NetReceivedAmount = collectedAmount,
+            NetReceivedAmount = appliedAmount,
             AmountReceivedNio = tender.AmountReceivedNio,
             AmountReceivedUsd = tender.AmountReceivedUsd,
             ChangeGivenNio = tender.ChangeGivenNio,
             ExchangeRate = tender.ExchangeRate,
-            ExchangeDifferenceNio = tender.ExchangeDifferenceNio,
+            ExchangeDifferenceNio = collectedAmount - appliedAmount,
             UserId = userId
         };
     }
@@ -368,7 +371,10 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
         ValidateDeliveryAmounts(request);
         if (delivery.DeliveryStatusId == (int)DeliveryStatusCode.Failed && collectedAmount != 0)
             throw new AppBadRequestException("Un envio fallido no puede registrar cobros de la clienta.");
-        if (collectedAmount > delivery.AmountToCollect)
+        var allowedDifference = delivery.DeliveryStatusId == (int)DeliveryStatusCode.Sent &&
+                                request.AmountCollectedUsd > 0 && delivery.AmountToCollect > 0 && collectedAmount > 0
+            ? SalePaymentMovementRules.UsdConversionToleranceNio : 0m;
+        if (collectedAmount > delivery.AmountToCollect + allowedDifference)
             throw new AppBadRequestException("El monto recolectado no puede exceder el monto indicado para cobrar en el envio.");
 
         if (delivery.DeliveryStatusId == (int)DeliveryStatusCode.Sent)
@@ -376,7 +382,7 @@ public class DeliveryAgencyReconciliationService(IApplicationDbContext context, 
             var outstandingProductAmount = Math.Max(0, delivery.Sale!.Total - SalePaymentMovementRules.CalculateProductTotal(delivery.Sale.PaymentMovements));
             var outstandingShippingAmount = Math.Max(0, delivery.ShippingChargedToClient - SalePaymentMovementRules.CalculateShippingTotal(delivery.Sale.PaymentMovements, delivery.Id));
             var outstandingTotal = Math.Round(outstandingProductAmount + outstandingShippingAmount, 2);
-            if (collectedAmount != outstandingTotal)
+            if (Math.Abs(collectedAmount - outstandingTotal) > allowedDifference)
             {
                 throw new AppBadRequestException("Un envio enviado solo puede completarse si la clienta paga el saldo total.");
             }

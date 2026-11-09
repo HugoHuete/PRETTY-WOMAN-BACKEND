@@ -56,6 +56,8 @@ The amount collected by the agency is not a sale payment until its delivery is i
 
 For cash-on-delivery deliveries, a `Sent` delivery is reconciled only when the agency reports the full outstanding amount. The reconciliation records that payment and completes both the delivery and the sale. If the client cannot pay the full amount, the agency must not deliver the products: the delivery is marked `Failed` and no partial collection is recorded.
 
+When the collection includes USD and the converted net differs from a positive outstanding amount by at most C$0.50, reconciliation applies the full outstanding amount and stores the difference in the sale payment's `exchangeDifferenceNio`. The agency settlement records the amounts actually received. The same tolerance applies to positive collections for post-sale exchanges; it does not apply to NIO-only collections or failed deliveries.
+
 ## Roles operativos
 
 - Vendedor (`Employee`) puede crear un envio, lo que deja la venta en `ReadyForDelivery`, y marcar un envio pendiente como `Sent`.
