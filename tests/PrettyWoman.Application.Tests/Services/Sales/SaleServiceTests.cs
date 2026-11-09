@@ -2397,6 +2397,52 @@ public class SaleServiceTests
 
         Assert.Contains("envio", exception.Message, StringComparison.OrdinalIgnoreCase);
     }
+    [Theory]
+    [InlineData(199.87, true, 0, true)]
+    [InlineData(199.50, true, 0, true)]
+    [InlineData(199.49, true, 0, false)]
+    [InlineData(199.87, true, -0.38, false)]
+    [InlineData(199.87, false, 0, false)]
+    public async Task MarkDeliveryAsSentAsync_AllowsOnlyUsdShippingShortfallsWithinTolerance(decimal shippingPaid, bool usd, decimal usdDifference, bool allowed)
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Departments.Add(new Department { Id = 1, Name = "Managua" });
+        context.Municipalities.Add(new Municipality { Id = 1, Name = "Managua", DepartmentId = 1 });
+        context.DeliveryAgencies.Add(new DeliveryAgency { Id = 2, Name = "Agencia prepago", PhoneNumber = "88881111", CanCollectCashOnDelivery = false });
+        await context.SaveChangesAsync();
+        var product = await AddProductAsync(context, availableQuantity: 1, salePrice: 950m, unitCostNio: 200m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+        var deliveryId = await service.CreateDeliveryAsync(saleId, new CreateSaleDeliveryDTO
+        {
+            Code = "USD-SHORTFALL", MunicipalityId = 1, DeliveryAgencyId = 2, ShippingChargedToClient = 200m
+        });
+        var paymentId = await service.AddPaymentMovementAsync(saleId, new CreateSalePaymentMovementDTO
+        {
+            PaymentMethodId = (int)PaymentMethodOption.Transfer, ProductAmount = 950m, ShippingAmount = shippingPaid,
+            SaleDeliveryId = deliveryId, AmountReceivedUsd = usd ? 950m + shippingPaid + usdDifference : 0m,
+            ExchangeRate = usd ? 1m : null
+        });
+
+        if (!allowed)
+        {
+            await Assert.ThrowsAsync<AppBadRequestException>(() => service.MarkDeliveryAsSentAsync(saleId, deliveryId));
+            return;
+        }
+
+        await service.MarkDeliveryAsSentAsync(saleId, deliveryId);
+        await service.MarkDeliveryAsCompletedAsync(saleId, deliveryId);
+        Assert.Equal((int)DeliveryStatusCode.Completed, (await context.SaleDeliveries.SingleAsync()).DeliveryStatusId);
+        var payment = await context.SalePaymentMovements.SingleAsync(item => item.Id == paymentId);
+        Assert.Equal(shippingPaid, payment.ShippingAmount);
+        Assert.Equal(950m + shippingPaid + usdDifference, (await context.FinancialMovements.SingleAsync(item => item.SalePaymentMovementId == paymentId)).Amount);
+    }
+
     [Fact]
     public async Task MarkDeliveryAsSentAsync_AcceptsUsdConversionDifferenceForAgencyWithoutCashCollection()
     {
