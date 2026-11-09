@@ -402,6 +402,7 @@ public class SaleDeliveryService(
     private async Task<SaleDelivery> GetDeliveryWithSaleAsync(int saleId, int deliveryId)
     {
         return await _context.SaleDeliveries
+            .Include(item => item.DeliveryAgency)
             .Include(item => item.Sale)
                 .ThenInclude(sale => sale!.PaymentMovements)
             .Include(item => item.Sale)
@@ -557,10 +558,7 @@ public class SaleDeliveryService(
         if (delivery.DeliveryStatusId is not ((int)DeliveryStatusCode.Sent or (int)DeliveryStatusCode.DeliveredPendingSelection))
             throw new AppBadRequestException("Solo se puede completar un envio enviado a la agencia.");
 
-        var payments = delivery.Sale!.PaymentMovements;
-        var productPaymentTotal = SalePaymentMovementRules.CalculateProductTotal(payments);
-        var shippingPaymentTotal = SalePaymentMovementRules.CalculateShippingTotal(payments, delivery.Id);
-        if (productPaymentTotal < delivery.Sale.Total || shippingPaymentTotal < delivery.ShippingChargedToClient)
+        if (!HasSufficientPaymentForDelivery(delivery, allowUsdTolerance: !delivery.DeliveryAgency!.CanCollectCashOnDelivery))
         {
             throw new AppBadRequestException("La venta y el envio deben estar pagados completamente antes de completar la entrega.");
         }
@@ -571,11 +569,33 @@ public class SaleDeliveryService(
         if (delivery.DeliveryAgency!.CanCollectCashOnDelivery)
             return;
 
-        var payments = delivery.Sale!.PaymentMovements;
-        var productPaymentTotal = SalePaymentMovementRules.CalculateProductTotal(payments);
-        var shippingPaymentTotal = SalePaymentMovementRules.CalculateShippingTotal(payments, delivery.Id);
-        if (productPaymentTotal < delivery.Sale.Total || shippingPaymentTotal < delivery.ShippingChargedToClient)
+        if (!HasSufficientPaymentForDelivery(delivery, allowUsdTolerance: true))
             throw new AppBadRequestException("La venta y el envio deben estar pagados completamente antes de enviarla con una agencia que no recauda efectivo.");
+    }
+
+    private static bool HasSufficientPaymentForDelivery(SaleDelivery delivery, bool allowUsdTolerance)
+    {
+        var sale = delivery.Sale!;
+        var payments = sale.PaymentMovements;
+        var productShortfall = Math.Max(0, sale.Total - SalePaymentMovementRules.CalculateProductTotal(payments));
+        var shippingShortfall = Math.Max(0, delivery.ShippingChargedToClient - SalePaymentMovementRules.CalculateShippingTotal(payments, delivery.Id));
+        var shortfall = productShortfall + shippingShortfall;
+        if (shortfall == 0)
+            return true;
+        if (!allowUsdTolerance || shortfall > SalePaymentMovementRules.UsdConversionToleranceNio)
+            return false;
+
+        var usdPayments = payments.Where(payment => payment.AmountReceivedUsd > 0).ToList();
+        decimal Signed(SalePaymentMovement payment, decimal amount) =>
+            payment.MovementDirectionId == (int)MovementDirectionOptions.In ? amount : -amount;
+        var usdProducts = usdPayments.Sum(payment => Signed(payment, payment.ProductAmount));
+        var usdShipping = usdPayments.Where(payment => payment.SaleDeliveryId == delivery.Id)
+            .Sum(payment => Signed(payment, payment.ShippingAmount));
+        var usdDifference = usdPayments.Sum(payment => Signed(payment, payment.ExchangeDifferenceNio));
+
+        return (productShortfall == 0 || usdProducts > 0) &&
+               (shippingShortfall == 0 || usdShipping > 0) &&
+               shortfall - usdDifference <= SalePaymentMovementRules.UsdConversionToleranceNio;
     }
 
     private static decimal CalculateAmountToCollect(decimal saleTotal, decimal productPaymentTotal, decimal shippingChargedToClient, decimal shippingPaymentTotal, DeliveryAgency agency)

@@ -108,6 +108,14 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
     }
 
     [Fact]
+    public async Task Employee_CannotCreateHistoricalSale()
+    {
+        using var client = await CreateEmployeeClientAsync();
+        var response = await client.PostAsJsonAsync("/api/v1/sales/migration", new { });
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Employee_CanCreateClientButCannotAccessFinances()
     {
         using var client = await CreateEmployeeClientAsync();

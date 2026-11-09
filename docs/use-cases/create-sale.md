@@ -26,6 +26,8 @@ Registrar una venta con sus productos, descuentos aplicados, subtotal, total y e
 
 ## Flujo esperado
 
+`POST /api/v1/sales` acepta un objeto `delivery` opcional con los datos del envío. Si se incluye, los pagos iniciales pueden asignar `shippingAmount` al envío nuevo sin enviar `saleDeliveryId`; la venta, la reserva, el envío y los pagos se registran en una sola transacción. Si se omite, el envío se crea posteriormente y los pagos iniciales solo pueden cubrir productos. La respuesta devuelve el ID de la venta y su detalle incluye el envío creado.
+
 1. Validar que el canal de venta exista y esté habilitado.
 2. Validar o crear el cliente, si aplica.
 3. Validar que cada producto tenga stock disponible suficiente.

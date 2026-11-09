@@ -20,6 +20,55 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
 {
     private readonly PrettyWomanApiFactory _factory = factory;
 
+    [Fact]
+    public async Task CreateSaleWithDelivery_RecordsCombinedPayment()
+    {
+        var product = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        var location = await _factory.SeedDeliveryLocationAsync();
+        using var admin = await CreateAdminClientAsync();
+
+        var response = await admin.PostAsJsonAsync("/api/v1/sales", new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = product.ProductVariantId, Quantity = 1 }],
+            Delivery = new CreateSaleDeliveryDTO { Code = $"SALE-{Guid.NewGuid():N}"[..20], MunicipalityId = location.MunicipalityId, DeliveryAgencyId = location.DeliveryAgencyId, ShippingChargedToClient = 50m },
+            PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Transfer, ProductAmount = 500m, ShippingAmount = 50m }]
+        });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var saleId = await response.Content.ReadFromJsonAsync<int>();
+        var sale = await admin.GetFromJsonAsync<SaleDTO>($"/api/v1/sales/{saleId}");
+        Assert.NotNull(sale);
+        var delivery = Assert.Single(sale.Deliveries);
+        var payment = Assert.Single(sale.PaymentMovements);
+        Assert.Equal(delivery.Id, payment.SaleDeliveryId);
+        Assert.Equal(550m, payment.GrossAmount);
+        Assert.Equal(0m, delivery.AmountToCollect);
+    }
+
+    [Fact]
+    public async Task CreateSaleWithDelivery_RollsBackSaleAndInventoryWhenPaymentIsInvalid()
+    {
+        var product = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        var location = await _factory.SeedDeliveryLocationAsync();
+        using var admin = await CreateAdminClientAsync();
+
+        var response = await admin.PostAsJsonAsync("/api/v1/sales", new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = product.ProductVariantId, Quantity = 1 }],
+            Delivery = new CreateSaleDeliveryDTO { Code = $"ROLL-{Guid.NewGuid():N}"[..20], MunicipalityId = location.MunicipalityId, DeliveryAgencyId = location.DeliveryAgencyId, ShippingChargedToClient = 50m },
+            PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Transfer, ProductAmount = 500m, ShippingAmount = 51m }]
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        Assert.False(await context.SaleProducts.AnyAsync(item => item.ProductId == product.ProductVariantId));
+        Assert.Equal(1, (await context.ProductVariants.SingleAsync(item => item.Id == product.ProductVariantId)).AvailableQuantity);
+        Assert.Equal(0, (await context.ProductVariants.SingleAsync(item => item.Id == product.ProductVariantId)).ReservedQuantity);
+    }
+
     [Theory]
     [InlineData(true, true)]
     [InlineData(true, false)]

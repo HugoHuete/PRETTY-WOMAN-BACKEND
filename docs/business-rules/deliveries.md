@@ -49,6 +49,7 @@ The amount is recalculated when payments, refunds, grouped payment adjustments, 
 For an agency with `can_collect_cash_on_delivery = false`:
 
 - A pending delivery can be created or updated before products and shipping are paid. Before the delivery is sent, both the sale product total and the delivery shipping charge must be fully paid; a product overpayment also satisfies the product requirement.
+- For an agency without cash collection, sending and completion also permit a combined product and shipping shortfall of up to C$0.50 when the affected components have a net USD payment. Any negative USD conversion difference is included in this limit. The recorded allocations and financial movements are not changed; a tolerated product shortfall can therefore remain visible as a partially paid sale.
 - `shipping_charged_to_client` remains the price charged to the customer for the delivery.
 - `amount_to_collect` is zero because the agency cannot collect on delivery.
 

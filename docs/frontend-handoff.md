@@ -509,11 +509,24 @@ Cada agencia expone `canCollectCashOnDelivery`, y la UI debe usar este valor en 
 - Si es `true`, la agencia puede transportar una venta sin pago completo. El backend devuelve en `delivery.amountToCollect` la suma pendiente de productos y del envío; la UI debe mostrar ese valor como la instrucción de cobro. La agencia debe recaudar el saldo completo para entregar y conciliar el pedido. Si la clienta no paga todo, no se registra un cobro parcial y el envío se marca `Failed`.
 - Si es `false`, la agencia no recauda dinero de la clienta. El envío puede crearse pendiente antes del pago para registrar productos y envío en un solo movimiento. Tanto los productos como `shippingChargedToClient` deben estar completamente pagados antes de ejecutar `send`. En este caso `delivery.amountToCollect` es `0`.
 
+Para agencias sin cobro contra entrega, `send` y `complete` también aceptan un saldo pendiente combinado de productos y envío de hasta C$0.50 cuando los componentes pendientes tienen pagos netos en dólares. La diferencia negativa de conversión registrada en esos pagos cuenta dentro del mismo margen. Los montos aplicados y los movimientos financieros no se modifican: el detalle puede mostrar el saldo tolerado y, si corresponde a productos, la venta puede seguir apareciendo parcialmente pagada.
+
 Al crear o editar una agencia, el formulario de configuración debe permitir definir `canCollectCashOnDelivery`. Al despachar un envío, conviene explicar la restricción y deshabilitar preventivamente la acción cuando el detalle de la venta muestre un saldo incompatible; el backend continúa siendo la fuente de verdad y validará nuevamente la operación.
 
 En la conciliación COD, cada entrega puede registrar `amountCollectedNio`, `amountCollectedUsd`, `changeGivenNio` y `collectionExchangeRate`; una agencia sí puede reportar NIO y USD juntos. Si se recibieron dólares, se acepta una diferencia de hasta ±C$0.50 entre el saldo y el neto convertido y redondeado a 2 decimales. El pago aplica el saldo completo como `grossAmount` y guarda la diferencia como `exchangeDifferenceNio`; conserva las monedas originales y se vincula a `deliveryAgencyReconciliationId`. La liquidación refleja los montos realmente recibidos con su propia tasa. Esta tolerancia también aplica a la cobranza de cambios postventa. Los pagos registrados directamente continúan usando una sola moneda por movimiento.
 
-Para crear una venta, `products` y `selectionProducts` son listas distintas. Cada elemento de `products` requiere `productId`, `quantity`, `discountAmount` y `discountSourceId`. `selectionProducts` solo se admite para canales destinados a envío: debe estar vacío cuando `saleChannelId` sea `1` (`InStoreSale`). El envío puede crearse después, por lo que no se exige un `delivery` previo para registrar la selección. El pago inicial es opcional en `paymentMovements`; cada pago requiere `paymentMethodId`, `productAmount` y `shippingAmount`.
+Para crear una venta, `productVariants` y `selectionProducts` son listas distintas. Cada elemento de `productVariants` requiere `productId`, `quantity`, `discountAmount` y `discountSourceId`. `selectionProducts` solo se admite para canales destinados a envío: debe estar vacío cuando `saleChannelId` sea `1` (`InStoreSale`). El pago inicial es opcional en `paymentMovements`; cada pago requiere `paymentMethodId`, `productAmount` y `shippingAmount`.
+
+También se puede incluir un objeto `delivery` opcional en la creación de una venta por envío, con los mismos campos que `POST /api/v1/sales/{id}/deliveries`. En ese caso los pagos iniciales pueden incluir `shippingAmount`; el backend los vincula al nuevo envío, por lo que no se debe enviar `saleDeliveryId`. La creación de la venta, la reserva, el envío y los pagos es atómica. Si se omite `delivery`, el envío se crea después y los pagos iniciales no pueden cubrirlo. El endpoint sigue devolviendo el ID de la venta; consultar `GET /api/v1/sales/{id}` para obtener el ID del envío.
+
+```json
+{
+  "saleChannelId": 2,
+  "productVariants": [{ "productId": 12450, "quantity": 1, "discountSourceId": 1, "discountAmount": 0 }],
+  "delivery": { "code": "C01", "municipalityId": 1, "deliveryAgencyId": 3, "shippingChargedToClient": 200 },
+  "paymentMovements": [{ "paymentMethodId": 2, "productAmount": 950, "shippingAmount": 200 }]
+}
+```
 
 Cada movimiento de pago aplica `productAmount` y `shippingAmount` a la deuda de la venta siempre en córdobas. Los campos de moneda recibida son independientes:
 
