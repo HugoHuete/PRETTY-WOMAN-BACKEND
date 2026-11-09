@@ -23,7 +23,7 @@ public class ProductServiceTests
         await context.SaveChangesAsync();
         var service = CreateService(context);
 
-        var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1001 });
+        var result = await service.GetAllAsync(new ProductQueryDTO { Code = [1001] });
 
         var mappedVariant = result.Items
             .Single()
@@ -41,7 +41,7 @@ public class ProductServiceTests
         await SeedProductsAsync(context);
         var service = CreateService(context);
 
-        var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1001 });
+        var result = await service.GetAllAsync(new ProductQueryDTO { Code = [1001] });
         var json = JsonSerializer.Serialize(result, new JsonSerializerOptions(JsonSerializerDefaults.Web));
 
         Assert.DoesNotContain("\"sizeGroupId\"", json);
@@ -95,13 +95,26 @@ public class ProductServiceTests
     }
 
     [Fact]
+    public async Task GetAllAsync_FiltersByMultipleCodes()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var query = new ProductQueryDTO { Code = [1001, 1003, 9999] };
+
+        var result = await CreateService(context).GetAllAsync(query);
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(new[] { 1001, 1003 }, result.Items.Select(product => product.Code).Order().ToArray());
+    }
+
+    [Fact]
     public async Task GetAllAsync_FiltersByCode()
     {
         await using var context = CreateContext();
         await SeedProductsAsync(context);
         var service = CreateService(context);
 
-        var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1002 });
+        var result = await service.GetAllAsync(new ProductQueryDTO { Code = [1002] });
 
         var product = Assert.Single(result.Items);
         Assert.Equal("Blusa satin", product.Name);
@@ -129,7 +142,7 @@ public class ProductServiceTests
         await SeedProductsAsync(context);
         var service = CreateService(context);
 
-        var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1001 });
+        var result = await service.GetAllAsync(new ProductQueryDTO { Code = [1001] });
 
         var product = Assert.Single(result.Items);
         Assert.All(product.Presentations.SelectMany(presentation => presentation.Sizes), productVariant =>
@@ -169,7 +182,7 @@ public class ProductServiceTests
         await context.SaveChangesAsync();
         var service = CreateService(context);
 
-        var result = await service.GetAllAsync(new ProductQueryDTO { Code = 1001 });
+        var result = await service.GetAllAsync(new ProductQueryDTO { Code = [1001] });
 
         var variants = result.Items.Single().Presentations.SelectMany(productPresentation => productPresentation.Sizes).ToList();
         Assert.NotEmpty(variants);
@@ -188,7 +201,7 @@ public class ProductServiceTests
         context.ChangeTracker.Clear();
         var service = CreateService(context);
 
-        var file = await service.ExportAsync(new ProductQueryDTO { Code = 1001 });
+        var file = await service.ExportAsync(new ProductQueryDTO { Code = [1001] });
 
         using var workbook = new XLWorkbook(new MemoryStream(file));
         var worksheet = workbook.Worksheets.Single();
@@ -209,7 +222,7 @@ public class ProductServiceTests
         await SeedProductsAsync(context);
         var service = CreateService(context);
 
-        var file = await service.ExportAsync(new ProductQueryDTO { Code = 1001, SizeId = 2 });
+        var file = await service.ExportAsync(new ProductQueryDTO { Code = [1001], SizeId = 2 });
 
         using var workbook = new XLWorkbook(new MemoryStream(file));
         var worksheet = workbook.Worksheets.Single();
@@ -226,8 +239,8 @@ public class ProductServiceTests
         await SeedProductsAsync(context);
         var service = CreateService(context);
 
-        var activeProduct = Assert.Single((await service.GetAllAsync(new ProductQueryDTO { Code = 1001 })).Items);
-        var futureProduct = Assert.Single((await service.GetAllAsync(new ProductQueryDTO { Code = 1002 })).Items);
+        var activeProduct = Assert.Single((await service.GetAllAsync(new ProductQueryDTO { Code = [1001] })).Items);
+        var futureProduct = Assert.Single((await service.GetAllAsync(new ProductQueryDTO { Code = [1002] })).Items);
 
         Assert.All(activeProduct.Presentations.SelectMany(presentation => presentation.Sizes), productVariant =>
         {
@@ -305,7 +318,7 @@ public class ProductServiceTests
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
 
-        var result = await CreateService(context).GetAllAsync(new ProductQueryDTO { Code = 1004 });
+        var result = await CreateService(context).GetAllAsync(new ProductQueryDTO { Code = [1004] });
 
         var mappedProduct = Assert.Single(result.Items);
         Assert.Equal("vestido-general.jpg", mappedProduct.PrimaryImageUrl);

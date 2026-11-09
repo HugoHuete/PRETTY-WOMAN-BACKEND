@@ -328,6 +328,8 @@ Cada elemento de `sizes` conserva el `id` de `ProductVariant`, que se usa en pre
 
 Los filtros `availability`, `code`, `discountCampaignId`, `categoryId`, `subcategoryId` y `sizeId` se aplican a las tallas, pero la paginación continúa contando productos. Una presentación sin tallas después de aplicar filtros no se devuelve.
 
+Para filtrar por varios códigos, repetir el parámetro: `GET /api/v1/products?code=1001&code=1003`. Devuelve productos que coincidan con cualquiera de los códigos y con los demás filtros; los códigos inexistentes se ignoran. Sin `code` se incluyen todos los códigos. Una búsqueda por un solo código sigue usando `?code=1001`.
+
 ### Productos: exportación a Excel
 
 Usar `GET /api/v1/products/export` para descargar el catálogo en formato `.xlsx`. Acepta los mismos filtros del listado (`availability`, `code`, `discountCampaignId`, `categoryId`, `subcategoryId` y `sizeId`), pero ignora `page` y `pageSize` para exportar todos los resultados coincidentes.

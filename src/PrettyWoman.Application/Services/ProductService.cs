@@ -378,9 +378,9 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
 
     private static IQueryable<Product> ApplyProductFilters(IQueryable<Product> query, ProductQueryDTO filters)
     {
-        if (filters.Code.HasValue)
+        if (filters.Code.Count > 0)
         {
-            query = query.Where(product => product.Code == filters.Code.Value);
+            query = query.Where(product => filters.Code.Contains(product.Code));
         }
 
         if (filters.DiscountCampaignId.HasValue)
