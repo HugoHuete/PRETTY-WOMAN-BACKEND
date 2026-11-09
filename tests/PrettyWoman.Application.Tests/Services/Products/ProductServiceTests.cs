@@ -95,6 +95,35 @@ public class ProductServiceTests
     }
 
     [Fact]
+    public async Task GetAllAsync_FiltersByVariantIdsAndReturnsOnlyMatchingVariants()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var query = new ProductQueryDTO { ProductVariantIds = [2, 3, 9999] };
+
+        var result = await CreateService(context).GetAllAsync(query);
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(new[] { 2, 3 }, result.Items.SelectMany(product => product.Presentations)
+            .SelectMany(presentation => presentation.Sizes).Select(variant => variant.Id).Order().ToArray());
+    }
+
+    [Fact]
+    public async Task GetAllAsync_CombinesVariantIdsWithAvailabilityOnTheSameVariant()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+
+        var result = await CreateService(context).GetAllAsync(new ProductQueryDTO
+        {
+            ProductVariantIds = [2], Availability = ProductAvailabilityFilter.Available
+        });
+
+        Assert.Equal(0, result.TotalCount);
+        Assert.Empty(result.Items);
+    }
+
+    [Fact]
     public async Task GetAllAsync_FiltersByMultipleCodes()
     {
         await using var context = CreateContext();
@@ -213,6 +242,21 @@ public class ProductServiceTests
         Assert.Equal("Pantalon cargo", worksheet.Cell(2, 1).GetString());
         Assert.Equal("Negro", worksheet.Cell(2, 5).GetString());
         Assert.Equal(3, rows.Count);
+    }
+
+    [Fact]
+    public async Task ExportAsync_FiltersByVariantIds()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+
+        var file = await CreateService(context).ExportAsync(new ProductQueryDTO { ProductVariantIds = [2] });
+
+        using var workbook = new XLWorkbook(new MemoryStream(file));
+        var worksheet = workbook.Worksheets.Single();
+        Assert.Equal(2, worksheet.RowsUsed().Count());
+        Assert.Equal("Pantalon cargo", worksheet.Cell(2, 1).GetString());
+        Assert.Equal("M", worksheet.Cell(2, 4).GetString());
     }
 
     [Fact]

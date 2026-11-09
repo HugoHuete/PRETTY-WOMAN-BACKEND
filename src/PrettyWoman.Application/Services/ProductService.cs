@@ -403,9 +403,10 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             query = query.Where(product => product.SubcategoryId == filters.SubcategoryId.Value);
         }
 
-        if (filters.SizeId.HasValue || filters.Availability.HasValue)
+        if (filters.ProductVariantIds.Count > 0 || filters.SizeId.HasValue || filters.Availability.HasValue)
         {
             query = query.Where(product => product.ProductVariants.Any(productVariant =>
+                (filters.ProductVariantIds.Count == 0 || filters.ProductVariantIds.Contains(productVariant.Id)) &&
                 (!filters.SizeId.HasValue || productVariant.SizeId == filters.SizeId.Value) &&
                 (!filters.Availability.HasValue ||
                     (filters.Availability.Value == ProductAvailabilityFilter.Available && productVariant.AvailableQuantity > 0) ||
@@ -546,6 +547,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
     }
 
     private static bool MatchesVariantFilters(ProductListVariantProjection productVariant, ProductQueryDTO query) =>
+        (query.ProductVariantIds.Count == 0 || query.ProductVariantIds.Contains(productVariant.Id)) &&
         (!query.SizeId.HasValue || productVariant.SizeId == query.SizeId.Value) &&
         (!query.Availability.HasValue ||
             (query.Availability.Value == ProductAvailabilityFilter.Available && productVariant.AvailableQuantity > 0) ||
@@ -635,6 +637,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
     }
 
     private static bool MatchesVariantFilters(ProductVariant productVariant, ProductQueryDTO query) =>
+        (query.ProductVariantIds.Count == 0 || query.ProductVariantIds.Contains(productVariant.Id)) &&
         (!query.SizeId.HasValue || productVariant.SizeId == query.SizeId.Value) &&
         (!query.Availability.HasValue ||
             (query.Availability.Value == ProductAvailabilityFilter.Available && productVariant.AvailableQuantity > 0) ||

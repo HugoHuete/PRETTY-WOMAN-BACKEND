@@ -6,6 +6,7 @@ public class ProductQueryDTO
     public int PageSize { get; set; } = 20;
     public ProductAvailabilityFilter? Availability { get; set; }
     public List<int> Code { get; set; } = [];
+    public List<int> ProductVariantIds { get; set; } = [];
     public int? DiscountCampaignId { get; set; }
     public int? CategoryId { get; set; }
     public int? SubcategoryId { get; set; }
