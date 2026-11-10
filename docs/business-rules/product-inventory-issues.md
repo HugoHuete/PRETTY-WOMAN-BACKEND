@@ -132,6 +132,8 @@ unavailable_quantity -= quantity
 
 No se debe disminuir `available_quantity` en este paso si la unidad ya habia salido de disponible al abrir el issue.
 
+El resumen financiero mensual incluye el costo congelado (`unit_cost_nio_at_issue * quantity`) de los estados `Discarded` y `ConfirmedLost` como gasto del mes de resolución en Nicaragua. Las incidencias abiertas, canceladas o devueltas a disponible no se incluyen como pérdida.
+
 ## Regla: cancelar issue
 
 Un issue solo debe cancelarse si fue creado por error.
