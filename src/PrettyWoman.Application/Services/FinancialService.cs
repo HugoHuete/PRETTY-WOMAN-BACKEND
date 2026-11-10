@@ -427,7 +427,8 @@ public class FinancialService(IApplicationDbContext context) : IFinancialService
             GetAccumulator(item.Year, item.Month).ManualExpensesNio += item.Amount;
 
         var lostIssuesByMonth = await _context.ProductInventoryIssues.AsNoTracking()
-            .Where(issue => issue.ProductInventoryIssueStatusId == (int)ProductInventoryIssueStatusOption.ConfirmedLost && issue.ResolvedAt.HasValue &&
+            .Where(issue => (issue.ProductInventoryIssueStatusId == (int)ProductInventoryIssueStatusOption.ConfirmedLost ||
+                             issue.ProductInventoryIssueStatusId == (int)ProductInventoryIssueStatusOption.Discarded) && issue.ResolvedAt.HasValue &&
                             (!startUtc.HasValue || issue.ResolvedAt.Value >= startUtc.Value) &&
                             (!endUtcExclusive.HasValue || issue.ResolvedAt.Value < endUtcExclusive.Value))
             .Select(issue => new

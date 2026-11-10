@@ -13,6 +13,37 @@ namespace PrettyWoman.Application.Tests.Services.Finances;
 public class FinancialServiceTests
 {
     [Fact]
+    public async Task MonthlySummary_IncludesDiscardedAndLostInventoryCostsByResolutionMonth()
+    {
+        await using var context = CreateContext();
+        var juneInManagua = new DateTime(2026, 7, 1, 2, 0, 0, DateTimeKind.Utc);
+        var julyInManagua = new DateTime(2026, 7, 1, 6, 0, 0, DateTimeKind.Utc);
+        context.ProductInventoryIssues.AddRange(
+            new ProductInventoryIssue { Id = 1, ProductId = 1, ProductInventoryIssueStatusId = (int)ProductInventoryIssueStatusOption.Discarded, Quantity = 2, UnitCostNioAtIssue = 15m, ResolvedAt = juneInManagua },
+            new ProductInventoryIssue { Id = 2, ProductId = 2, ProductInventoryIssueStatusId = (int)ProductInventoryIssueStatusOption.ConfirmedLost, Quantity = 1, UnitCostNioAtIssue = 12m, ResolvedAt = julyInManagua },
+            new ProductInventoryIssue { Id = 3, ProductId = 3, ProductInventoryIssueStatusId = (int)ProductInventoryIssueStatusOption.ResolvedToAvailable, Quantity = 1, UnitCostNioAtIssue = 100m, ResolvedAt = juneInManagua },
+            new ProductInventoryIssue { Id = 4, ProductId = 4, ProductInventoryIssueStatusId = (int)ProductInventoryIssueStatusOption.Cancelled, Quantity = 1, UnitCostNioAtIssue = 100m, ResolvedAt = juneInManagua },
+            new ProductInventoryIssue { Id = 5, ProductId = 5, ProductInventoryIssueStatusId = (int)ProductInventoryIssueStatusOption.Open, Quantity = 1, UnitCostNioAtIssue = 100m });
+        await context.SaveChangesAsync();
+        var service = new FinancialService(context);
+
+        var summary = await service.GetMonthlySummaryAsync(2026, 2026);
+        var year = Assert.Single(summary.Years);
+        Assert.Equal(30m, year.Months.Single(month => month.Month == 6).ExpensesNio);
+        Assert.Equal(-30m, year.Months.Single(month => month.Month == 6).UtilityNio);
+        Assert.Equal(12m, year.Months.Single(month => month.Month == 7).ExpensesNio);
+        Assert.Equal(42m, year.ExpensesNio);
+        Assert.Equal(42m, summary.GrandTotal.ExpensesNio);
+
+        var file = await service.ExportMonthlySummaryAsync(2026, 2026);
+        using var workbook = new XLWorkbook(new MemoryStream(file));
+        var worksheet = workbook.Worksheet("Resumen financiero");
+        var headers = worksheet.Row(2).CellsUsed().ToDictionary(cell => cell.GetString(), cell => cell.Address.ColumnNumber);
+        var juneRow = worksheet.RowsUsed().Single(row => row.Cell(2).GetString() == "junio").RowNumber();
+        Assert.Equal(30m, worksheet.Cell(juneRow, headers["Incidencias perdidas"]).GetValue<decimal>());
+    }
+
+    [Fact]
     public async Task ExportMonthlySummaryAsync_ReturnsDetailedMonthlyAndAnnualTotals()
     {
         await using var context = CreateContext();
