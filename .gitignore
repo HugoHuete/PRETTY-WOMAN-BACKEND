@@ -115,3 +115,6 @@ prueba.json
 .codegraph-*/
 docs/superpowers
 sixlabors.lic
+
+UploadImages/Images/
+UploadImages/*.csv

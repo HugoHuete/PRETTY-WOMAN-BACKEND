@@ -25,8 +25,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
 
         var totalCount = await productsQuery.CountAsync();
         var products = await productsQuery
-            .OrderBy(product => product.Name)
-            .ThenBy(product => product.Code)
+            .OrderBy(product => product.Code)
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
             .Select(product => new ProductListProjection
