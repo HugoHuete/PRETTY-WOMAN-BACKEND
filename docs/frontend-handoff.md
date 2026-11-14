@@ -300,6 +300,10 @@ Para una orden con tracking, sustituir el costo directo por elementos como:
 La respuesta `OrderReceiptDTO` incluye `id`, `orderId`, `receivedDate`, `warehouseShippingCostUsd`, `warehouseShippingCostNio`, `orderStatusId`, `trackingNumberIds` y, por producto, `productId`, `quantity`, `isSurplus`, `salePrice` y `allocatedWarehouseShippingCostNio`.
 - Después de una recepción, recargar el detalle de la orden para mostrar cantidades y costos calculados. Si quedan pendientes que el proveedor ya confirmó que no llegarán, habilitar el flujo de faltantes descrito arriba.
 
+### Clientes: búsqueda
+
+`GET /api/v1/clients` acepta los filtros opcionales `name`, `phoneNumber`, `instagramUser` y `messengerUser`. Busca coincidencias parciales sin distinguir mayúsculas; si se envían varios filtros, devuelve cada cliente que coincida con cualquiera de ellos. Por ejemplo, `GET /api/v1/clients?name=Ana&phoneNumber=8888` encuentra clientes cuyo nombre contenga `Ana` o cuyo teléfono contenga `8888`. Los valores vacíos se ignoran y `page` y `pageSize` controlan la paginación.
+
 ### Productos: listado, presentaciones e imágenes
 
 `GET /api/v1/products` y `GET /api/v1/products/{productId}` devuelven un producto por ficha, no una fila por talla. Las variantes vendibles se agrupan en `presentations`; cada presentación representa un color o cualquier otra diferencia visual y contiene sus tallas en `sizes`.

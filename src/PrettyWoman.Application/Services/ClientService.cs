@@ -109,31 +109,22 @@ public class ClientService(IApplicationDbContext context, IMapper mapper) : ICli
 
     private static IQueryable<Client> ApplyFilters(IQueryable<Client> clientsQuery, ClientQueryDTO query)
     {
-        if (!string.IsNullOrWhiteSpace(query.Name))
+        var name = query.Name?.Trim().ToLower();
+        var phoneNumber = query.PhoneNumber?.Trim().ToLower();
+        var instagramUser = query.InstagramUser?.Trim().ToLower();
+        var messengerUser = query.MessengerUser?.Trim().ToLower();
+
+        if (string.IsNullOrEmpty(name) && string.IsNullOrEmpty(phoneNumber) &&
+            string.IsNullOrEmpty(instagramUser) && string.IsNullOrEmpty(messengerUser))
         {
-            var name = query.Name.Trim().ToLower();
-            clientsQuery = clientsQuery.Where(client => client.Name.ToLower().Contains(name));
+            return clientsQuery;
         }
 
-        if (!string.IsNullOrWhiteSpace(query.PhoneNumber))
-        {
-            var phoneNumber = query.PhoneNumber.Trim().ToLower();
-            clientsQuery = clientsQuery.Where(client => client.PhoneNumber != null && client.PhoneNumber.ToLower().Contains(phoneNumber));
-        }
-
-        if (!string.IsNullOrWhiteSpace(query.InstagramUser))
-        {
-            var instagramUser = query.InstagramUser.Trim().ToLower();
-            clientsQuery = clientsQuery.Where(client => client.InstagramUser != null && client.InstagramUser.ToLower().Contains(instagramUser));
-        }
-
-        if (!string.IsNullOrWhiteSpace(query.MessengerUser))
-        {
-            var messengerUser = query.MessengerUser.Trim().ToLower();
-            clientsQuery = clientsQuery.Where(client => client.MessengerUser != null && client.MessengerUser.ToLower().Contains(messengerUser));
-        }
-
-        return clientsQuery;
+        return clientsQuery.Where(client =>
+            (!string.IsNullOrEmpty(name) && client.Name.ToLower().Contains(name)) ||
+            (!string.IsNullOrEmpty(phoneNumber) && client.PhoneNumber != null && client.PhoneNumber.ToLower().Contains(phoneNumber)) ||
+            (!string.IsNullOrEmpty(instagramUser) && client.InstagramUser != null && client.InstagramUser.ToLower().Contains(instagramUser)) ||
+            (!string.IsNullOrEmpty(messengerUser) && client.MessengerUser != null && client.MessengerUser.ToLower().Contains(messengerUser)));
     }
 
     private static void NormalizePagination(ClientQueryDTO query)

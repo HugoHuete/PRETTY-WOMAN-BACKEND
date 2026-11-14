@@ -35,6 +35,46 @@ public class ClientServiceTests
     }
 
     [Fact]
+    public async Task GetAllAsync_MatchesAnySuppliedTextFilterBeforePagination()
+    {
+        await using var context = CreateContext();
+        await SeedClientsAsync(context);
+        var service = CreateService(context);
+        var query = new ClientQueryDTO
+        {
+            Name = " ALV ",
+            PhoneNumber = "7003",
+            InstagramUser = "LOOK",
+            MessengerUser = "beatriz",
+            PageSize = 2
+        };
+
+        var firstPage = await service.GetAllAsync(query);
+        query.Page = 2;
+        var secondPage = await service.GetAllAsync(query);
+
+        Assert.Equal(3, firstPage.TotalCount);
+        Assert.Equal(new[] { "Alvaro", "Beatriz" }, firstPage.Items.Select(client => client.Name));
+        Assert.Equal("Carla", Assert.Single(secondPage.Items).Name);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_IgnoresBlankFiltersWhenMatchingAnyField()
+    {
+        await using var context = CreateContext();
+        await SeedClientsAsync(context);
+
+        var result = await CreateService(context).GetAllAsync(new ClientQueryDTO
+        {
+            Name = "  ",
+            PhoneNumber = "7002",
+            InstagramUser = ""
+        });
+
+        Assert.Equal("Beatriz", Assert.Single(result.Items).Name);
+    }
+
+    [Fact]
     public async Task GetAllAsync_ReturnsPagedResultAndMapsMessengerUser()
     {
         await using var context = CreateContext();
