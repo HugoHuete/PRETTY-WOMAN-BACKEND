@@ -27,8 +27,11 @@ MAX_SIDE = 6000
 MAX_PIXELS = 25_000_000
 FORMATS = {'.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp'}
 USER_AGENT = 'PrettyWoman-Migracion/1.0'
-API_TOKEN = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJmODk5ODc1Zi05ZTFiLTQ5OTctOTMzYi01YzQyODg0NDNkNmYiLCJqdGkiOiIyOTg2N2E4NS1jYjllLTQ0YTctODc5OC03YzhmMGMzMTkyNDAiLCJlbWFpbCI6Imh1Z28uaHVldGUwNDAyQGdtYWlsLmNvbSIsImh0dHA6Ly9zY2hlbWFzLnhtbHNvYXAub3JnL3dzLzIwMDUvMDUvaWRlbnRpdHkvY2xhaW1zL25hbWVpZGVudGlmaWVyIjoiZjg5OTg3NWYtOWUxYi00OTk3LTkzM2ItNWM0Mjg4NDQzZDZmIiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvZW1haWxhZGRyZXNzIjoiaHVnby5odWV0ZTA0MDJAZ21haWwuY29tIiwiaHR0cDovL3NjaGVtYXMueG1sc29hcC5vcmcvd3MvMjAwNS8wNS9pZGVudGl0eS9jbGFpbXMvbmFtZSI6Ikh1Z28iLCJzZWN1cml0eV9zdGFtcCI6IkFNVklQN0JDQk1FQk9NTDRBQlRHN0dTQkVXVjdDS1czIiwiaHR0cDovL3NjaGVtYXMubWljcm9zb2Z0LmNvbS93cy8yMDA4LzA2L2lkZW50aXR5L2NsYWltcy9yb2xlIjoiQWRtaW4iLCJleHAiOjE3OTQ0MzgxNDYsImlzcyI6IlByZXR0eVdvbWFuLkFwaSIsImF1ZCI6IlByZXR0eVdvbWFuLkNsaWVudCJ9.S4Fkp83Y8eDn7-9rdeLQ2hWSu2IlK7zQgXX4DFloFJ4'  # Pegue aquí el token de la API.
+API_TOKEN = ''  # Pegue aquí el token de la API.
 
+#? python3 subir_imagenes_productos.py --execute --report subidas.jsonl
+#! Imagenes tienen que ir como "codigo - presentacion - #.ext" 
+#! y el CSV con code, product_id, presentation, presentation_id
 
 def load_mapping(path):
     try:
@@ -62,9 +65,11 @@ def prepare_images(directory, mapping):
         raise ValueError('No se encontraron imágenes JPG, PNG o WebP.')
     result, seen = [], set()
     for path in files:
-        parts = path.stem.split('_')
+        parts = path.stem.split(' - ', 1)
+        if len(parts) == 2:
+            parts = [parts[0], *parts[1].rsplit(' - ', 1)]
         if len(parts) != 3 or not parts[0].isascii() or not parts[0].isdigit() or int(parts[0]) <= 0 or not parts[1] or not parts[2].isascii() or not parts[2].isdigit() or int(parts[2]) <= 0:
-            raise ValueError(f'Nombre inválido, use codigo_presentacion_#.ext: {path.name}')
+            raise ValueError(f'Nombre inválido, use codigo - presentacion - #.ext: {path.name}')
         code = str(int(parts[0]))
         key = (code, parts[1].casefold())
         image_key = (key, int(parts[2]))

@@ -19,7 +19,7 @@ class UploadTests(unittest.TestCase):
             mapping = root / 'products.csv'
             mapping.write_text('code;product_id;presentation;presentation_id\n10;15;Negro;20\n')
             for n in (1, 2):
-                Image.new('RGB', (2, 2)).save(root / f'10_Negro_{n}.webp', format='JPEG')
+                Image.new('RGB', (2, 2)).save(root / f'10 - Negro - {n}.webp', format='JPEG')
             items = m.prepare_images(root, m.load_mapping(mapping))
             self.assertEqual(len(items), 2)
             self.assertEqual(m.image_payload(items[0])[2], 'image/jpeg')
@@ -34,7 +34,7 @@ class UploadTests(unittest.TestCase):
     def test_unknown_upload_blocks_retry(self):
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
-            Image.new('RGB', (2, 2)).save(root / '10_Negro_1.png')
+            Image.new('RGB', (2, 2)).save(root / '10 - Negro - 1.png')
             items = m.prepare_images(root, {('10', 'negro'): (15, 20)})
             report = root / 'log.jsonl'
             with patch.object(m, 'http_request', side_effect=OSError('offline')):
