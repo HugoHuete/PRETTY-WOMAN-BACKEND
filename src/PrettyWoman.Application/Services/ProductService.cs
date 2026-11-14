@@ -24,8 +24,10 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
         productsQuery = ApplyProductFilters(productsQuery, query);
 
         var totalCount = await productsQuery.CountAsync();
-        var products = await productsQuery
-            .OrderBy(product => product.Code)
+        var orderedProducts = query.CodeDescending
+            ? productsQuery.OrderByDescending(product => product.Code)
+            : productsQuery.OrderBy(product => product.Code);
+        var products = await orderedProducts
             .Skip((query.Page - 1) * query.PageSize)
             .Take(query.PageSize)
             .Select(product => new ProductListProjection

@@ -47,6 +47,22 @@ public class ProductServiceTests
         Assert.Equal(200, result.Items.Count());
     }
 
+    [Theory]
+    [InlineData(false, 1001, 1002)]
+    [InlineData(true, 1003, 1002)]
+    public async Task GetAllAsync_OrdersByCodeBeforePagination(bool descending, int first, int second)
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var service = CreateService(context);
+
+        var firstPage = await service.GetAllAsync(new ProductQueryDTO { CodeDescending = descending, PageSize = 1 });
+        var secondPage = await service.GetAllAsync(new ProductQueryDTO { CodeDescending = descending, PageSize = 1, Page = 2 });
+
+        Assert.Equal(first, Assert.Single(firstPage.Items).Code);
+        Assert.Equal(second, Assert.Single(secondPage.Items).Code);
+    }
+
     [Fact]
     public async Task GetAllAsync_MapsUnitCostInNioForVariants()
     {

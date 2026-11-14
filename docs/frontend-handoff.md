@@ -306,6 +306,8 @@ La respuesta `OrderReceiptDTO` incluye `id`, `orderId`, `receivedDate`, `warehou
 
 El listado acepta `pageSize` de hasta 200 productos; los valores superiores se ajustan a 200 y el valor predeterminado es 20.
 
+El listado se ordena por código ascendente por defecto. Para orden descendente, usar `GET /api/v1/products?codeDescending=true`; `codeDescending=false` conserva el orden ascendente. El orden se aplica antes de la paginación.
+
 ```json
 {
   "id": 15,
