@@ -732,9 +732,9 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
             query.PageSize = 20;
         }
 
-        if (query.PageSize > 100)
+        if (query.PageSize > 200)
         {
-            query.PageSize = 100;
+            query.PageSize = 200;
         }
     }
 

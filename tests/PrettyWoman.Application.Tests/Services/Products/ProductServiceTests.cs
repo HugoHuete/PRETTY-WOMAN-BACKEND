@@ -13,6 +13,40 @@ namespace PrettyWoman.Application.Tests.Services.Products;
 
 public class ProductServiceTests
 {
+    [Theory]
+    [InlineData(150, 150)]
+    [InlineData(200, 200)]
+    [InlineData(201, 200)]
+    public async Task GetAllAsync_AllowsPageSizesUpTo200(int requestedSize, int expectedSize)
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+
+        var result = await CreateService(context).GetAllAsync(new ProductQueryDTO { PageSize = requestedSize });
+
+        Assert.Equal(expectedSize, result.PageSize);
+    }
+
+    [Fact]
+    public async Task GetAllAsync_Returns200ProductsWhenPageSizeIs200()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        context.Products.AddRange(Enumerable.Range(0, 201).Select(index => new Product
+        {
+            Code = 10000 + index,
+            Name = $"Producto {index}",
+            SupplierProductCode = $"SKU-{index}",
+            SubcategoryId = 1
+        }));
+        await context.SaveChangesAsync();
+
+        var result = await CreateService(context).GetAllAsync(new ProductQueryDTO { PageSize = 200 });
+
+        Assert.Equal(204, result.TotalCount);
+        Assert.Equal(200, result.Items.Count());
+    }
+
     [Fact]
     public async Task GetAllAsync_MapsUnitCostInNioForVariants()
     {

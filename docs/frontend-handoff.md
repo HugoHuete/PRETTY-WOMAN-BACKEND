@@ -304,6 +304,8 @@ La respuesta `OrderReceiptDTO` incluye `id`, `orderId`, `receivedDate`, `warehou
 
 `GET /api/v1/products` y `GET /api/v1/products/{productId}` devuelven un producto por ficha, no una fila por talla. Las variantes vendibles se agrupan en `presentations`; cada presentación representa un color o cualquier otra diferencia visual y contiene sus tallas en `sizes`.
 
+El listado acepta `pageSize` de hasta 200 productos; los valores superiores se ajustan a 200 y el valor predeterminado es 20.
+
 ```json
 {
   "id": 15,
