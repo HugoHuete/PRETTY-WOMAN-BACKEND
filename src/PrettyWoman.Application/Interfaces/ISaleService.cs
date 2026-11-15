@@ -18,6 +18,7 @@ public interface ISaleService
     Task<int> AddPaymentMovementAsync(int saleId, CreateSalePaymentMovementDTO paymentMovement);
     Task UpdatePaymentMovementAsync(int saleId, int paymentMovementId, UpdateSalePaymentMovementDTO paymentMovement);
     Task<int> RefundPaymentMovementAsync(int saleId, int paymentMovementId, RefundSalePaymentMovementDTO refund);
+    Task CompleteStorePickupAsync(int saleId);
     Task<int> CreateDeliveryAsync(int saleId, CreateSaleDeliveryDTO delivery);
     Task UpdateDeliveryAsync(int saleId, int deliveryId, PatchSaleDeliveryDTO delivery);
     Task MarkDeliveryAsSentAsync(int saleId, int deliveryId);

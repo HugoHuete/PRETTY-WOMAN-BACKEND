@@ -14,6 +14,101 @@ namespace PrettyWoman.Application.Tests.Services.Sales;
 public class SaleServiceTests
 {
     [Theory]
+    [InlineData(SaleStatusOption.Pending)]
+    [InlineData(SaleStatusOption.Reserved)]
+    public async Task CompleteStorePickupAsync_CompletesPaidSaleAndMovesInventory(SaleStatusOption status)
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            SaleStatusId = (int)status,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Transfer, ProductAmount = 500m }]
+        });
+
+        await service.CompleteStorePickupAsync(saleId);
+
+        var sale = await context.Sales.SingleAsync(item => item.Id == saleId);
+        Assert.Equal((int)SaleStatusOption.Completed, sale.SaleStatusId);
+        Assert.Equal((int)SaleChannelOption.Whatsapp, sale.SaleChannelId);
+        Assert.Equal(1, product.AvailableQuantity);
+        Assert.Equal(0, product.ReservedQuantity);
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.CompleteStorePickupAsync(saleId));
+    }
+
+    [Fact]
+    public async Task CompleteStorePickupAsync_DoesNotDeductSelectedItemsTwice()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var regular = await AddProductAsync(context, availableQuantity: 1, salePrice: 500m, unitCostNio: 200m);
+        var selected = await AddProductAsync(context, availableQuantity: 1, salePrice: 300m, unitCostNio: 100m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = regular.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            SelectionProducts = [new CreateSaleSelectionProductDTO { ProductId = selected.Id, Quantity = 1 }]
+        });
+        var holdId = (await context.ProductHolds.SingleAsync(hold => hold.SaleId == saleId)).Id;
+        await service.ResolveSelectionHoldAsync(saleId, holdId, new ResolveSelectionHoldDTO { Selected = true });
+        await service.AddPaymentMovementAsync(saleId, new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Transfer, ProductAmount = 800m });
+
+        await service.CompleteStorePickupAsync(saleId);
+
+        Assert.Equal((int)SaleStatusOption.Completed, (await context.Sales.SingleAsync(sale => sale.Id == saleId)).SaleStatusId);
+        Assert.Equal(0, regular.AvailableQuantity);
+        Assert.Equal(0, selected.AvailableQuantity);
+        Assert.Equal(1, await context.InventoryMovements.CountAsync(movement => movement.ProductId == selected.Id && movement.ToStockBucketId == (int)InventoryStockBucketOption.OutOfInventory));
+    }
+
+    [Fact]
+    public async Task CompleteStorePickupAsync_RejectsUnpaidSale()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 2, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }]
+        });
+
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.CompleteStorePickupAsync(saleId));
+        Assert.Equal(2, product.AvailableQuantity);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CompleteStorePickupAsync_RejectsActiveDeliveryOrSelection(bool activeDelivery)
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var product = await AddProductAsync(context, availableQuantity: 3, salePrice: 500m, unitCostNio: 200m);
+        var service = CreateService(context);
+        var saleId = await service.CreateAsync(new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = product.Id, Quantity = 1, DiscountSourceId = (int)DiscountSourceOption.None }],
+            PaymentMovements = [new CreateSalePaymentMovementDTO { PaymentMethodId = (int)PaymentMethodOption.Transfer, ProductAmount = 500m }]
+        });
+        if (activeDelivery)
+            context.SaleDeliveries.Add(new SaleDelivery { SaleId = saleId, DeliveryStatusId = (int)DeliveryStatusCode.Pending, Code = "TEST", UserId = "seller" });
+        else
+            context.ProductHolds.Add(new ProductHold { SaleId = saleId, ProductId = product.Id, Quantity = 1, HoldReason = "Seleccion", ProductHoldStatusId = (int)ProductHoldStatusOption.Active });
+        await context.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.CompleteStorePickupAsync(saleId));
+        Assert.Equal((int)SaleStatusOption.Pending, (await context.Sales.SingleAsync(sale => sale.Id == saleId)).SaleStatusId);
+    }
+
+    [Theory]
     [InlineData(550, 550, 0)]
     [InlineData(450, 500, 50)]
     public async Task CreateMigrationAsync_UsesChargedPriceWithoutChangingCatalog(decimal charged, decimal original, decimal discount)

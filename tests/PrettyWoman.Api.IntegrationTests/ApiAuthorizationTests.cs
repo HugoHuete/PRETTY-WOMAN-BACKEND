@@ -108,6 +108,16 @@ public class ApiAuthorizationTests(PrettyWomanApiFactory factory)
     }
 
     [Fact]
+    public async Task Employee_CanAccessStorePickupAction()
+    {
+        using var client = await CreateEmployeeClientAsync();
+
+        var response = await client.PostAsync("/api/v1/sales/2147483647/complete-store-pickup", null);
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
     public async Task Employee_CannotCreateHistoricalSale()
     {
         using var client = await CreateEmployeeClientAsync();

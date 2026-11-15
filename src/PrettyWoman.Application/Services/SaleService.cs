@@ -702,6 +702,30 @@ public class SaleService(
         return refundPaymentMovementId;
     }
 
+    public async Task CompleteStorePickupAsync(int saleId)
+    {
+        await using var transaction = await _context.BeginSalePaymentTransactionAsync(saleId);
+        var sale = await GetSaleWithDetailsAsync(saleId, asNoTracking: false);
+        if (sale.SaleStatusId is not ((int)SaleStatusOption.Pending or (int)SaleStatusOption.Reserved or (int)SaleStatusOption.ReadyForDelivery))
+            throw new AppBadRequestException("Solo se puede completar una venta pendiente, reservada o lista para entrega.");
+        if (sale.SalePaymentStatusId != (int)SalePaymentStatusOption.Paid)
+            throw new AppBadRequestException("La venta debe estar pagada completamente antes del retiro.");
+        if (sale.ProductHolds.Any(hold => hold.ProductHoldStatusId == (int)ProductHoldStatusOption.Active))
+            throw new AppBadRequestException("La venta tiene prendas en seleccion pendientes de resolver.");
+        if (sale.Deliveries.Any(delivery => delivery.DeliveryStatusId is (int)DeliveryStatusCode.Pending or (int)DeliveryStatusCode.Sent or (int)DeliveryStatusCode.DeliveredPendingSelection))
+            throw new AppBadRequestException("La venta tiene un envio activo; debe finalizarlo o cancelarlo antes del retiro.");
+
+        if (GetInventoryBucketForSaleStatus(sale.SaleStatusId) == InventoryStockBucketOption.Reserved)
+            await TransitionCurrentSaleInventoryAsync(sale, InventoryStockBucketOption.Reserved, InventoryStockBucketOption.OutOfInventory,
+                InventoryMovementTypeOption.ReservationConvertedToSale, "Reserva entregada mediante retiro en tienda.");
+        else
+            await CompletePendingPickupInventoryAsync(sale);
+
+        sale.SaleStatusId = (int)SaleStatusOption.Completed;
+        await _context.SaveChangesAsync();
+        if (transaction is not null) await transaction.CommitAsync();
+    }
+
     private async Task<Sale> GetSaleWithDetailsAsync(int id, bool asNoTracking)
     {
         var query = _context.Sales
@@ -1170,6 +1194,29 @@ public class SaleService(
                     ? "Productos reservados para la venta."
                     : "Venta registrada.");
             movement.SaleProduct = saleProduct;
+        }
+    }
+
+    private async Task CompletePendingPickupInventoryAsync(Sale sale)
+    {
+        var saleProductIds = sale.ProductVariants.Select(line => line.Id).ToList();
+        var movements = await _context.InventoryMovements
+            .Where(movement => movement.SaleProductId.HasValue && saleProductIds.Contains(movement.SaleProductId.Value))
+            .ToListAsync();
+
+        foreach (var line in sale.ProductVariants)
+        {
+            var alreadyOut = CalculateQuantityInBucket(line.Id, movements, InventoryStockBucketOption.OutOfInventory);
+            var returned = CalculateReceivedReturnQuantity(line.Id, movements);
+            var remaining = line.Quantity - alreadyOut - returned;
+            if (remaining < 0)
+                throw new AppBadRequestException($"Los movimientos de la linea de venta con id {line.Id} exceden la cantidad vendida.");
+            if (remaining == 0) continue;
+
+            var movement = _inventoryService.Move(line.ProductVariant!, InventoryStockBucketOption.Available,
+                InventoryStockBucketOption.OutOfInventory, remaining, InventoryMovementTypeOption.Sale,
+                DateTime.UtcNow, "Productos entregados mediante retiro en tienda.");
+            movement.SaleProduct = line;
         }
     }
 

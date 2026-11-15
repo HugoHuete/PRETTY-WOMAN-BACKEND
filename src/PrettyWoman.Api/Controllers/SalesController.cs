@@ -283,6 +283,14 @@ public class SalesController(
         return NoContent();
     }
 
+    /// <summary>Confirma el retiro en tienda de una venta pagada sin envío activo.</summary>
+    [HttpPost("{id:int}/complete-store-pickup")]
+    public async Task<IActionResult> CompleteStorePickup(int id)
+    {
+        await _saleService.CompleteStorePickupAsync(id);
+        return NoContent();
+    }
+
     /// <summary>Finaliza un envío cuando la entrega y cualquier selección pendiente se completaron.</summary>
     [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/deliveries/{deliveryId:int}/complete")]
