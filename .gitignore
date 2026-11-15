@@ -118,3 +118,4 @@ sixlabors.lic
 
 UploadImages/Images/
 UploadImages/*.csv
+UploadImages/*.jsonl
