@@ -150,6 +150,8 @@ Ejemplos: `GET /api/v1/auth/users?user=maria`, `GET /api/v1/auth/users?role=Empl
 
 `GET /api/v1/orders` devuelve un `PaginatedResult<OrderDTO>` y acepta `page`, `pageSize`, `purchaseDateFrom`, `purchaseDateTo`, `orderStatusId` y `supplierId`. Las fechas filtran por `purchaseDate`; `pageSize` se limita a 100.
 
+Al crear o actualizar una orden, el nombre de cada producto admite hasta 200 caracteres y el nombre opcional de cada presentación hasta 50, después de quitar espacios al inicio y al final. Si se excede un límite, la API devuelve `400` con el detalle del error.
+
 `GET /api/v1/orders/statuses` devuelve el catálogo de estados de orden, ordenado por `id`, para poblar el filtro `orderStatusId` de la UI. Cada elemento tiene `id` y `name`.
 
 `GET /api/v1/orders/{id}/tracking-numbers` acepta `isReceived` opcional: `true` devuelve trackings con `ProductReceiptId` y `false` los pendientes; sin el parámetro devuelve todos.

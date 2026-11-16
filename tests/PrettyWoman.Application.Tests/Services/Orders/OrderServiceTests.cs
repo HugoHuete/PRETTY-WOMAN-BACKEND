@@ -20,6 +20,42 @@ public class OrderServiceTests
     }, NullLoggerFactory.Instance).CreateMapper();
 
 
+    [Theory]
+    [InlineData(false, false, 201, 200)]
+    [InlineData(true, false, 201, 200)]
+    [InlineData(false, true, 51, 50)]
+    [InlineData(true, true, 51, 50)]
+    public async Task CreateAndUpdate_RejectNamesOverDatabaseLimit(bool update, bool presentation, int length, int limit)
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var request = CreateOrderRequest("SKU-LIMIT", "Nombre válido");
+        if (presentation) request.Products.Single().Presentations.Single().Name = new string('a', length);
+        else request.Products.Single().Name = new string('a', length);
+
+        var exception = update
+            ? await Assert.ThrowsAsync<AppBadRequestException>(() => service.UpdateAsync(999, new UpdateOrderDTO { SupplierId = request.SupplierId, Products = request.Products }))
+            : await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(request));
+
+        Assert.Contains(limit.ToString(), exception.Message);
+        Assert.Empty(await context.Orders.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreateAsync_AllowsMaximumNamesAfterTrimming()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var request = CreateOrderRequest("SKU-LIMIT", " " + new string('a', 200) + " ");
+        request.Products.Single().Presentations.Single().Name = " " + new string('b', 50) + " ";
+
+        await CreateService(context).CreateAsync(request);
+
+        Assert.Equal(200, (await context.Products.SingleAsync()).Name.Length);
+        Assert.Equal(50, (await context.ProductPresentations.SingleAsync()).Name!.Length);
+    }
+
     [Fact]
     public async Task GetAllAsync_PaginatesAndFiltersByPurchaseDateStatusAndSupplier()
     {

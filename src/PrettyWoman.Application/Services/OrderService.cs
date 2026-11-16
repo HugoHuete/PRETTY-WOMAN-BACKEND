@@ -1,4 +1,5 @@
 using AutoMapper;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.Common.Extensions;
 using PrettyWoman.Application.Common.Media;
@@ -1189,11 +1190,15 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         {
             product.SupplierProductCode = product.SupplierProductCode.NormalizeRequired("Código de proveedor");
             product.Name = product.Name.NormalizeRequired("Nombre");
+            if (product.Name.EnumerateRunes().Count() > 200)
+                throw new AppBadRequestException("El nombre del producto no puede superar los 200 caracteres.");
 
             product.Presentations ??= [];
             foreach (var presentation in product.Presentations)
             {
                 presentation.Name = presentation.Name.NormalizeOptional();
+                if (presentation.Name is not null && presentation.Name.EnumerateRunes().Count() > 50)
+                    throw new AppBadRequestException("El nombre de la presentación no puede superar los 50 caracteres.");
                 presentation.Sizes ??= [];
             }
         }
