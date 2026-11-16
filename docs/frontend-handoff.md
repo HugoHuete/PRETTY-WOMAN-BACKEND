@@ -98,6 +98,9 @@ Al crear o editar una orden no enviar `salePrice`. En `POST /api/v1/orders/{orde
 
 El listado de órdenes devuelve únicamente el resumen de cada orden. No incluye `products` ni `purchaseShortages`; consultar `GET /api/v1/orders/{id}` para obtener productos, variantes y faltantes.
 
+El detalle `GET /api/v1/orders/{id}` incluye `primaryImageUrl` en cada producto y presentación. Si no existe una imagen principal, el valor es `null`. Una presentación sin imagen usa la imagen general; un producto sin imagen general usa la imagen principal de su primera presentación que tenga una.
+
+
 ## Contratos operativos confirmados
 
 ### Tasa de cambio vigente

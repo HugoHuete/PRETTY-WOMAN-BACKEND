@@ -12,7 +12,7 @@ using PrettyWoman.Domain.Enums;
 
 namespace PrettyWoman.Application.Services;
 
-public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrderService
+public class OrderService(IApplicationDbContext context, IMapper mapper, IMediaUrlResolver mediaUrlResolver) : IOrderService
 {
     private readonly IApplicationDbContext _context = context;
     private readonly IMapper _mapper = mapper;
@@ -495,7 +495,21 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             .FirstOrDefaultAsync(order => order.Id == id)
             ?? throw new AppNotFoundException($"La orden con id '{id}' no existe.");
 
-        return MapOrderDto(order);
+        var productIds = order.ProductVariants.Select(variant => variant.ProductId).Distinct().ToArray();
+        var images = await _context.ProductImages.AsNoTracking()
+            .Where(image => productIds.Contains(image.ProductId) && image.IsPrimary)
+            .Select(image => new OrderImage(
+                image.ProductId,
+                image.ProductPresentationId,
+                image.SortOrder,
+                image.ProductPresentation != null ? image.ProductPresentation.SortOrder : 0,
+                image.MediaAsset == null ? null : image.MediaAsset.Variants
+                    .Where(variant => variant.Type == MediaVariantType.Web)
+                    .Select(variant => variant.StorageKey)
+                    .FirstOrDefault()))
+            .ToListAsync();
+
+        return MapOrderDto(order, images.ToLookup(image => image.ProductId));
     }
 
     public async Task<IEnumerable<OrderTrackingNumberDTO>> GetTrackingNumbersAsync(int orderId, bool? isReceived = null)
@@ -1025,7 +1039,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
         }
     }
 
-    private OrderDTO MapOrderDto(Order order)
+    private OrderDTO MapOrderDto(Order order, ILookup<int, OrderImage> images)
     {
         var orderDto = _mapper.Map<OrderDTO>(order);
         orderDto.PurchaseCurrencyName = order.PurchaseCurrencyId == (int)PurchaseCurrencyOption.Usd ? "USD" : "NIO";
@@ -1070,6 +1084,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                 SupplierProductCode = group.Key.SupplierProductCode,
                 Code = group.Key.Code,
                 Name = group.Key.Name,
+                PrimaryImageUrl = GetProductImageUrl(group.Key.Id, images),
                 SubcategoryId = group.Key.SubcategoryId,
                 SubcategoryName = group.Key.Subcategory?.Name,
                 Presentations = group.GroupBy(productVariant => productVariant.ProductPresentation!)
@@ -1078,6 +1093,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
                     {
                         Id = presentation.Key.Id,
                         Name = presentation.Key.Name,
+                        PrimaryImageUrl = GetPresentationImageUrl(group.Key.Id, presentation.Key.Id, images),
                         SortOrder = presentation.Key.SortOrder,
                         Sizes = presentation.OrderBy(item => item.Size != null ? item.Size.DisplayOrder : 0)
                             .Select(productVariant => new OrderProductVariantDTO
@@ -1103,6 +1119,25 @@ public class OrderService(IApplicationDbContext context, IMapper mapper) : IOrde
             .ToList();
 
         return orderDto;
+    }
+
+    private sealed record OrderImage(int ProductId, int? PresentationId, int SortOrder, int PresentationSortOrder, string? StorageKey);
+
+    private string? GetProductImageUrl(int productId, ILookup<int, OrderImage> images)
+    {
+        var productImages = images[productId];
+        var image = productImages.Where(image => image.PresentationId is null).OrderBy(image => image.SortOrder).FirstOrDefault()
+            ?? productImages.Where(image => image.PresentationId is not null)
+                .OrderBy(image => image.PresentationSortOrder).ThenBy(image => image.SortOrder).FirstOrDefault();
+        return image?.StorageKey is null ? null : mediaUrlResolver.GetPublicUrl(image.StorageKey);
+    }
+
+    private string? GetPresentationImageUrl(int productId, int presentationId, ILookup<int, OrderImage> images)
+    {
+        var productImages = images[productId];
+        var image = productImages.Where(image => image.PresentationId == presentationId).OrderBy(image => image.SortOrder).FirstOrDefault()
+            ?? productImages.Where(image => image.PresentationId is null).OrderBy(image => image.SortOrder).FirstOrDefault();
+        return image?.StorageKey is null ? null : mediaUrlResolver.GetPublicUrl(image.StorageKey);
     }
 
     private static PurchaseShortageRefundStatusOption ResolveShortageRefundStatus(decimal totalLossNio, decimal refundedNio, bool refundDeclined)

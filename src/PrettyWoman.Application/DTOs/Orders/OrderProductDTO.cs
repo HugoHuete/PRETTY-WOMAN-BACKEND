@@ -6,6 +6,7 @@ public class OrderProductDTO
     public required string SupplierProductCode { get; set; }
     public int Code { get; set; }
     public required string Name { get; set; }
+    public string? PrimaryImageUrl { get; set; }
     public int SubcategoryId { get; set; }
     public string? SubcategoryName { get; set; }
     public ICollection<OrderProductPresentationDTO> Presentations { get; set; } = [];

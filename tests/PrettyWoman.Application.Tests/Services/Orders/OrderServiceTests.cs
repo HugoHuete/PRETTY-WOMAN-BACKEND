@@ -117,6 +117,74 @@ public class OrderServiceTests
     }
 
     [Fact]
+    public async Task GetByIdAsync_ReturnsProductAndPresentationImageUrls()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var orderId = await service.CreateAsync(CreateOrderRequest("IMAGES", "Vestido"));
+        var product = await context.Products.Include(item => item.ProductPresentations).SingleAsync();
+        var presentation = Assert.Single(product.ProductPresentations);
+        context.ProductImages.AddRange(
+            new ProductImage { ProductId = product.Id, IsPrimary = true, MediaAsset = ImageAsset("general.webp") },
+            new ProductImage { ProductId = product.Id, ProductPresentationId = presentation.Id, IsPrimary = true, MediaAsset = ImageAsset("azul.webp") });
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var order = await service.GetByIdAsync(orderId);
+        var result = Assert.Single(order.Products);
+        Assert.Equal("https://images.example/general.webp", result.PrimaryImageUrl);
+        Assert.Equal("https://images.example/azul.webp", Assert.Single(result.Presentations).PrimaryImageUrl);
+    }
+
+    [Fact]
+    public async Task GetByIdAsync_UsesPresentationImageWhenProductHasNoGeneralImage()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var orderId = await service.CreateAsync(CreateOrderRequest("PRESENTATION", "Vestido"));
+        var product = await context.Products.Include(item => item.ProductPresentations).SingleAsync();
+        var presentation = Assert.Single(product.ProductPresentations);
+        context.ProductImages.Add(new ProductImage { ProductId = product.Id, ProductPresentationId = presentation.Id, IsPrimary = true, MediaAsset = ImageAsset("azul.webp") });
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var result = Assert.Single((await service.GetByIdAsync(orderId)).Products);
+        Assert.Equal("https://images.example/azul.webp", result.PrimaryImageUrl);
+        Assert.Equal("https://images.example/azul.webp", Assert.Single(result.Presentations).PrimaryImageUrl);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task GetByIdAsync_UsesGeneralImageForPresentationOrNullWhenMissing(bool hasImage)
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var orderId = await service.CreateAsync(CreateOrderRequest("FALLBACK", "Vestido"));
+        if (hasImage)
+        {
+            var productId = await context.Products.Select(product => product.Id).SingleAsync();
+            context.ProductImages.Add(new ProductImage { ProductId = productId, IsPrimary = true, MediaAsset = ImageAsset("general.webp") });
+            await context.SaveChangesAsync();
+        }
+        context.ChangeTracker.Clear();
+
+        var product = Assert.Single((await service.GetByIdAsync(orderId)).Products);
+        var expected = hasImage ? "https://images.example/general.webp" : null;
+        Assert.Equal(expected, product.PrimaryImageUrl);
+        Assert.Equal(expected, Assert.Single(product.Presentations).PrimaryImageUrl);
+    }
+
+    private static MediaAsset ImageAsset(string key) => new()
+    {
+        StorageKey = key, OriginalContentType = "image/webp",
+        Variants = [new MediaAssetVariant { Type = MediaVariantType.Web, StorageKey = key, ContentType = "image/webp" }]
+    };
+
+    [Fact]
     public async Task GetByIdAsync_ReturnsPersistedProductPresentationName()
     {
         await using var context = CreateContext();
@@ -989,7 +1057,7 @@ public class OrderServiceTests
 
     private static OrderService CreateService(ApplicationDbContext context)
     {
-        return new OrderService(context, Mapper);
+        return new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
     }
 
     private static CreateOrderDTO CreateOrderRequest(string supplierProductCode, string name)

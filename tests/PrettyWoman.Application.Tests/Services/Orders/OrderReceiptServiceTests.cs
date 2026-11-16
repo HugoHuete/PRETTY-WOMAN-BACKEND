@@ -23,7 +23,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 4));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -84,7 +84,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 4));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -114,7 +114,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -151,7 +151,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -189,7 +189,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -249,7 +249,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -283,7 +283,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -316,7 +316,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateTwoProductOrderRequest());
         var productVariants = await context.ProductVariants.OrderBy(productVariant => productVariant.Id).ToListAsync();
@@ -362,7 +362,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -405,7 +405,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateTwoProductOrderRequest());
         var productVariants = await context.ProductVariants.OrderBy(productVariant => productVariant.Id).ToListAsync();
@@ -455,7 +455,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateTwoProductOrderRequest());
         var productVariants = await context.ProductVariants.OrderBy(productVariant => productVariant.Id).ToListAsync();
@@ -487,7 +487,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 1));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -515,7 +515,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 1));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -554,7 +554,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -603,7 +603,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -634,7 +634,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -661,7 +661,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -694,7 +694,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -717,7 +717,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -761,7 +761,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -802,7 +802,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 1));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -847,7 +847,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -873,7 +873,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var orderId = await orderService.CreateAsync(CreateOrderRequest(quantity: 2));
         var productVariant = await context.ProductVariants.SingleAsync();
@@ -902,7 +902,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var request = CreateOrderRequest(quantity: 2);
         request.Products.Single().Presentations.Single().Sizes.Single().SalePrice = 0m;
@@ -926,7 +926,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var request = CreateOrderRequest(quantity: 2);
         request.Products.Single().Presentations.Single().Sizes.Single().SalePrice = 0m;
@@ -946,7 +946,7 @@ public class OrderReceiptServiceTests
     {
         await using var context = CreateContext();
         await SeedCatalogAsync(context);
-        var orderService = new OrderService(context, Mapper);
+        var orderService = new OrderService(context, Mapper, new TestOrderMediaUrlResolver());
         var receiptService = CreateReceiptService(context);
         var request = CreateOrderRequest(quantity: 3);
         request.Products.Single().Presentations.Single().Sizes.Single().SalePrice = 0m;
