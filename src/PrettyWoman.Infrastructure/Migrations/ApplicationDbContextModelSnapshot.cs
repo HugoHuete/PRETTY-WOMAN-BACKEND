@@ -4485,6 +4485,36 @@ namespace PrettyWoman.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("PrettyWoman.Domain.Entities.SharedCatalogSelection", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<Guid>("IdempotencyKey")
+                        .HasColumnType("uuid")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<string>("Snapshot")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("snapshot");
+
+                    b.HasKey("Id")
+                        .HasName("pk_shared_catalog_selections");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ix_shared_catalog_selections_idempotency_key");
+
+                    b.ToTable("shared_catalog_selections", (string)null);
+                });
+
             modelBuilder.Entity("PrettyWoman.Domain.Entities.ShippingCompany", b =>
                 {
                     b.Property<int>("Id")

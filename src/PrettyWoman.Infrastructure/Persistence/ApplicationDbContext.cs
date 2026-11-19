@@ -93,6 +93,8 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
             entity.HasOne(token => token.User).WithMany().HasForeignKey(token => token.UserId);
         });
 
+        builder.Entity<SharedCatalogSelection>().HasIndex(selection => selection.IdempotencyKey).IsUnique();
+
         builder.ApplyConfigurationsFromAssembly(
         typeof(ApplicationDbContext).Assembly);
 
@@ -122,6 +124,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public DbSet<Size> Sizes { get; set; }
     public DbSet<SizeGroup> SizeGroups { get; set; }
     public DbSet<Product> Products { get; set; }
+    public DbSet<SharedCatalogSelection> SharedCatalogSelections { get; set; }
     public DbSet<ProductPresentation> ProductPresentations { get; set; }
     public DbSet<ProductImage> ProductImages { get; set; }
     public DbSet<ProductVariant> ProductVariants { get; set; }

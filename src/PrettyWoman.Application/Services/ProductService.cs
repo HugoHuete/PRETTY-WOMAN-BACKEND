@@ -671,7 +671,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
         };
     }
 
-    private static ActiveDiscountDTO? GetBestActiveDiscount(
+    internal static ActiveDiscountDTO? GetBestActiveDiscount(
         Product product,
         ProductPresentation presentation,
         ProductVariant productVariant,
@@ -799,5 +799,5 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
         public decimal DiscountValue { get; init; }
     }
 
-    private sealed record ActiveDiscountDTO(int CampaignId, string CampaignName, decimal DiscountedSalePrice);
+    internal sealed record ActiveDiscountDTO(int CampaignId, string CampaignName, decimal DiscountedSalePrice);
 }

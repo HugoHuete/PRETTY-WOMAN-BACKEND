@@ -74,7 +74,7 @@ make migrate
 - `GET /health/ready` verifica la conexión con PostgreSQL.
 - `GET /health` es el endpoint de Railway y también verifica PostgreSQL.
 
-Railway termina TLS antes de reenviar la solicitud a la API. La aplicación procesa `X-Forwarded-Proto` únicamente desde el rango de proxy recomendado por Railway (`100.0.0.0/8`) para redirigir HTTP a HTTPS. El rate limiting no usa encabezados ni direcciones IP del cliente.
+Railway termina TLS antes de reenviar la solicitud a la API. La aplicación procesa `X-Forwarded-Proto` y `X-Real-IP` únicamente desde los proxies configurados, incluido el rango `100.0.0.0/8` de Railway. El rate limiting del catálogo usa la dirección resultante; comprueba en el despliegue que corresponda al cliente si hay otros proxies intermedios y configura únicamente proxies confiables.
 
 ## Archivos e imágenes
 

@@ -13,6 +13,46 @@ namespace PrettyWoman.Application.Tests.Services.Products;
 
 public class ProductServiceTests
 {
+    [Fact]
+    public async Task PublicCatalog_ListsOnlyAvailableVariantsAndKeepsSoldOutDetail()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var variant = await context.ProductVariants.FirstAsync();
+        variant.AvailableQuantity = 1;
+        await context.SaveChangesAsync();
+
+        var catalog = new PublicCatalogService(context, new TestMediaUrlResolver());
+        var list = await catalog.ListAsync(new());
+        Assert.Contains(list.Items, product => product.Id == variant.ProductId);
+
+        foreach (var item in await context.ProductVariants.Where(item => item.ProductId == variant.ProductId).ToListAsync())
+            item.AvailableQuantity = 0;
+
+        await context.SaveChangesAsync();
+        Assert.DoesNotContain((await catalog.ListAsync(new())).Items, product => product.Id == variant.ProductId);
+        Assert.True((await catalog.GetAsync(variant.ProductId))!.SoldOut);
+    }
+
+    [Fact]
+    public async Task PublicCatalog_HidesProductsThatHaveNeverReceivedInventory()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var product = await context.Products.Include(item => item.ProductVariants).FirstAsync();
+        foreach (var variant in product.ProductVariants)
+        {
+            variant.ReceivedQuantity = 0;
+            variant.AvailableQuantity = 0;
+            variant.ReservedQuantity = 0;
+            variant.UnavailableQuantity = 0;
+        }
+        await context.SaveChangesAsync();
+
+        var catalog = new PublicCatalogService(context, new TestMediaUrlResolver());
+        Assert.Null(await catalog.GetAsync(product.Id));
+    }
+
     [Theory]
     [InlineData(150, 150)]
     [InlineData(200, 200)]

@@ -44,7 +44,8 @@ rateLimitOptions.Validate();
 builder.Services.AddDataProtection();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedProto;
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedFor;
+    options.ForwardedForHeaderName = "X-Real-IP";
     options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("100.0.0.0"), 8));
 });
 builder.Services.AddControllers();
@@ -79,6 +80,12 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddRouting(options => { options.LowercaseUrls = true; });
 builder.Services.AddCors(options =>
 {
+    var catalogOrigin = builder.Configuration["Catalog:Origin"] ?? "https://catalog.prettywomanboutiquenic.com";
+    var catalogOrigins = builder.Environment.IsDevelopment()
+        ? new[] { catalogOrigin, "http://localhost:5173" }
+        : [catalogOrigin];
+    options.AddPolicy("PublicCatalog", policy => policy.WithOrigins(catalogOrigins)
+        .WithMethods("GET", "POST").WithHeaders("Content-Type", "Idempotency-Key"));
     options.AddPolicy(AdminFrontendCorsPolicy, policy =>
         policy.WithOrigins(adminOrigins)
             .AllowAnyHeader()
@@ -164,6 +171,14 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddRateLimiter(options =>
 {
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("CatalogSelectionCreation", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 30,
+                Window = TimeSpan.FromMinutes(1)
+            }));
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(httpContext =>
     {
         if (httpContext.Request.Path.StartsWithSegments("/health"))
@@ -172,6 +187,11 @@ builder.Services.AddRateLimiter(options =>
         }
 
         var (name, permitLimit) = GetRateLimit(httpContext, rateLimitOptions);
+        if (httpContext.Request.Path.StartsWithSegments("/api/v1/catalog") ||
+            httpContext.Request.Path.StartsWithSegments("/compartir"))
+        {
+            name = $"catalog:{name}:{httpContext.Connection.RemoteIpAddress}";
+        }
 
         return RateLimitPartition.GetSlidingWindowLimiter(
             name,

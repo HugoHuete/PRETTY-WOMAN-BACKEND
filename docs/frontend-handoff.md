@@ -891,3 +891,14 @@ Ejemplo abreviado (la respuesta real incluye los 12 objetos de mes por cada año
   }
 }
 ```
+
+## Catálogo público
+
+El catálogo se publica como un sitio estático separado. Su API usa rutas anónimas bajo `/api/v1/catalog` y contratos que omiten los costos y el inventario comprometido. Las rutas administrativas conservan su autorización.
+
+- `GET /api/v1/catalog/filters` devuelve categorías con subcategorías y tallas.
+- `GET /api/v1/catalog/products?sizeId=1&onSale=true&sort=priceAsc&page=1` devuelve `items`, `totalCount`, `page` y `pageSize`. Los precios de cada prenda incluyen `originalPrice` y `finalPrice`, ambos en córdobas. El orden predeterminado es código descendente.
+- `GET /api/v1/catalog/products/{id}` devuelve fotos y variantes, incluido `maxQuantity`. Una prenda existente sin stock devuelve `soldOut: true`.
+- `POST /api/v1/catalog/selections` recibe el encabezado `Idempotency-Key` con un UUID y un cuerpo como `{"items":[{"variantId":123,"quantity":2}]}`. Devuelve `id` y `expiresAt`. Si la cantidad cambió, responde 409 con `unavailable` e indica las unidades disponibles por variante. La consulta no reserva inventario.
+- `GET /api/v1/catalog/selections/{id}` devuelve las líneas originales y los datos vigentes de precio y disponibilidad. Devuelve 410 al vencer después de 30 días.
+- `/compartir/prendas/{id}` y `/compartir/selecciones/{id}` entregan metadatos Open Graph y continúan al catálogo. `Catalog__Origin` define el destino y el origen CORS de producción.
