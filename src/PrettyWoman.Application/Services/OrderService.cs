@@ -541,6 +541,7 @@ public class OrderService(IApplicationDbContext context, IMapper mapper, IMediaU
         var trackingQuery = _context.OrderTrackingNumbers
             .AsNoTracking()
             .Include(tracking => tracking.Order)
+                .ThenInclude(order => order!.Supplier)
             .Include(tracking => tracking.ShippingCompany)
             .AsQueryable();
 

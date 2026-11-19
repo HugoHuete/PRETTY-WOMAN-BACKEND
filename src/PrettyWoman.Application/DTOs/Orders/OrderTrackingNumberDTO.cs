@@ -6,6 +6,8 @@ public class OrderTrackingNumberDTO
 {
     public int Id { get; set; }
     public int OrderId { get; set; }
+    public DateTime? PurchaseDate { get; set; }
+    public string? SupplierName { get; set; }
     public int ShippingCompanyId { get; set; }
 
     [Required(ErrorMessage = "Número de tracking es obligatorio.")]

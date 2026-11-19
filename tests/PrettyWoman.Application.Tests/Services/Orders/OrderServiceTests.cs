@@ -924,6 +924,8 @@ public class OrderServiceTests
         var tracking = Assert.Single(result.Items);
         Assert.Equal(firstOrderId, tracking.OrderId);
         Assert.Equal("GLOBAL-ALPHA", tracking.TrackingNumber);
+        Assert.Equal(firstOrder.PurchaseDate, tracking.PurchaseDate);
+        Assert.Equal("SOHO", tracking.SupplierName);
         Assert.Equal(1, result.Page);
         Assert.Equal(1, result.PageSize);
         Assert.Equal(1, result.TotalCount);

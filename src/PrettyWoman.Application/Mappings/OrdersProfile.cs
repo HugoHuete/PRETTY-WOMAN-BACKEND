@@ -27,6 +27,12 @@ public class OrdersProfile : Profile
         CreateMap<UpdateOrderTrackingNumberDTO, OrderTrackingNumber>();
         CreateMap<OrderTrackingNumber, OrderTrackingNumberDTO>()
             .ForMember(
+                destination => destination.PurchaseDate,
+                options => options.MapFrom(source => source.Order != null ? (DateTime?)source.Order.PurchaseDate : null))
+            .ForMember(
+                destination => destination.SupplierName,
+                options => options.MapFrom(source => source.Order != null && source.Order.Supplier != null ? source.Order.Supplier.Name : null))
+            .ForMember(
                 destination => destination.ShippingCompanyName,
                 options => options.MapFrom(source => source.ShippingCompany != null ? source.ShippingCompany.Name : null));
     }
