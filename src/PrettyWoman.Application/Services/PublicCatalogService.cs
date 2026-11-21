@@ -12,13 +12,16 @@ public sealed class PublicCatalogService(IApplicationDbContext context, IMediaUr
     {
         var page = Math.Clamp(request.Page, 1, 100_000);
         var pageSize = Math.Clamp(request.PageSize, 1, 60);
+        var categoryIds = FilterIds(request.CategoryIds, request.CategoryId);
+        var subcategoryIds = FilterIds(request.SubcategoryIds, request.SubcategoryId);
+        var sizeIds = FilterIds(request.SizeIds, request.SizeId);
         var candidates = context.Products.AsNoTracking()
             .Where(product => product.IsPublishedInCatalog && product.ProductVariants.Any(variant =>
-                variant.AvailableQuantity > 0 && (request.SizeId == null || variant.SizeId == request.SizeId)));
-        if (request.CategoryId is int category)
-            candidates = candidates.Where(product => product.Subcategory!.CategoryId == category);
-        if (request.SubcategoryId is int subcategory)
-            candidates = candidates.Where(product => product.SubcategoryId == subcategory);
+                variant.AvailableQuantity > 0 && (sizeIds.Length == 0 || sizeIds.Contains(variant.SizeId))));
+        if (categoryIds.Length > 0)
+            candidates = candidates.Where(product => product.Subcategory != null && categoryIds.Contains(product.Subcategory.CategoryId));
+        if (subcategoryIds.Length > 0)
+            candidates = candidates.Where(product => subcategoryIds.Contains(product.SubcategoryId));
 
         var now = DateTime.UtcNow;
         if (!request.OnSale && request.Sort is not ("priceAsc" or "priceDesc"))
@@ -27,7 +30,7 @@ public sealed class PublicCatalogService(IApplicationDbContext context, IMediaUr
             var newest = await WithImages(WithVariants(candidates.OrderByDescending(product => product.Code)
                 .ThenByDescending(product => product.Id).Skip((page - 1) * pageSize).Take(pageSize)))
                 .ToListAsync(cancellationToken);
-            return new(newest.Select(product => (Product: product, Variants: MatchingVariants(product, request, now)))
+            return new(newest.Select(product => (Product: product, Variants: MatchingVariants(product, sizeIds, request.OnSale, now)))
                 .Where(row => row.Variants.Length > 0)
                 .Select(row => Summarize(row.Product, row.Variants, ReadImages(row.Product)))
                 .ToArray(), count, page, pageSize);
@@ -37,7 +40,7 @@ public sealed class PublicCatalogService(IApplicationDbContext context, IMediaUr
         var pricedVariants =
             from variant in context.ProductVariants.AsNoTracking()
             join product in candidates on variant.ProductId equals product.Id
-            where variant.AvailableQuantity > 0 && (request.SizeId == null || variant.SizeId == request.SizeId)
+            where variant.AvailableQuantity > 0 && (sizeIds.Length == 0 || sizeIds.Contains(variant.SizeId))
             let discount = (from target in context.DiscountCampaignProducts
                 where (target.ProductPresentationId == variant.ProductPresentationId || target.ProductId == variant.ProductId) &&
                       target.DiscountCampaign != null && target.DiscountCampaign.CancelledAt == null &&
@@ -75,7 +78,7 @@ public sealed class PublicCatalogService(IApplicationDbContext context, IMediaUr
             if (!productsById.TryGetValue(id, out var product))
                 continue;
 
-            var variants = MatchingVariants(product, request, now);
+            var variants = MatchingVariants(product, sizeIds, request.OnSale, now);
             if (variants.Length > 0)
                 items.Add(Summarize(product, variants, ReadImages(product)));
         }
@@ -154,10 +157,13 @@ public sealed class PublicCatalogService(IApplicationDbContext context, IMediaUr
             .SelectMany(presentation => presentation.ProductVariants.OrderBy(variant => variant.Size?.DisplayOrder)
                 .ThenBy(variant => variant.Id).Select(variant => PriceVariant(product, presentation, variant, now)));
 
-    private static CatalogVariantDTO[] MatchingVariants(Product product, CatalogQueryDTO request, DateTime now) =>
+    private static int[] FilterIds(int[]? multiple, int? single) =>
+        multiple is { Length: > 0 } ? multiple : single is int id ? [id] : [];
+
+    private static CatalogVariantDTO[] MatchingVariants(Product product, int[] sizeIds, bool onSale, DateTime now) =>
         ReadVariants(product, now).Where(variant => variant.MaxQuantity > 0 &&
-            (request.SizeId == null || variant.SizeId == request.SizeId) &&
-            (!request.OnSale || variant.FinalPrice < variant.OriginalPrice)).ToArray();
+            (sizeIds.Length == 0 || sizeIds.Contains(variant.SizeId)) &&
+            (!onSale || variant.FinalPrice < variant.OriginalPrice)).ToArray();
 
     private CatalogImageDTO[] ReadImages(Product product) => product.ProductImages
         .Where(image => image.MediaAsset is { Visibility: MediaVisibility.Public, Status: MediaAssetStatus.Ready })

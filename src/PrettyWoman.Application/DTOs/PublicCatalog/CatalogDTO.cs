@@ -2,7 +2,8 @@ namespace PrettyWoman.Application.DTOs.PublicCatalog;
 
 public sealed record CatalogQueryDTO(
     int? CategoryId = null, int? SubcategoryId = null, int? SizeId = null,
-    bool OnSale = false, string Sort = "newest", int Page = 1, int PageSize = 24);
+    bool OnSale = false, string Sort = "newest", int Page = 1, int PageSize = 24,
+    int[]? CategoryIds = null, int[]? SubcategoryIds = null, int[]? SizeIds = null);
 
 public sealed record CatalogOptionDTO(int Id, string Name);
 public sealed record CatalogCategoryDTO(int Id, string Name, IReadOnlyList<CatalogOptionDTO> Subcategories);

@@ -55,6 +55,63 @@ public class PublicCatalogServiceTests
         Assert.Equal(available.ProductId, Assert.Single(result.Items).Id);
     }
 
+    [Theory]
+    [InlineData("newest")]
+    [InlineData("priceAsc")]
+    public async Task ListAsync_MatchesAnyValueWithinEachActiveFilter(string sort)
+    {
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        await using var context = new ApplicationDbContext(options);
+        var clothing = new Category { Name = "Ropa" };
+        var shoes = new Category { Name = "Calzado" };
+        var other = new Category { Name = "Accesorios" };
+        var blouses = new Subcategory { Name = "Blusas", Category = clothing };
+        var sandals = new Subcategory { Name = "Sandalias", Category = shoes };
+        var bags = new Subcategory { Name = "Bolsos", Category = other };
+        var dresses = new Subcategory { Name = "Vestidos", Category = clothing };
+        var group = new SizeGroup { Name = "Tallas" };
+        var small = new Size { Name = "S", SizeGroup = group };
+        var medium = new Size { Name = "M", SizeGroup = group };
+        var large = new Size { Name = "L", SizeGroup = group };
+
+        AddVariant(1, blouses, small, 10);
+        AddVariant(2, sandals, medium, 20);
+        AddVariant(3, bags, small, 30);
+        AddVariant(4, dresses, small, 40);
+        AddVariant(5, blouses, large, 5);
+        await context.SaveChangesAsync();
+        context.ChangeTracker.Clear();
+
+        var result = await new PublicCatalogService(context, new Resolver()).ListAsync(new(
+            Sort: sort, CategoryIds: [clothing.Id, shoes.Id],
+            SubcategoryIds: [blouses.Id, sandals.Id, bags.Id], SizeIds: [small.Id, medium.Id]));
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(new[] { 1, 2 }, result.Items.Select(item => item.Code).OrderBy(code => code));
+        Assert.Equal(new[] { "S", "M" }, result.Items.OrderBy(item => item.Code).Select(item => Assert.Single(item.Sizes)));
+
+        void AddVariant(int code, Subcategory subcategory, Size size, decimal price)
+        {
+            var product = new Product
+            {
+                Code = code,
+                IsPublishedInCatalog = true,
+                Name = $"Prenda {code}",
+                SupplierProductCode = $"SKU-{code}",
+                Subcategory = subcategory
+            };
+            context.ProductVariants.Add(new ProductVariant
+            {
+                Product = product,
+                ProductPresentation = new ProductPresentation { Product = product },
+                Size = size,
+                AvailableQuantity = 1,
+                SalePrice = price
+            });
+        }
+    }
+
     private sealed class BeforeLoadingPage(Action updateInventory) : IQueryExpressionInterceptor
     {
         public bool Ran { get; private set; }

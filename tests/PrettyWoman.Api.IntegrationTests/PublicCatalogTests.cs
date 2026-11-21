@@ -99,6 +99,15 @@ public sealed class PublicCatalogTests(PrettyWomanApiFactory factory)
         var sorted = await client.GetFromJsonAsync<CatalogPageDTO>($"/api/v1/catalog/products?{filter}&sort=priceAsc&pageSize=1");
         var sale = await client.GetFromJsonAsync<CatalogPageDTO>($"/api/v1/catalog/products?{filter}&onSale=true");
 
+        var sizeId = await context.ProductVariants.Where(variant => variant.Id == first.ProductVariantId)
+            .Select(variant => variant.SizeId).SingleAsync();
+        var categoryId = await context.Subcategories.Where(subcategory => subcategory.Id == firstProduct.SubcategoryId)
+            .Select(subcategory => subcategory.CategoryId).SingleAsync();
+        var multiple = await client.GetFromJsonAsync<CatalogPageDTO>("/api/v1/catalog/products?" +
+            $"categoryIds=0&categoryIds={categoryId}&subcategoryIds=0&subcategoryIds={firstProduct.SubcategoryId}" +
+            $"&sizeIds=0&sizeIds={sizeId}&sort=priceAsc&onSale=true");
+        Assert.Equal(first.ProductId, Assert.Single(multiple!.Items).Id);
+
         Assert.Equal(2, sorted!.TotalCount);
         Assert.Equal(second.ProductId, Assert.Single(sorted.Items).Id);
         var discounted = Assert.Single(sale!.Items);
