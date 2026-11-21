@@ -83,6 +83,39 @@ public class ProductServiceTests
         Assert.Empty(published.Unavailable);
     }
 
+    [Fact]
+    public async Task CreateSelection_RevalidatesExistingKeyBeforeReturningItsLinkWhenRequested()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var variant = await context.ProductVariants.Include(item => item.Product)
+            .FirstAsync(item => item.AvailableQuantity > 0);
+        variant.Product!.IsPublishedInCatalog = true;
+        await context.SaveChangesAsync();
+
+        var service = new SharedCatalogSelectionService(context);
+        var key = Guid.NewGuid();
+        SelectionItemDTO[] items = [new(variant.Id, 1)];
+        var original = await service.CreateAsync(key, items);
+        var replay = await service.CreateAsync(key, items, revalidateExisting: true);
+        Assert.NotNull(original.Link);
+        Assert.Equal(original.Link, replay.Link);
+
+        variant.SalePrice += 100m;
+        await context.SaveChangesAsync();
+        var changed = await service.CreateAsync(key, items, revalidateExisting: true);
+        Assert.Null(changed.Link);
+        Assert.True(changed.KeyConflict);
+
+        variant.AvailableQuantity = 0;
+        await context.SaveChangesAsync();
+        var exhausted = await service.CreateAsync(key, items, revalidateExisting: true);
+        Assert.Null(exhausted.Link);
+        Assert.Equal(new SelectionConflictDTO(variant.Id, 0), Assert.Single(exhausted.Unavailable));
+        Assert.Equal(original.Link, (await service.CreateAsync(key, items)).Link);
+        Assert.Single(await context.SharedCatalogSelections.ToListAsync());
+    }
+
     [Theory]
     [InlineData(150, 150)]
     [InlineData(200, 200)]

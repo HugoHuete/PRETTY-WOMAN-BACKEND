@@ -11,19 +11,17 @@ public sealed class SharedCatalogSelectionService(IApplicationDbContext context)
     public const int MaximumLines = 30;
 
     public async Task<CreateSelectionResult> CreateAsync(Guid key, IReadOnlyList<SelectionItemDTO> items,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default, bool revalidateExisting = false)
     {
         var ordered = items.OrderBy(item => item.VariantId).ToArray();
         var existing = await FindByKeyAsync(key, cancellationToken);
         if (existing is not null)
-            return CheckExisting(existing, ordered);
+            return await CheckExistingAsync(existing, ordered, revalidateExisting, cancellationToken);
 
         var now = DateTime.UtcNow;
         var current = await ReadVariantsAsync(ordered.Select(item => item.VariantId), now, cancellationToken,
             publishedOnly: true);
-        var conflicts = ordered.Where(item => (current.GetValueOrDefault(item.VariantId)?.Variant.MaxQuantity ?? 0) < item.Quantity)
-            .Select(item => new SelectionConflictDTO(item.VariantId, current.GetValueOrDefault(item.VariantId)?.Variant.MaxQuantity ?? 0))
-            .ToArray();
+        var conflicts = FindUnavailable(ordered, current);
         if (conflicts.Length > 0)
             return new(null, conflicts);
 
@@ -53,7 +51,7 @@ public sealed class SharedCatalogSelectionService(IApplicationDbContext context)
             existing = await FindByKeyAsync(key, cancellationToken);
             if (existing is null)
                 throw;
-            return CheckExisting(existing, ordered);
+            return await CheckExistingAsync(existing, ordered, revalidateExisting, cancellationToken);
         }
         return new(new(selection.Id, selection.ExpiresAt), []);
     }
@@ -86,14 +84,35 @@ public sealed class SharedCatalogSelectionService(IApplicationDbContext context)
     private static SelectionLineDTO[] ReadSnapshot(SharedCatalogSelection selection) =>
         JsonSerializer.Deserialize<SelectionLineDTO[]>(selection.Snapshot)!;
 
-    private static CreateSelectionResult CheckExisting(SharedCatalogSelection selection, SelectionItemDTO[] ordered)
+    private async Task<CreateSelectionResult> CheckExistingAsync(SharedCatalogSelection selection,
+        SelectionItemDTO[] ordered, bool revalidate, CancellationToken cancellationToken)
     {
-        var matches = ReadSnapshot(selection).Select(line => new SelectionItemDTO(line.VariantId, line.Quantity))
-            .SequenceEqual(ordered);
-        return matches && selection.ExpiresAt > DateTime.UtcNow
-            ? new(new(selection.Id, selection.ExpiresAt), [])
-            : new(null, [], true);
+        var snapshot = ReadSnapshot(selection);
+        var now = DateTime.UtcNow;
+        if (selection.ExpiresAt <= now ||
+            !snapshot.Select(line => new SelectionItemDTO(line.VariantId, line.Quantity)).SequenceEqual(ordered))
+            return new(null, [], true);
+
+        if (revalidate)
+        {
+            var current = await ReadVariantsAsync(ordered.Select(item => item.VariantId), now, cancellationToken,
+                publishedOnly: true);
+            var conflicts = FindUnavailable(ordered, current);
+            if (conflicts.Length > 0)
+                return new(null, conflicts);
+            if (snapshot.Any(line => line.UnitPrice != current[line.VariantId].Variant.FinalPrice))
+                return new(null, [], true);
+        }
+
+        return new(new(selection.Id, selection.ExpiresAt), []);
     }
+
+    private static SelectionConflictDTO[] FindUnavailable(SelectionItemDTO[] items,
+        Dictionary<int, LiveVariant> current) => items
+        .Select(item => (Item: item, Available: current.GetValueOrDefault(item.VariantId)?.Variant.MaxQuantity ?? 0))
+        .Where(row => row.Available < row.Item.Quantity)
+        .Select(row => new SelectionConflictDTO(row.Item.VariantId, row.Available))
+        .ToArray();
 
     private async Task<Dictionary<int, LiveVariant>> ReadVariantsAsync(IEnumerable<int> variantIds, DateTime now,
         CancellationToken cancellationToken, bool publishedOnly = false)

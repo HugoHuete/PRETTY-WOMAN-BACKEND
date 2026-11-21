@@ -18,14 +18,14 @@ public sealed class SharedCatalogSelectionsController(SharedCatalogSelectionServ
     [EnableRateLimiting("CatalogSelectionCreation")]
     [RequestSizeLimit(8192)]
     public async Task<ActionResult<SelectionLinkDTO>> Create([FromBody] CreateSelectionDTO request,
-        [FromHeader(Name = "Idempotency-Key")] Guid key, CancellationToken cancellationToken)
+        [FromHeader(Name = "Idempotency-Key")] Guid key, [FromQuery] bool revalidateExisting, CancellationToken cancellationToken)
     {
         if (key == Guid.Empty || request.Items is not { Count: > 0 and <= SharedCatalogSelectionService.MaximumLines } items ||
             items.Any(item => item is null || item.VariantId <= 0 || item.Quantity <= 0) ||
             items.Select(item => item.VariantId).Distinct().Count() != items.Count)
             return BadRequest(new { message = "La selección debe incluir variantes únicas y cantidades válidas." });
 
-        var result = await selections.CreateAsync(key, items, cancellationToken);
+        var result = await selections.CreateAsync(key, items, cancellationToken, revalidateExisting);
         if (result.Link is not null)
             return Ok(result.Link);
 
