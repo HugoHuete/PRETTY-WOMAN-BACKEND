@@ -54,7 +54,7 @@ When the delivery includes products sent for selection, it can be marked as `Del
 The creation request does not accept `amountCollectedNio`, `amountCollectedUsd`, or `shippingPaidToAgency`. Those fields are recorded during a later reconciliation with the agency.
 ## Update request
 
-`PATCH /api/v1/sales/{saleId}/deliveries/{deliveryId}` accepts any combination of these fields:
+Admins and sellers can use `PATCH /api/v1/sales/{saleId}/deliveries/{deliveryId}` with any combination of these fields:
 
 ```json
 {

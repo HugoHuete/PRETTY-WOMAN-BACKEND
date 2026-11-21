@@ -258,7 +258,6 @@ public class SalesController(
     }
 
     /// <summary>Actualiza la información logística de un envío antes de que sea cerrado.</summary>
-    [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPatch("{id:int}/deliveries/{deliveryId:int}")]
     public async Task<IActionResult> UpdateDelivery(int id, int deliveryId, [FromBody] PatchSaleDeliveryDTO delivery)
     {

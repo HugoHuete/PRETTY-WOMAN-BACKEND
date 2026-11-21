@@ -21,6 +21,46 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
     private readonly PrettyWomanApiFactory _factory = factory;
 
     [Fact]
+    public async Task EmployeeCanUpdatePendingSaleDelivery()
+    {
+        var product = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        var location = await _factory.SeedDeliveryLocationAsync();
+        using var employee = await CreateEmployeeClientAsync();
+        var response = await employee.PostAsJsonAsync("/api/v1/sales", new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = product.ProductVariantId, Quantity = 1 }],
+            Delivery = new CreateSaleDeliveryDTO
+            {
+                Code = $"EDIT-{Guid.NewGuid():N}"[..20],
+                MunicipalityId = location.MunicipalityId,
+                DeliveryAgencyId = location.DeliveryAgencyId,
+                ShippingChargedToClient = 50m
+            }
+        });
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var saleId = await response.Content.ReadFromJsonAsync<int>();
+        var salePath = $"/api/v1/sales/{saleId}";
+        var sale = await employee.GetFromJsonAsync<SaleDTO>(salePath);
+        Assert.NotNull(sale);
+        var delivery = Assert.Single(sale.Deliveries);
+        var newCode = $"EDIT-{Guid.NewGuid():N}"[..20];
+
+        var patch = await employee.PatchAsJsonAsync($"{salePath}/deliveries/{delivery.Id}", new
+        {
+            Code = newCode,
+            ShippingChargedToClient = 75m
+        });
+
+        Assert.Equal(HttpStatusCode.NoContent, patch.StatusCode);
+        var updatedSale = await employee.GetFromJsonAsync<SaleDTO>(salePath);
+        Assert.NotNull(updatedSale);
+        var updatedDelivery = Assert.Single(updatedSale.Deliveries);
+        Assert.Equal(newCode, updatedDelivery.Code);
+        Assert.Equal(75m, updatedDelivery.ShippingChargedToClient);
+    }
+
+    [Fact]
     public async Task CreateSaleWithDelivery_RecordsCombinedPayment()
     {
         var product = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
