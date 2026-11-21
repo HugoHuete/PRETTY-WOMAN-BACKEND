@@ -56,16 +56,19 @@ public sealed class PublicCatalogTests(PrettyWomanApiFactory factory)
     }
 
     [Fact]
-    public async Task AnonymousCatalogExcludesSoldOutProductsAndKeepsTheirDetails()
+    public async Task AnonymousCatalogExcludesUnpublishedAndSoldOutProductsAndKeepsPublishedSoldOutDetails()
     {
-        var available = await factory.SeedProductAsync(2, 2, 2);
-        var soldOut = await factory.SeedProductAsync(1, 1, 0);
+        var available = await factory.SeedProductAsync(2, 2, 2, isPublishedInCatalog: true);
+        var unpublished = await factory.SeedProductAsync(2, 2, 2);
+        var soldOut = await factory.SeedProductAsync(1, 1, 0, isPublishedInCatalog: true);
         using var client = factory.CreateClient();
 
         var page = await client.GetFromJsonAsync<CatalogPageDTO>("/api/v1/catalog/products?pageSize=60");
         Assert.NotNull(page);
         Assert.Contains(page.Items, product => product.Id == available.ProductId);
         Assert.DoesNotContain(page.Items, product => product.Id == soldOut.ProductId);
+        Assert.DoesNotContain(page.Items, product => product.Id == unpublished.ProductId);
+        Assert.Equal(HttpStatusCode.NotFound, (await client.GetAsync($"/api/v1/catalog/products/{unpublished.ProductId}")).StatusCode);
 
         var detail = await client.GetFromJsonAsync<CatalogDetailDTO>($"/api/v1/catalog/products/{soldOut.ProductId}");
         Assert.True(detail!.SoldOut);
@@ -78,8 +81,8 @@ public sealed class PublicCatalogTests(PrettyWomanApiFactory factory)
     [Fact]
     public async Task PriceSortingAndSaleFiltering_UsePresentationDiscountAndPaginate()
     {
-        var first = await factory.SeedProductAsync(2, 2, 2, 100m);
-        var second = await factory.SeedProductAsync(2, 2, 2, 90m);
+        var first = await factory.SeedProductAsync(2, 2, 2, 100m, isPublishedInCatalog: true);
+        var second = await factory.SeedProductAsync(2, 2, 2, 90m, isPublishedInCatalog: true);
         using var scope = factory.Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
         var firstProduct = await context.Products.FindAsync(first.ProductId);
@@ -107,7 +110,7 @@ public sealed class PublicCatalogTests(PrettyWomanApiFactory factory)
     [Fact]
     public async Task ConcurrentSelectionRetriesRetainOriginalPriceAndReportCurrentStock()
     {
-        var product = await factory.SeedProductAsync(2, 2, 2, 600);
+        var product = await factory.SeedProductAsync(2, 2, 2, 600, isPublishedInCatalog: true);
         using var client = factory.CreateClient();
         var key = Guid.NewGuid();
         var attempts = await Task.WhenAll(CreateAsync(2, key), CreateAsync(2, key));

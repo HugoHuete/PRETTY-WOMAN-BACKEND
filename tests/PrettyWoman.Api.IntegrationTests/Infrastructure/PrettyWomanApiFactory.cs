@@ -108,7 +108,8 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
         int quantity,
         int receivedQuantity,
         int availableQuantity,
-        decimal salePrice = 1000m)
+        decimal salePrice = 1000m,
+        bool isPublishedInCatalog = false)
     {
         using var scope = Services.CreateScope();
         var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
@@ -146,7 +147,8 @@ public sealed class PrettyWomanApiFactory : WebApplicationFactory<Program>, IAsy
             SupplierProductCode = $"SKU-{suffix}",
             Code = nextProductCode,
             Name = $"Producto integración {suffix}",
-            Subcategory = subcategory
+            Subcategory = subcategory,
+            IsPublishedInCatalog = isPublishedInCatalog
         };
         var presentation = new ProductPresentation
         {

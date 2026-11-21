@@ -13,7 +13,7 @@ public sealed class PublicCatalogService(IApplicationDbContext context, IMediaUr
         var page = Math.Clamp(request.Page, 1, 100_000);
         var pageSize = Math.Clamp(request.PageSize, 1, 60);
         var candidates = context.Products.AsNoTracking()
-            .Where(product => product.ProductVariants.Any(variant =>
+            .Where(product => product.IsPublishedInCatalog && product.ProductVariants.Any(variant =>
                 variant.AvailableQuantity > 0 && (request.SizeId == null || variant.SizeId == request.SizeId)));
         if (request.CategoryId is int category)
             candidates = candidates.Where(product => product.Subcategory!.CategoryId == category);
@@ -84,7 +84,7 @@ public sealed class PublicCatalogService(IApplicationDbContext context, IMediaUr
 
     public async Task<CatalogDetailDTO?> GetAsync(int id, CancellationToken cancellationToken = default)
     {
-        var product = await WithImages(WithVariants(context.Products.AsNoTracking().Where(product => product.Id == id &&
+        var product = await WithImages(WithVariants(context.Products.AsNoTracking().Where(product => product.Id == id && product.IsPublishedInCatalog &&
             product.ProductVariants.Any(variant => variant.ReceivedQuantity > 0 || variant.AvailableQuantity > 0))))
             .SingleOrDefaultAsync(cancellationToken);
         if (product is null)
@@ -98,7 +98,7 @@ public sealed class PublicCatalogService(IApplicationDbContext context, IMediaUr
     public async Task<CatalogFiltersDTO> FiltersAsync(CancellationToken cancellationToken = default)
     {
         var stockedSubcategories = await context.Subcategories.AsNoTracking()
-            .Where(subcategory => subcategory.Products.Any(product =>
+            .Where(subcategory => subcategory.Products.Any(product => product.IsPublishedInCatalog &&
                 product.ProductVariants.Any(variant => variant.AvailableQuantity > 0)))
             .OrderBy(subcategory => subcategory.Category!.Name).ThenBy(subcategory => subcategory.Name)
             .Select(subcategory => new

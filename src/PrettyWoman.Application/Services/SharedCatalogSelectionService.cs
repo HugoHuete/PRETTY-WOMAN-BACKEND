@@ -19,7 +19,8 @@ public sealed class SharedCatalogSelectionService(IApplicationDbContext context)
             return CheckExisting(existing, ordered);
 
         var now = DateTime.UtcNow;
-        var current = await ReadVariantsAsync(ordered.Select(item => item.VariantId), now, cancellationToken);
+        var current = await ReadVariantsAsync(ordered.Select(item => item.VariantId), now, cancellationToken,
+            publishedOnly: true);
         var conflicts = ordered.Where(item => (current.GetValueOrDefault(item.VariantId)?.Variant.MaxQuantity ?? 0) < item.Quantity)
             .Select(item => new SelectionConflictDTO(item.VariantId, current.GetValueOrDefault(item.VariantId)?.Variant.MaxQuantity ?? 0))
             .ToArray();
@@ -95,11 +96,11 @@ public sealed class SharedCatalogSelectionService(IApplicationDbContext context)
     }
 
     private async Task<Dictionary<int, LiveVariant>> ReadVariantsAsync(IEnumerable<int> variantIds, DateTime now,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken, bool publishedOnly = false)
     {
         var ids = variantIds.ToArray();
         var variants = await context.ProductVariants.AsNoTracking()
-            .Where(variant => ids.Contains(variant.Id))
+            .Where(variant => ids.Contains(variant.Id) && (!publishedOnly || variant.Product!.IsPublishedInCatalog))
             .Include(variant => variant.Size)
             .Include(variant => variant.Product).ThenInclude(product => product!.DiscountCampaignProducts)
                 .ThenInclude(target => target.DiscountCampaign)

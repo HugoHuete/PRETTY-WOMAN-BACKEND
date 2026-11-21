@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using ClosedXML.Excel;
 using PrettyWoman.Application.DTOs.Products;
+using PrettyWoman.Application.DTOs.PublicCatalog;
 using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Interfaces;
 using PrettyWoman.Application.Services;
@@ -19,6 +20,8 @@ public class ProductServiceTests
         await using var context = CreateContext();
         await SeedProductsAsync(context);
         var variant = await context.ProductVariants.FirstAsync();
+        var product = await context.Products.SingleAsync(item => item.Id == variant.ProductId);
+        product.IsPublishedInCatalog = true;
         variant.AvailableQuantity = 1;
         await context.SaveChangesAsync();
 
@@ -40,6 +43,7 @@ public class ProductServiceTests
         await using var context = CreateContext();
         await SeedProductsAsync(context);
         var product = await context.Products.Include(item => item.ProductVariants).FirstAsync();
+        product.IsPublishedInCatalog = true;
         foreach (var variant in product.ProductVariants)
         {
             variant.ReceivedQuantity = 0;
@@ -51,6 +55,32 @@ public class ProductServiceTests
 
         var catalog = new PublicCatalogService(context, new TestMediaUrlResolver());
         Assert.Null(await catalog.GetAsync(product.Id));
+    }
+
+    [Fact]
+    public async Task CreateSelection_RequiresPublishedProductEvenWhenVariantHasStock()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+        var variant = await context.ProductVariants.Include(item => item.Product)
+            .FirstAsync(item => item.AvailableQuantity > 0);
+        var service = new SharedCatalogSelectionService(context);
+        var key = Guid.NewGuid();
+        SelectionItemDTO[] items = [new(variant.Id, 1)];
+
+        var unpublished = await service.CreateAsync(key, items);
+
+        Assert.Null(unpublished.Link);
+        Assert.Equal(new SelectionConflictDTO(variant.Id, 0), Assert.Single(unpublished.Unavailable));
+        Assert.Empty(await context.SharedCatalogSelections.ToListAsync());
+
+        variant.Product!.IsPublishedInCatalog = true;
+        await context.SaveChangesAsync();
+
+        var published = await service.CreateAsync(key, items);
+
+        Assert.NotNull(published.Link);
+        Assert.Empty(published.Unavailable);
     }
 
     [Theory]

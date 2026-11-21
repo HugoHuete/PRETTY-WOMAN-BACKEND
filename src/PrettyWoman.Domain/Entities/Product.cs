@@ -7,6 +7,7 @@ public class Product
     public int Code { get; set; }
     public required string Name { get; set; }
     public int SubcategoryId { get; set; }
+    public bool IsPublishedInCatalog { get; set; }
 
     public Subcategory? Subcategory { get; set; }
 

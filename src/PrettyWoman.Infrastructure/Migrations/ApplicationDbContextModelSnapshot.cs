@@ -2579,6 +2579,12 @@ namespace PrettyWoman.Infrastructure.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("code");
 
+                    b.Property<bool>("IsPublishedInCatalog")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_published_in_catalog");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(200)

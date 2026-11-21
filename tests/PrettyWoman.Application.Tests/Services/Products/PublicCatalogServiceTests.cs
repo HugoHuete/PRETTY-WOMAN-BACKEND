@@ -23,7 +23,7 @@ public class PublicCatalogServiceTests
 
         ProductVariant AddVariant(int code, decimal price)
         {
-            var product = new Product { Code = code, Name = $"Prenda {code}", SupplierProductCode = $"SKU-{code}", Subcategory = subcategory };
+            var product = new Product { IsPublishedInCatalog = true, Code = code, Name = $"Prenda {code}", SupplierProductCode = $"SKU-{code}", Subcategory = subcategory };
             return inventory.ProductVariants.Add(new ProductVariant
             {
                 Product = product,
@@ -80,8 +80,8 @@ public class PublicCatalogServiceTests
         var category = new Category { Name = "Ropa" };
         var subcategory = new Subcategory { Name = "Blusas", Category = category };
         var size = new Size { Name = "M", SizeGroup = new SizeGroup { Name = "Ropa" } };
-        var product = new Product { Name = "Con descuento", SupplierProductCode = "A", Code = 1, Subcategory = subcategory };
-        var other = new Product { Name = "Sin descuento", SupplierProductCode = "B", Code = 2, Subcategory = subcategory };
+        var product = new Product { IsPublishedInCatalog = true, Name = "Con descuento", SupplierProductCode = "A", Code = 1, Subcategory = subcategory };
+        var other = new Product { IsPublishedInCatalog = true, Name = "Sin descuento", SupplierProductCode = "B", Code = 2, Subcategory = subcategory };
         var presentation = new ProductPresentation { Product = product };
         var otherPresentation = new ProductPresentation { Product = other };
         context.ProductVariants.AddRange(
@@ -105,7 +105,7 @@ public class PublicCatalogServiceTests
     }
 
     [Fact]
-    public async Task FiltersAsync_OnlyListsCategoriesAndSubcategoriesWithAvailableProducts()
+    public async Task Catalog_ExcludesUnpublishedProductsFromListDetailAndCategories()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
@@ -116,19 +116,26 @@ public class PublicCatalogServiceTests
         var other = new Subcategory { Name = "Bolsos", Category = new Category { Name = "Accesorios" } };
         var size = new Size { Name = "M", SizeGroup = new SizeGroup { Name = "Ropa" } };
 
-        foreach (var (subcategory, quantity) in new[] { (stocked, 2), (soldOut, 0), (other, 0) })
+        foreach (var (subcategory, quantity) in new[] { (stocked, 2), (soldOut, 0), (other, 2) })
         {
-            var product = new Product { Name = subcategory.Name, SupplierProductCode = subcategory.Name, Subcategory = subcategory };
+            var product = new Product { IsPublishedInCatalog = subcategory != other, Name = subcategory.Name, SupplierProductCode = subcategory.Name, Subcategory = subcategory };
             context.ProductVariants.Add(new ProductVariant
             {
                 Product = product, ProductPresentation = new ProductPresentation { Product = product },
-                Size = size, AvailableQuantity = quantity
+                Size = size, AvailableQuantity = quantity, ReceivedQuantity = quantity
             });
         }
         await context.SaveChangesAsync();
         context.ChangeTracker.Clear();
 
-        var filters = await new PublicCatalogService(context, new Resolver()).FiltersAsync();
+        var service = new PublicCatalogService(context, new Resolver());
+        var hiddenId = await context.Products.Where(product => !product.IsPublishedInCatalog)
+            .Select(product => product.Id).SingleAsync();
+        var page = await service.ListAsync(new CatalogQueryDTO());
+        Assert.Equal("Blusas", Assert.Single(page.Items).Name);
+        Assert.Null(await service.GetAsync(hiddenId));
+
+        var filters = await service.FiltersAsync();
 
         var category = Assert.Single(filters.Categories);
         Assert.Equal("Ropa", category.Name);
@@ -167,7 +174,7 @@ public class PublicCatalogServiceTests
         var group = new SizeGroup { Name = "Ropa" };
         var small = new Size { Name = "S", SizeGroup = group };
         var medium = new Size { Name = "M", SizeGroup = group };
-        var product = new Product { Name = "Blusa", SupplierProductCode = "A", Code = 1, Subcategory = subcategory };
+        var product = new Product { IsPublishedInCatalog = true, Name = "Blusa", SupplierProductCode = "A", Code = 1, Subcategory = subcategory };
         var blue = new ProductPresentation { Product = product, Name = "Azul", SortOrder = 1 };
         var pink = new ProductPresentation { Product = product, Name = "Rosa", SortOrder = 2 };
         var black = new ProductPresentation { Product = product, Name = "Negro", SortOrder = 3 };
