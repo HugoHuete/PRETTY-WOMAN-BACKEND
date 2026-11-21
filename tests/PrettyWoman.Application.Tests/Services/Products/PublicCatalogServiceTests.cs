@@ -91,6 +91,13 @@ public class PublicCatalogServiceTests
         Assert.Equal(new[] { 1, 2 }, result.Items.Select(item => item.Code).OrderBy(code => code));
         Assert.Equal(new[] { "S", "M" }, result.Items.OrderBy(item => item.Code).Select(item => Assert.Single(item.Sizes)));
 
+        var mixed = await new PublicCatalogService(context, new Resolver()).ListAsync(new(
+            Sort: sort, CategoryIds: [clothing.Id], SubcategoryIds: [sandals.Id],
+            SizeIds: [small.Id, medium.Id], MatchAnyCategory: true));
+
+        Assert.Equal(3, mixed.TotalCount);
+        Assert.Equal(new[] { 1, 2, 4 }, mixed.Items.Select(item => item.Code).OrderBy(code => code));
+
         void AddVariant(int code, Subcategory subcategory, Size size, decimal price)
         {
             var product = new Product
@@ -200,21 +207,35 @@ public class PublicCatalogServiceTests
     }
 
     [Fact]
-    public async Task FiltersAsync_OrdersSizeGroupsByIdAndSizesByDisplayOrder()
+    public async Task FiltersAsync_ListsOnlyStockedPublishedSizesInDisplayOrder()
     {
         var options = new DbContextOptionsBuilder<ApplicationDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
         await using var context = new ApplicationDbContext(options);
         var clothing = new SizeGroup { Id = 2, Name = "Ropa" };
         var shoes = new SizeGroup { Id = 5, Name = "Calzado" };
-        context.Sizes.AddRange(
-            new Size { Name = "M", SizeGroup = clothing, DisplayOrder = 2 },
-            new Size { Name = "7", SizeGroup = shoes, DisplayOrder = 1 },
-            new Size { Name = "S", SizeGroup = clothing, DisplayOrder = 1 });
+        var hiddenGroup = new SizeGroup { Id = 6, Name = "Otros" };
+        var published = new Product { IsPublishedInCatalog = true, Name = "Publicada", SupplierProductCode = "A" };
+        var hidden = new Product { Name = "Oculta", SupplierProductCode = "B" };
+        var publishedColor = new ProductPresentation { Product = published };
+        var hiddenColor = new ProductPresentation { Product = hidden };
+        var medium = new Size { Name = "M", SizeGroup = clothing, DisplayOrder = 2 };
+        context.Sizes.Add(new Size { Name = "XL", SizeGroup = clothing, DisplayOrder = 4 });
+        context.ProductVariants.AddRange(
+            new ProductVariant { ProductPresentation = publishedColor, Product = published, Size = medium, AvailableQuantity = 1 },
+            new ProductVariant { ProductPresentation = publishedColor, Product = published, Size =
+                new Size { Name = "7", SizeGroup = shoes, DisplayOrder = 1 }, AvailableQuantity = 1 },
+            new ProductVariant { ProductPresentation = publishedColor, Product = published, Size =
+                new Size { Name = "S", SizeGroup = clothing, DisplayOrder = 1 }, AvailableQuantity = 1 },
+            new ProductVariant { ProductPresentation = publishedColor, Product = published, Size =
+                new Size { Name = "L", SizeGroup = clothing, DisplayOrder = 3 }, AvailableQuantity = 0 },
+            new ProductVariant { ProductPresentation = hiddenColor, Product = hidden, Size =
+                new Size { Name = "Única", SizeGroup = hiddenGroup, DisplayOrder = 1 }, AvailableQuantity = 1 });
         await context.SaveChangesAsync();
 
         var filters = await new PublicCatalogService(context, new Resolver()).FiltersAsync();
 
+        Assert.Equal(new[] { "S", "M", "7" }, filters.Sizes.Select(size => size.Name));
         Assert.Equal(new[] { 2, 5 }, filters.SizeGroups.Select(group => group.Id));
         Assert.Equal(new[] { "S", "M" }, filters.SizeGroups[0].Sizes.Select(size => size.Name));
         Assert.Equal("7", Assert.Single(filters.SizeGroups[1].Sizes).Name);

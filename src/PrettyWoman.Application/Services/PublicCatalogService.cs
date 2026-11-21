@@ -18,10 +18,18 @@ public sealed class PublicCatalogService(IApplicationDbContext context, IMediaUr
         var candidates = context.Products.AsNoTracking()
             .Where(product => product.IsPublishedInCatalog && product.ProductVariants.Any(variant =>
                 variant.AvailableQuantity > 0 && (sizeIds.Length == 0 || sizeIds.Contains(variant.SizeId))));
-        if (categoryIds.Length > 0)
-            candidates = candidates.Where(product => product.Subcategory != null && categoryIds.Contains(product.Subcategory.CategoryId));
-        if (subcategoryIds.Length > 0)
-            candidates = candidates.Where(product => subcategoryIds.Contains(product.SubcategoryId));
+        if (request.MatchAnyCategory && categoryIds.Length > 0 && subcategoryIds.Length > 0)
+        {
+            candidates = candidates.Where(product => subcategoryIds.Contains(product.SubcategoryId) ||
+                (product.Subcategory != null && categoryIds.Contains(product.Subcategory.CategoryId)));
+        }
+        else
+        {
+            if (categoryIds.Length > 0)
+                candidates = candidates.Where(product => product.Subcategory != null && categoryIds.Contains(product.Subcategory.CategoryId));
+            if (subcategoryIds.Length > 0)
+                candidates = candidates.Where(product => subcategoryIds.Contains(product.SubcategoryId));
+        }
 
         var now = DateTime.UtcNow;
         if (!request.OnSale && request.Sort is not ("priceAsc" or "priceDesc"))
@@ -117,6 +125,8 @@ public sealed class PublicCatalogService(IApplicationDbContext context, IMediaUr
                 group.Select(subcategory => new CatalogOptionDTO(subcategory.Id, subcategory.Name)).ToArray()))
             .ToArray();
         var sizes = await context.Sizes.AsNoTracking()
+            .Where(size => context.ProductVariants.Any(variant => variant.SizeId == size.Id &&
+                variant.AvailableQuantity > 0 && variant.Product != null && variant.Product.IsPublishedInCatalog))
             .OrderBy(size => size.SizeGroupId).ThenBy(size => size.DisplayOrder)
             .ThenBy(size => size.Name).ThenBy(size => size.Id)
             .Select(size => new
