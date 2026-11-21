@@ -19,4 +19,11 @@ public static class StringExtensions
         var normalizedValue = value?.Trim();
         return string.IsNullOrWhiteSpace(normalizedValue) ? null : normalizedValue;
     }
+
+    public static string? RemovePhoneSeparators(this string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? null
+            : new string(value.Where(character => !char.IsWhiteSpace(character) && character != '-').ToArray());
+    }
 }

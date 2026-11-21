@@ -100,7 +100,13 @@ public class ClientService(IApplicationDbContext context, IMapper mapper) : ICli
     private static void NormalizeClientFields(CreateClientDTO clientDTO)
     {
         clientDTO.Name = clientDTO.Name.NormalizeRequired("Nombre del cliente");
-        clientDTO.PhoneNumber = clientDTO.PhoneNumber.NormalizeOptional();
+        var phoneNumber = clientDTO.PhoneNumber.RemovePhoneSeparators();
+        if (phoneNumber is not null && (phoneNumber.Length != 8 || !phoneNumber.All(char.IsAsciiDigit)))
+        {
+            throw new AppBadRequestException("El número de teléfono debe tener 8 dígitos.");
+        }
+
+        clientDTO.PhoneNumber = phoneNumber;
         clientDTO.InstagramUser = clientDTO.InstagramUser.NormalizeOptional()?.ToLower();
         clientDTO.MessengerUser = clientDTO.MessengerUser.NormalizeOptional()?.ToLower();
         clientDTO.Address = clientDTO.Address.NormalizeOptional();
@@ -110,7 +116,7 @@ public class ClientService(IApplicationDbContext context, IMapper mapper) : ICli
     private static IQueryable<Client> ApplyFilters(IQueryable<Client> clientsQuery, ClientQueryDTO query)
     {
         var name = query.Name?.Trim().ToLower();
-        var phoneNumber = query.PhoneNumber?.Trim().ToLower();
+        var phoneNumber = query.PhoneNumber.RemovePhoneSeparators()?.ToLower();
         var instagramUser = query.InstagramUser?.Trim().ToLower();
         var messengerUser = query.MessengerUser?.Trim().ToLower();
 
@@ -139,7 +145,7 @@ public class ClientService(IApplicationDbContext context, IMapper mapper) : ICli
             var phoneExists = await _context.Clients.AnyAsync(client =>
                 client.Id != clientId &&
                 client.PhoneNumber != null &&
-                client.PhoneNumber.ToLower() == phoneNumber.ToLower());
+                client.PhoneNumber == phoneNumber);
 
             if (phoneExists)
             {

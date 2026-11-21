@@ -2,6 +2,7 @@ using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using PrettyWoman.Application.DTOs.Clients;
+using PrettyWoman.Application.Exceptions;
 using PrettyWoman.Application.Mappings;
 using PrettyWoman.Application.Services;
 using PrettyWoman.Domain.Entities;
@@ -18,7 +19,8 @@ public class ClientServiceTests
 
     [Theory]
     [InlineData("Name", "lva", "Alvaro")]
-    [InlineData("PhoneNumber", "7001", "Alvaro")]
+    [InlineData("PhoneNumber", "0001", "Alvaro")]
+    [InlineData("PhoneNumber", " 8887-0001 ", "Alvaro")]
     [InlineData("InstagramUser", "look", "Beatriz")]
     [InlineData("MessengerUser", "carla", "Carla")]
     public async Task GetAllAsync_FiltersPartialMatchesByEachTextField(string property, string value, string expectedName)
@@ -95,6 +97,38 @@ public class ClientServiceTests
         Assert.False(result.HasNextPage);
     }
 
+    [Fact]
+    public async Task CreateAndUpdateAsync_NormalizePhoneBeforeCheckingDuplicatesAndSaving()
+    {
+        await using var context = CreateContext();
+        var service = CreateService(context);
+        var id = await service.CreateAsync(new CreateClientDTO { Name = "Ana", PhoneNumber = " 8949 4589 " });
+        Assert.Equal("89494589", (await service.GetByIdAsync(id)).PhoneNumber);
+
+        var otherId = await service.CreateAsync(new CreateClientDTO { Name = "Bea", PhoneNumber = "8858-1572" });
+        await Assert.ThrowsAsync<AppBadRequestException>(() =>
+            service.CreateAsync(new CreateClientDTO { Name = "Caro", PhoneNumber = "8949-4589" }));
+        await Assert.ThrowsAsync<AppBadRequestException>(() =>
+            service.UpdateAsync(otherId, new UpdateClientDTO { Name = "Bea", PhoneNumber = "8949 4589" }));
+
+        await service.UpdateAsync(id, new UpdateClientDTO { Name = "Ana", PhoneNumber = "8949-4589" });
+        await service.UpdateAsync(id, new UpdateClientDTO { Name = "Ana", PhoneNumber = " 8765-4321 " });
+        Assert.Equal("87654321", (await service.GetByIdAsync(id)).PhoneNumber);
+    }
+
+    [Theory]
+    [InlineData("8949-458")]
+    [InlineData("8949-45890")]
+    [InlineData("+505 8949-4589")]
+    [InlineData("8949-4589x")]
+    [InlineData("--")]
+    public async Task CreateAsync_RejectsPhoneThatDoesNotNormalizeToEightDigits(string phone)
+    {
+        await using var context = CreateContext();
+        await Assert.ThrowsAsync<AppBadRequestException>(() =>
+            CreateService(context).CreateAsync(new CreateClientDTO { Name = "Ana", PhoneNumber = phone }));
+    }
+
     private static ClientService CreateService(ApplicationDbContext context) => new(context, Mapper);
 
     private static async Task SeedClientsAsync(ApplicationDbContext context)
@@ -103,7 +137,7 @@ public class ClientServiceTests
             new Client
             {
                 Name = "Alvaro",
-                PhoneNumber = "8887001",
+                PhoneNumber = "88870001",
                 InstagramUser = "alvaro.style",
                 CreatedAt = DateTime.UtcNow
             },

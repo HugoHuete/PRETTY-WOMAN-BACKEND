@@ -43,9 +43,11 @@ public class SaleDeliveryService(
         if (!string.IsNullOrWhiteSpace(query.ClientSearch))
         {
             var search = query.ClientSearch.Trim().ToLower();
+            var phoneSearch = search.RemovePhoneSeparators();
             deliveriesQuery = deliveriesQuery.Where(item => item.Client != null &&
                 (item.Client.Name.ToLower().Contains(search) ||
-                 (item.Client.PhoneNumber != null && item.Client.PhoneNumber.ToLower().Contains(search)) ||
+                 (!string.IsNullOrEmpty(phoneSearch) && item.Client.PhoneNumber != null &&
+                  item.Client.PhoneNumber.ToLower().Contains(phoneSearch)) ||
                  (item.Client.InstagramUser != null && item.Client.InstagramUser.ToLower().Contains(search)) ||
                  (item.Client.MessengerUser != null && item.Client.MessengerUser.ToLower().Contains(search))));
         }
@@ -54,10 +56,10 @@ public class SaleDeliveryService(
             var search = query.ClientName.Trim().ToLower();
             deliveriesQuery = deliveriesQuery.Where(item => item.Client != null && item.Client.Name.ToLower().Contains(search));
         }
-        if (!string.IsNullOrWhiteSpace(query.ClientPhone))
+        var clientPhone = query.ClientPhone.RemovePhoneSeparators()?.ToLower();
+        if (!string.IsNullOrEmpty(clientPhone))
         {
-            var search = query.ClientPhone.Trim().ToLower();
-            deliveriesQuery = deliveriesQuery.Where(item => item.Client != null && item.Client.PhoneNumber != null && item.Client.PhoneNumber.ToLower().Contains(search));
+            deliveriesQuery = deliveriesQuery.Where(item => item.Client != null && item.Client.PhoneNumber != null && item.Client.PhoneNumber.ToLower().Contains(clientPhone));
         }
         if (!string.IsNullOrWhiteSpace(query.ClientInstagramUser))
         {

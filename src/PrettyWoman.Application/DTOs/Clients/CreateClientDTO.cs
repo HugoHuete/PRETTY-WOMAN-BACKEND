@@ -7,7 +7,6 @@ public class CreateClientDTO
     [Required(ErrorMessage = "Nombre del cliente es obligatorio.")]
     public required string Name { get; set; }
 
-    [Phone(ErrorMessage = "El teléfono no tiene un formato válido.")]
     public string? PhoneNumber { get; set; }
 
     public string? InstagramUser { get; set; }
