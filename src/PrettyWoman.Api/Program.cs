@@ -1,6 +1,7 @@
 using System.Text;
 using System.Globalization;
 using System.Net;
+using System.Security.Cryptography;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics.HealthChecks;
@@ -40,6 +41,8 @@ if (adminOrigins.Length == 0 || adminOrigins.Any(string.IsNullOrWhiteSpace))
 var rateLimitOptions = builder.Configuration.GetSection(ApiRateLimitOptions.SectionName).Get<ApiRateLimitOptions>()
     ?? new ApiRateLimitOptions();
 rateLimitOptions.Validate();
+var previewProxySecret = builder.Configuration["Catalog:PreviewProxySecret"];
+var previewProxyKey = string.IsNullOrWhiteSpace(previewProxySecret) ? null : Encoding.UTF8.GetBytes(previewProxySecret);
 
 builder.Services.AddDataProtection();
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
@@ -190,7 +193,8 @@ builder.Services.AddRateLimiter(options =>
         if (httpContext.Request.Path.StartsWithSegments("/api/v1/catalog") ||
             httpContext.Request.Path.StartsWithSegments("/compartir"))
         {
-            name = $"catalog:{name}:{httpContext.Connection.RemoteIpAddress}";
+            var clientIp = GetCatalogClientIp(httpContext, previewProxyKey);
+            name = $"catalog:{name}:{clientIp}";
         }
 
         return RateLimitPartition.GetSlidingWindowLimiter(
@@ -271,6 +275,22 @@ app.MapHealthChecks("/health", new HealthCheckOptions
 }).AllowAnonymous();
 
 app.Run();
+
+static IPAddress? GetCatalogClientIp(HttpContext context, byte[]? previewProxyKey)
+{
+    var request = context.Request;
+    if (previewProxyKey is not null && request.Path.StartsWithSegments("/compartir") &&
+        (HttpMethods.IsGet(request.Method) || HttpMethods.IsHead(request.Method)) &&
+        request.Headers.TryGetValue("X-Catalog-Preview-Key", out var key) && key.Count == 1 &&
+        request.Headers.TryGetValue("X-Catalog-Client-IP", out var forwardedIp) && forwardedIp.Count == 1 &&
+        IPAddress.TryParse(forwardedIp[0], out var clientIp) &&
+        CryptographicOperations.FixedTimeEquals(previewProxyKey, Encoding.UTF8.GetBytes(key.ToString())))
+    {
+        return clientIp.IsIPv4MappedToIPv6 ? clientIp.MapToIPv4() : clientIp;
+    }
+
+    return context.Connection.RemoteIpAddress;
+}
 
 static (string Name, int PermitLimit) GetRateLimit(HttpContext httpContext, ApiRateLimitOptions options)
 {

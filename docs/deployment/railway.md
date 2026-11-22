@@ -74,7 +74,19 @@ make migrate
 - `GET /health/ready` verifica la conexión con PostgreSQL.
 - `GET /health` es el endpoint de Railway y también verifica PostgreSQL.
 
-Railway termina TLS antes de reenviar la solicitud a la API. La aplicación procesa `X-Forwarded-Proto` y `X-Real-IP` únicamente desde los proxies configurados, incluido el rango `100.0.0.0/8` de Railway. El rate limiting del catálogo usa la dirección resultante; comprueba en el despliegue que corresponda al cliente si hay otros proxies intermedios y configura únicamente proxies confiables.
+Railway termina TLS antes de reenviar la solicitud a la API. La aplicación procesa `X-Forwarded-Proto` y `X-Real-IP` únicamente desde los proxies configurados, incluido el rango `100.0.0.0/8` de Railway. Por defecto, el límite de solicitudes del catálogo usa la dirección resultante. Si hay otros proxies intermedios, comprueba que esa dirección corresponda al cliente.
+
+### Vistas previas detrás de Cloudflare Workers
+
+Si el Worker del catálogo reenvía `/compartir/*` a Railway, configura la identidad del visitante para que las vistas previas tengan un límite por cliente.
+
+1. En el servicio de la API de Railway, guarda un secreto aleatorio como `Catalog__PreviewProxySecret`.
+2. En el Worker del catálogo, guarda el mismo valor como secreto `CATALOG_PREVIEW_PROXY_SECRET`. Configura `CATALOG_API_ORIGIN` con el origen HTTPS de la API.
+3. En cada solicitud de vista previa, el Worker debe crear sus propios encabezados y descartar cualquier `X-Catalog-Client-IP` o `X-Catalog-Preview-Key` recibido del visitante. Debe sobrescribir `X-Catalog-Client-IP` con la dirección obtenida de una fuente de confianza, como `CF-Connecting-IP` proporcionado por Cloudflare, y solo entonces añadir `X-Catalog-Preview-Key` con el secreto configurado. Si no dispone de una IP de confianza, debe omitir ambos encabezados.
+
+La API usa esa IP solo para solicitudes `GET` o `HEAD` bajo `/compartir/*`, cuando recibe una sola IP válida y una sola clave que coincide con el secreto. Si falta el secreto o alguno de los encabezados, o si son inválidos, usa la IP resuelta por Railway. Si Railway resuelve una misma IP del Worker para varios visitantes, esos visitantes pueden compartir cuota.
+
+Después del despliegue, comprueba desde dos clientes con IP distintas que las vistas previas lleguen con identidades separadas. Haz la prueba del límite en un entorno de pruebas con una cuota baja.
 
 ## Archivos e imágenes
 

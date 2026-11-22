@@ -41,6 +41,53 @@ public sealed class PublicCatalogTests(PrettyWomanApiFactory factory)
         }
     }
 
+    [Fact]
+    public async Task PreviewRateLimit_SeparatesClientsOnlyWhenTheProxyKeyMatches()
+    {
+        const string secret = "preview-proxy-integration-test-key";
+        using var app = factory.WithWebHostBuilder(builder => builder.ConfigureServices(services =>
+            services.AddTransient<IStartupFilter, TestPeerAddressFilter>()));
+        using var client = CreatePreviewClient();
+
+        HttpClient CreatePreviewClient()
+        {
+            const string secretVariable = "Catalog__PreviewProxySecret";
+            const string limitVariable = "RateLimiting__ReadPermitLimit";
+            var previousSecret = Environment.GetEnvironmentVariable(secretVariable);
+            var previousLimit = Environment.GetEnvironmentVariable(limitVariable);
+            try
+            {
+                Environment.SetEnvironmentVariable(secretVariable, secret);
+                Environment.SetEnvironmentVariable(limitVariable, "1");
+                return app.CreateClient();
+            }
+            finally
+            {
+                Environment.SetEnvironmentVariable(secretVariable, previousSecret);
+                Environment.SetEnvironmentVariable(limitVariable, previousLimit);
+            }
+        }
+
+        Assert.Equal(HttpStatusCode.OK, await SendAsync("198.51.100.7", secret));
+        Assert.Equal(HttpStatusCode.TooManyRequests, await SendAsync("198.51.100.7", secret));
+        Assert.Equal(HttpStatusCode.OK, await SendAsync("198.51.100.8", secret));
+        Assert.Equal(HttpStatusCode.OK, await SendAsync("198.51.100.9", "wrong-key"));
+        Assert.Equal(HttpStatusCode.TooManyRequests, await SendAsync("198.51.100.10", "wrong-key"));
+        Assert.Equal(HttpStatusCode.TooManyRequests, await SendAsync("198.51.100.11", null));
+
+        async Task<HttpStatusCode> SendAsync(string clientIp, string? key)
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"/compartir/selecciones/{Guid.NewGuid()}");
+            request.Headers.Add("X-Test-Peer", "100.64.1.1");
+            request.Headers.Add("X-Catalog-Client-IP", clientIp);
+            if (key is not null)
+                request.Headers.Add("X-Catalog-Preview-Key", key);
+
+            using var response = await client.SendAsync(request);
+            return response.StatusCode;
+        }
+    }
+
     private sealed class TestPeerAddressFilter : IStartupFilter
     {
         public Action<IApplicationBuilder> Configure(Action<IApplicationBuilder> next) => app =>
