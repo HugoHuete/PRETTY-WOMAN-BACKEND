@@ -192,7 +192,7 @@ public sealed class PublicCatalogService(IApplicationDbContext context, IMediaUr
             .Select(variant =>
             {
                 var color = presentations.GetValueOrDefault(variant.PresentationId)?.Color;
-                return new CatalogColorDTO(variant.PresentationId, variant.Presentation ?? color?.Name,
+                return new CatalogColorDTO(variant.PresentationId, variant.Presentation,
                     images.FirstOrDefault(image => image.PresentationId == variant.PresentationId)?.Url,
                     color?.HexCode);
             })

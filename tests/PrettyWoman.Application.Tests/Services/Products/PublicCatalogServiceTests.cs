@@ -304,6 +304,14 @@ public class PublicCatalogServiceTests
         await context.SaveChangesAsync();
         Assert.Null(Assert.Single((await service.ListAsync(new(SizeId: small.Id))).Items).ImageUrl);
 
+        var unnamed = await context.ProductPresentations.SingleAsync(option => option.Id == pink.Id);
+        unnamed.Name = null;
+        unnamed.ColorId = catalogColor.Id;
+        await context.SaveChangesAsync();
+        var unnamedColor = Assert.Single((await service.ListAsync(new())).Items).Colors.Single(option => option.Id == pink.Id);
+        Assert.Null(unnamedColor.Name);
+        Assert.Equal("#2C5DAA", unnamedColor.HexCode);
+
         static ProductImage CreateImage(string file, ProductPresentation? color, bool primary) => new()
         {
             ProductPresentation = color,
