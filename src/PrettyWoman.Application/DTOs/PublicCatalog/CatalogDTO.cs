@@ -10,7 +10,7 @@ public sealed record CatalogCategoryDTO(int Id, string Name, IReadOnlyList<Catal
 public sealed record CatalogSizeGroupDTO(int Id, string Name, IReadOnlyList<CatalogOptionDTO> Sizes);
 public sealed record CatalogFiltersDTO(
     IReadOnlyList<CatalogCategoryDTO> Categories, IReadOnlyList<CatalogOptionDTO> Sizes,
-    IReadOnlyList<CatalogSizeGroupDTO> SizeGroups);
+    IReadOnlyList<CatalogSizeGroupDTO> SizeGroups, DateTime? DiscountsEndDate = null);
 public sealed record CatalogImageDTO(string Url, int? PresentationId);
 public sealed record CatalogVariantDTO(
     int Id, int SizeId, string Size, int PresentationId, string? Presentation,

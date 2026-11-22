@@ -135,10 +135,13 @@ public sealed class PublicCatalogTests(PrettyWomanApiFactory factory)
         var firstProduct = await context.Products.FindAsync(first.ProductId);
         var secondProduct = await context.Products.FindAsync(second.ProductId);
         secondProduct!.SubcategoryId = firstProduct!.SubcategoryId;
-        var campaign = new DiscountCampaign { Name = "Catalog price test", StartDate = DateTime.UtcNow.AddHours(-1), EndDate = DateTime.UtcNow.AddHours(1) };
+        var now = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds()).UtcDateTime;
+        var campaign = new DiscountCampaign { Name = "Catalog price test", StartDate = now.AddHours(-1), EndDate = now.AddHours(1) };
+        var futureCampaign = new DiscountCampaign { Name = "Future catalog price test", StartDate = now.AddHours(1), EndDate = now.AddHours(2) };
         context.DiscountCampaignProducts.AddRange(
             new DiscountCampaignProduct { ProductId = first.ProductId, DiscountCampaign = campaign, DiscountTypeId = (int)DiscountTypeOption.FixedPrice, DiscountValue = 50m },
-            new DiscountCampaignProduct { ProductPresentationId = first.ProductPresentationId, DiscountCampaign = campaign, DiscountTypeId = (int)DiscountTypeOption.FixedAmount, DiscountValue = 5m });
+            new DiscountCampaignProduct { ProductPresentationId = first.ProductPresentationId, DiscountCampaign = campaign, DiscountTypeId = (int)DiscountTypeOption.FixedAmount, DiscountValue = 5m },
+            new DiscountCampaignProduct { ProductId = second.ProductId, DiscountCampaign = futureCampaign, DiscountTypeId = (int)DiscountTypeOption.FixedPrice, DiscountValue = 25m });
         await context.SaveChangesAsync();
         using var client = factory.CreateClient();
         var filter = $"subcategoryId={firstProduct.SubcategoryId}";
@@ -161,6 +164,9 @@ public sealed class PublicCatalogTests(PrettyWomanApiFactory factory)
         Assert.Equal(first.ProductId, discounted.Id);
         Assert.Equal(95m, discounted.FinalPrice);
         Assert.Equal(1, sale.TotalCount);
+
+        var filters = await client.GetFromJsonAsync<CatalogFiltersDTO>("/api/v1/catalog/filters");
+        Assert.Equal(campaign.EndDate, filters!.DiscountsEndDate);
     }
 
     [Fact]

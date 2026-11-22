@@ -139,7 +139,20 @@ public sealed class PublicCatalogService(IApplicationDbContext context, IMediaUr
             .Select(group => new CatalogSizeGroupDTO(group.Key.SizeGroupId, group.Key.GroupName,
                 group.Select(size => size.Option).ToArray()))
             .ToArray();
-        return new(categories, sizes.Select(size => size.Option).ToArray(), sizeGroups);
+        var now = DateTime.UtcNow;
+        var discountsEndDate = await context.DiscountCampaignProducts.AsNoTracking()
+            .Where(target => target.DiscountCampaign != null && target.DiscountCampaign.CancelledAt == null &&
+                target.DiscountCampaign.StartDate <= now && target.DiscountCampaign.EndDate >= now &&
+                context.ProductVariants.Any(variant => variant.AvailableQuantity > 0 &&
+                    variant.Product != null && variant.Product.IsPublishedInCatalog &&
+                    (target.ProductId == variant.ProductId || target.ProductPresentationId == variant.ProductPresentationId) &&
+                    Math.Floor(Math.Max(0m,
+                        target.DiscountTypeId == (int)DiscountTypeOption.FixedAmount ? variant.SalePrice - target.DiscountValue :
+                        target.DiscountTypeId == (int)DiscountTypeOption.Percentage ? variant.SalePrice * (1 - target.DiscountValue / 100) :
+                        target.DiscountTypeId == (int)DiscountTypeOption.FixedPrice ? target.DiscountValue : variant.SalePrice
+                    ) * 100m + 0.5m) / 100m < variant.SalePrice))
+            .MaxAsync(target => (DateTime?)target.DiscountCampaign!.EndDate, cancellationToken);
+        return new(categories, sizes.Select(size => size.Option).ToArray(), sizeGroups, discountsEndDate);
     }
 
     internal static CatalogVariantDTO PriceVariant(Product product, ProductPresentation presentation,
