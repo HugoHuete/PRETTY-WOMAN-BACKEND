@@ -183,7 +183,12 @@ public class ProductsApiTests(PrettyWomanApiFactory factory)
         var seededProduct = await _factory.SeedProductAsync(quantity: 2, receivedQuantity: 2, availableQuantity: 2, salePrice: 500m);
         using var client = await CreateEmployeeClientAsync();
 
-        var response = await client.GetAsync("/api/v1/products");
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var code = await context.Products.Where(product => product.Id == seededProduct.ProductId)
+            .Select(product => product.Code).SingleAsync();
+
+        var response = await client.GetAsync($"/api/v1/products?code={code}");
         var result = await response.Content.ReadFromJsonAsync<PaginatedResult<ProductDTO>>();
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
