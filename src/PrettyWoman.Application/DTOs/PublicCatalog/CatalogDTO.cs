@@ -15,7 +15,7 @@ public sealed record CatalogImageDTO(string Url, int? PresentationId);
 public sealed record CatalogVariantDTO(
     int Id, int SizeId, string Size, int PresentationId, string? Presentation,
     int MaxQuantity, decimal OriginalPrice, decimal FinalPrice);
-public sealed record CatalogColorDTO(int Id, string? Name, string? ImageUrl);
+public sealed record CatalogColorDTO(int Id, string? Name, string? ImageUrl, string? HexCode = null);
 public sealed record CatalogProductDTO(
     int Id, int Code, string Name, string? ImageUrl, IReadOnlyList<string> Sizes,
     decimal OriginalPrice, decimal FinalPrice, bool HasPriceRange, IReadOnlyList<CatalogColorDTO> Colors);

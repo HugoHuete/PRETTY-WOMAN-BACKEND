@@ -8,6 +8,8 @@ public class ProductPresentation
     public string? NormalizedName { get; set; }
     public int SortOrder { get; set; }
 
+    public int? ColorId { get; set; }
+    public Color? Color { get; set; }
     public Product? Product { get; set; }
     public ICollection<ProductVariant> ProductVariants { get; set; } = [];
     public ICollection<ProductImage> ProductImages { get; set; } = [];

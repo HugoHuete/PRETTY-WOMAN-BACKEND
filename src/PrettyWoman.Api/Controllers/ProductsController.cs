@@ -22,6 +22,18 @@ public class ProductsController(IProductService productService, IProductImageSer
         return Ok(productVariants);
     }
 
+    [HttpGet("colors")]
+    public async Task<ActionResult<IReadOnlyList<ProductColorDTO>>> GetColors(CancellationToken cancellationToken) =>
+        Ok(await _productService.GetColorsAsync(cancellationToken));
+
+    [HttpPatch("{productId:int}/presentations/{presentationId:int}/color")]
+    public async Task<IActionResult> UpdatePresentationColor(int productId, int presentationId,
+        UpdatePresentationColorDTO request, CancellationToken cancellationToken)
+    {
+        await _productService.UpdatePresentationColorAsync(productId, presentationId, request.ColorId, cancellationToken);
+        return NoContent();
+    }
+
     [HttpGet("export")]
     public async Task<IActionResult> Export([FromQuery] ProductQueryDTO query)
     {

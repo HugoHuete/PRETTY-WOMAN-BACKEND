@@ -151,6 +151,7 @@ public sealed class PublicCatalogService(IApplicationDbContext context, IMediaUr
     }
 
     private static IQueryable<Product> WithVariants(IQueryable<Product> products) => products
+        .Include(product => product.ProductPresentations).ThenInclude(presentation => presentation.Color)
         .Include(product => product.DiscountCampaignProducts).ThenInclude(target => target.DiscountCampaign)
         .Include(product => product.ProductPresentations).ThenInclude(presentation => presentation.DiscountCampaignProducts)
             .ThenInclude(target => target.DiscountCampaign)
@@ -186,14 +187,29 @@ public sealed class PublicCatalogService(IApplicationDbContext context, IMediaUr
     private static CatalogProductDTO Summarize(Product product, CatalogVariantDTO[] variants, CatalogImageDTO[] images)
     {
         var cheapest = variants.MinBy(variant => variant.FinalPrice)!;
+        var presentations = product.ProductPresentations.ToDictionary(presentation => presentation.Id);
         var colors = variants.DistinctBy(variant => variant.PresentationId)
-            .Select(variant => new CatalogColorDTO(variant.PresentationId, variant.Presentation,
-                images.FirstOrDefault(image => image.PresentationId == variant.PresentationId)?.Url))
+            .Select(variant =>
+            {
+                var color = presentations.GetValueOrDefault(variant.PresentationId)?.Color;
+                return new CatalogColorDTO(variant.PresentationId, variant.Presentation ?? color?.Name,
+                    images.FirstOrDefault(image => image.PresentationId == variant.PresentationId)?.Url,
+                    color?.HexCode);
+            })
             .ToArray();
         var cover = images.FirstOrDefault(image => colors.Any(color => color.Id == image.PresentationId))
             ?? images.FirstOrDefault(image => image.PresentationId is null);
+        var matchingSizeIds = variants.Select(variant => variant.SizeId).ToHashSet();
+        var sizes = product.ProductPresentations.SelectMany(presentation => presentation.ProductVariants)
+            .Where(variant => matchingSizeIds.Contains(variant.SizeId))
+            .Select(variant => variant.Size)
+            .OfType<Size>()
+            .DistinctBy(size => size.Id)
+            .OrderBy(size => size.SizeGroupId).ThenBy(size => size.DisplayOrder)
+            .ThenBy(size => size.Name).ThenBy(size => size.Id)
+            .Select(size => size.Name).Distinct().ToArray();
         return new(product.Id, product.Code, product.Name, cover?.Url,
-            variants.Select(variant => variant.Size).Distinct().ToArray(), cheapest.OriginalPrice, cheapest.FinalPrice,
+            sizes, cheapest.OriginalPrice, cheapest.FinalPrice,
             variants.Any(variant => variant.FinalPrice != cheapest.FinalPrice), colors);
     }
 }

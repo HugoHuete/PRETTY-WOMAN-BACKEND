@@ -11,6 +11,11 @@ public class ProductPresentationConfiguration : IEntityTypeConfiguration<Product
         builder.Property(x => x.Name).HasMaxLength(50);
         builder.Property(x => x.NormalizedName).HasMaxLength(50);
 
+        builder.HasOne(x => x.Color)
+            .WithMany()
+            .HasForeignKey(x => x.ColorId)
+            .OnDelete(DeleteBehavior.SetNull);
+
         builder.HasAlternateKey(x => new { x.Id, x.ProductId });
 
         builder.HasOne(x => x.Product)

@@ -107,6 +107,32 @@ public class ProductsApiTests(PrettyWomanApiFactory factory)
     }
 
     [Theory]
+    [InlineData("{}")]
+    [InlineData("""{"colourId":null}""")]
+    public async Task UpdatePresentationColor_RequiresExplicitColorId(string body)
+    {
+        var product = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1);
+        using var client = await CreateEmployeeClientAsync();
+        using var scope = _factory.Services.CreateScope();
+        var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+        var colorId = await context.Colors.Where(color => color.Name == "Blanco").Select(color => color.Id).SingleAsync();
+        var path = $"/api/v1/products/{product.ProductId}/presentations/{product.ProductPresentationId}/color";
+        var presentation = context.ProductPresentations.Where(item => item.Id == product.ProductPresentationId);
+
+        var assigned = await client.PatchAsJsonAsync(path, new UpdatePresentationColorDTO(colorId));
+        Assert.Equal(HttpStatusCode.NoContent, assigned.StatusCode);
+
+        using var omitted = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+        var rejected = await client.PatchAsync(path, omitted);
+        Assert.Equal(HttpStatusCode.BadRequest, rejected.StatusCode);
+        Assert.Equal(colorId, await presentation.Select(item => item.ColorId).SingleAsync());
+
+        var cleared = await client.PatchAsJsonAsync(path, new UpdatePresentationColorDTO(null));
+        Assert.Equal(HttpStatusCode.NoContent, cleared.StatusCode);
+        Assert.Null(await presentation.Select(item => item.ColorId).SingleAsync());
+    }
+
+    [Theory]
     [InlineData(0)]
     [InlineData(-1)]
     public async Task UpdateVariantPrice_RejectsNonPositivePrice(decimal salePrice)

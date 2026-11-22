@@ -293,6 +293,40 @@ namespace PrettyWoman.Infrastructure.Migrations
                     b.ToTable("clients", (string)null);
                 });
 
+            modelBuilder.Entity("PrettyWoman.Domain.Entities.Color", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("HexCode")
+                        .IsRequired()
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)")
+                        .HasColumnName("hex_code");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id")
+                        .HasName("pk_colors");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_colors_name");
+
+                    b.ToTable("colors", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_colors_hex_code", "hex_code ~ '^#[0-9A-Fa-f]{6}$'");
+                        });
+                });
+
             modelBuilder.Entity("PrettyWoman.Domain.Entities.DeliveryAgency", b =>
                 {
                     b.Property<int>("Id")
@@ -2985,6 +3019,10 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<int?>("ColorId")
+                        .HasColumnType("integer")
+                        .HasColumnName("color_id");
+
                     b.Property<string>("Name")
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)")
@@ -3008,6 +3046,9 @@ namespace PrettyWoman.Infrastructure.Migrations
 
                     b.HasAlternateKey("Id", "ProductId")
                         .HasName("ak_product_presentations_id_product_id");
+
+                    b.HasIndex("ColorId")
+                        .HasDatabaseName("ix_product_presentations_color_id");
 
                     b.HasIndex("ProductId")
                         .IsUnique()
@@ -5550,12 +5591,20 @@ namespace PrettyWoman.Infrastructure.Migrations
 
             modelBuilder.Entity("PrettyWoman.Domain.Entities.ProductPresentation", b =>
                 {
+                    b.HasOne("PrettyWoman.Domain.Entities.Color", "Color")
+                        .WithMany()
+                        .HasForeignKey("ColorId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_product_presentations_colors_color_id");
+
                     b.HasOne("PrettyWoman.Domain.Entities.Product", "Product")
                         .WithMany("ProductPresentations")
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_product_presentations_products_product_id");
+
+                    b.Navigation("Color");
 
                     b.Navigation("Product");
                 });

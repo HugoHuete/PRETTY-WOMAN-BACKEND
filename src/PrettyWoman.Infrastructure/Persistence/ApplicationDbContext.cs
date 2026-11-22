@@ -125,6 +125,7 @@ public class ApplicationDbContext : IdentityDbContext<User>, IApplicationDbConte
     public DbSet<SizeGroup> SizeGroups { get; set; }
     public DbSet<Product> Products { get; set; }
     public DbSet<SharedCatalogSelection> SharedCatalogSelections { get; set; }
+    public DbSet<Color> Colors { get; set; }
     public DbSet<ProductPresentation> ProductPresentations { get; set; }
     public DbSet<ProductImage> ProductImages { get; set; }
     public DbSet<ProductVariant> ProductVariants { get; set; }

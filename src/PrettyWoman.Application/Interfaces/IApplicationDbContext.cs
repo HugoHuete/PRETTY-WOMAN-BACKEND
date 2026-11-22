@@ -30,6 +30,7 @@ public interface IApplicationDbContext
     DbSet<SizeGroup> SizeGroups { get; }
     DbSet<Product> Products { get; }
     DbSet<SharedCatalogSelection> SharedCatalogSelections { get; }
+    DbSet<Color> Colors { get; }
     DbSet<ProductPresentation> ProductPresentations { get; }
     DbSet<ProductImage> ProductImages { get; }
     DbSet<ProductVariant> ProductVariants { get; }

@@ -73,6 +73,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
                     {
                         Id = presentation.Id,
                         Name = presentation.Name,
+                        ColorId = presentation.ColorId,
                         SortOrder = presentation.SortOrder,
                         DiscountCampaigns = presentation.DiscountCampaignProducts
                             .Select(discount => new ProductListDiscountProjection
@@ -289,6 +290,24 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
         await _context.SaveChangesAsync();
     }
 
+    public async Task<IReadOnlyList<ProductColorDTO>> GetColorsAsync(CancellationToken cancellationToken) =>
+        await _context.Colors.AsNoTracking().OrderBy(color => color.Name)
+            .Select(color => new ProductColorDTO(color.Id, color.Name, color.HexCode))
+            .ToListAsync(cancellationToken);
+
+    public async Task UpdatePresentationColorAsync(int productId, int presentationId, int? colorId,
+        CancellationToken cancellationToken)
+    {
+        var presentation = await _context.ProductPresentations.SingleOrDefaultAsync(item =>
+            item.Id == presentationId && item.ProductId == productId, cancellationToken)
+            ?? throw new AppNotFoundException($"La presentación con id '{presentationId}' no existe para el producto con id '{productId}'.");
+        if (colorId is int id && !await _context.Colors.AnyAsync(color => color.Id == id, cancellationToken))
+            throw new AppNotFoundException($"El color con id '{id}' no existe.");
+
+        presentation.ColorId = colorId;
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task UpdatePriceForPresentationAsync(int productId, int productPresentationId, UpdateProductPriceDTO request)
     {
         var presentationExists = await _context.ProductPresentations
@@ -438,6 +457,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
                 {
                     Id = presentation.Id,
                     Name = presentation.Name,
+                    ColorId = presentation.ColorId,
                     SortOrder = presentation.SortOrder,
                     PrimaryImageUrl = GetPresentationPrimaryImageUrl(product, presentation),
                     Sizes = presentation.ProductVariants
@@ -479,6 +499,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
                     {
                         Id = presentation.Id,
                         Name = presentation.Name,
+                        ColorId = presentation.ColorId,
                         SortOrder = presentation.SortOrder,
                         PrimaryImageUrl = GetPresentationPrimaryImageUrl(product, presentation),
                         Sizes = sizes
@@ -759,6 +780,7 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
     {
         public int Id { get; init; }
         public string? Name { get; init; }
+        public int? ColorId { get; init; }
         public int SortOrder { get; init; }
         public List<ProductListImageProjection> ProductImages { get; init; } = [];
         public List<ProductListDiscountProjection> DiscountCampaigns { get; init; } = [];

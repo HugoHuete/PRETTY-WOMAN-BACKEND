@@ -250,10 +250,11 @@ public class PublicCatalogServiceTests
         var category = new Category { Name = "Ropa" };
         var subcategory = new Subcategory { Name = "Blusas", Category = category };
         var group = new SizeGroup { Name = "Ropa" };
-        var small = new Size { Name = "S", SizeGroup = group };
-        var medium = new Size { Name = "M", SizeGroup = group };
+        var small = new Size { Name = "S", SizeGroup = group, DisplayOrder = 2 };
+        var medium = new Size { Name = "M", SizeGroup = group, DisplayOrder = 1 };
         var product = new Product { IsPublishedInCatalog = true, Name = "Blusa", SupplierProductCode = "A", Code = 1, Subcategory = subcategory };
         var blue = new ProductPresentation { Product = product, Name = "Azul", SortOrder = 1 };
+        blue.Color = new Color { Name = "Azul", HexCode = "#2C5DAA" };
         var pink = new ProductPresentation { Product = product, Name = "Rosa", SortOrder = 2 };
         var black = new ProductPresentation { Product = product, Name = "Negro", SortOrder = 3 };
 
@@ -275,8 +276,23 @@ public class PublicCatalogServiceTests
         var all = Assert.Single((await service.ListAsync(new())).Items);
         var filtered = Assert.Single((await service.ListAsync(new(SizeId: small.Id))).Items);
 
+        Assert.Equal(new[] { "M", "S" }, all.Sizes);
+        Assert.Equal("S", Assert.Single(filtered.Sizes));
         Assert.Equal(new[] { "Azul", "Rosa" }, all.Colors.Select(color => color.Name));
         Assert.Equal("Azul", Assert.Single(filtered.Colors).Name);
+        Assert.Equal("#2C5DAA", Assert.Single(filtered.Colors).HexCode);
+        Assert.Null(all.Colors.Single(option => option.Name == "Rosa").HexCode);
+
+        var products = new ProductService(context, new Resolver());
+        var catalogColor = Assert.Single(await products.GetColorsAsync(default));
+        await products.UpdatePresentationColorAsync(product.Id, pink.Id, catalogColor.Id, default);
+        var updated = Assert.Single((await service.ListAsync(new())).Items);
+        Assert.Equal("#2C5DAA", updated.Colors.Single(option => option.Name == "Rosa").HexCode);
+        Assert.Equal(catalogColor.Id, (await products.GetByIdAsync(product.Id)).Presentations.Single(option => option.Id == pink.Id).ColorId);
+        await products.UpdatePresentationColorAsync(product.Id, pink.Id, null, default);
+        var cleared = Assert.Single((await service.ListAsync(new())).Items);
+        Assert.Null(cleared.Colors.Single(option => option.Name == "Rosa").HexCode);
+        context.ChangeTracker.Clear();
         Assert.Equal("rosa.webp", all.ImageUrl);
         Assert.Equal("azul.webp", filtered.ImageUrl);
 
