@@ -723,6 +723,22 @@ public class ProductServiceTests
         Assert.Equal("El producto con id '999' no existe.", exception.Message);
     }
 
+    [Fact]
+    public async Task GetInventorySnapshotAsync_ReturnsAvailableSizesAndKeepsPresentationsWithoutStock()
+    {
+        await using var context = CreateContext();
+        await SeedProductsAsync(context);
+
+        var snapshot = await CreateService(context).GetInventorySnapshotAsync(CancellationToken.None);
+
+        Assert.Equal(new[] { 1001, 1002, 1003 }, snapshot.Select(product => product.Code));
+        var inStock = Assert.Single(snapshot[0].Presentations);
+        Assert.Equal("Negro", inStock.Name);
+        Assert.Equal(new SizeInventorySnapshotDTO("S", 2), Assert.Single(inStock.Sizes));
+        Assert.Empty(Assert.Single(snapshot[1].Presentations).Sizes);
+        Assert.Empty(Assert.Single(snapshot[2].Presentations).Sizes);
+    }
+
     private static ProductService CreateService(ApplicationDbContext context)
     {
         return new ProductService(context, new TestMediaUrlResolver());

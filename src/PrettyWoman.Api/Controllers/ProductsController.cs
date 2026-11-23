@@ -22,6 +22,10 @@ public class ProductsController(IProductService productService, IProductImageSer
         return Ok(productVariants);
     }
 
+    [HttpGet("inventory-snapshot")]
+    public async Task<ActionResult<IReadOnlyList<ProductInventorySnapshotDTO>>> GetInventorySnapshot(CancellationToken cancellationToken) =>
+        Ok(await _productService.GetInventorySnapshotAsync(cancellationToken));
+
     [HttpGet("colors")]
     public async Task<ActionResult<IReadOnlyList<ProductColorDTO>>> GetColors(CancellationToken cancellationToken) =>
         Ok(await _productService.GetColorsAsync(cancellationToken));

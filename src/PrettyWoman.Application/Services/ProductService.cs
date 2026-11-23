@@ -13,6 +13,30 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
 {
     private readonly IApplicationDbContext _context = context;
 
+    public async Task<IReadOnlyList<ProductInventorySnapshotDTO>> GetInventorySnapshotAsync(CancellationToken cancellationToken)
+    {
+        return await _context.Products.AsNoTracking()
+            .OrderBy(product => product.Code)
+            .Select(product => new ProductInventorySnapshotDTO(
+                product.Code,
+                product.ProductPresentations
+                    .OrderBy(presentation => presentation.SortOrder)
+                    .ThenBy(presentation => presentation.Id)
+                    .Select(presentation => new PresentationInventorySnapshotDTO(
+                        presentation.Id,
+                        presentation.Name,
+                        presentation.ProductVariants
+                            .Where(variant => variant.AvailableQuantity > 0)
+                            .OrderBy(variant => variant.Size != null ? variant.Size.DisplayOrder : 0)
+                            .ThenBy(variant => variant.Id)
+                            .Select(variant => new SizeInventorySnapshotDTO(
+                                variant.Size != null ? variant.Size.Name : null,
+                                variant.AvailableQuantity))
+                            .ToList()))
+                    .ToList()))
+            .ToListAsync(cancellationToken);
+    }
+
     public async Task<PaginatedResult<ProductDTO>> GetAllAsync(ProductQueryDTO query)
     {
         NormalizePagination(query);

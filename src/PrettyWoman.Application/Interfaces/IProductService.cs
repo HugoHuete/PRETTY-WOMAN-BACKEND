@@ -6,6 +6,7 @@ namespace PrettyWoman.Application.Interfaces;
 public interface IProductService
 {
     Task<PaginatedResult<ProductDTO>> GetAllAsync(ProductQueryDTO query);
+    Task<IReadOnlyList<ProductInventorySnapshotDTO>> GetInventorySnapshotAsync(CancellationToken cancellationToken);
     Task<byte[]> ExportAsync(ProductQueryDTO query);
     Task<ProductDTO> GetByIdAsync(int id);
     Task UpdatePriceAsync(int productId, int productVariantId, UpdateProductPriceDTO request);
