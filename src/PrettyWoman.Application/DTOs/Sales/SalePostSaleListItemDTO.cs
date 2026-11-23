@@ -15,5 +15,8 @@ public class SalePostSaleQueryDTO
 {
     public int Page { get; set; } = 1;
     public bool History { get; set; }
+    public bool IncludeAll { get; set; }
+    public bool? IsExchange { get; set; }
+    public int? StatusId { get; set; }
     public string? Search { get; set; }
 }

@@ -14,6 +14,15 @@ namespace PrettyWoman.Application.Tests.Services.Sales;
 public class SaleServiceTests
 {
     [Fact]
+    public async Task GetPostSaleAsync_RejectsStatusWithoutRequestType()
+    {
+        await using var context = CreateContext();
+        var query = new SalePostSaleQueryDTO { StatusId = 3 };
+
+        await Assert.ThrowsAsync<AppBadRequestException>(() => CreateService(context).GetPostSaleAsync(query));
+    }
+
+    [Fact]
     public async Task GetPostSaleAsync_ListsPendingReceiptsAcrossSalesAndFiltersHistory()
     {
         await using var context = CreateContext();
@@ -53,6 +62,16 @@ public class SaleServiceTests
         var received = Assert.Single(history.Items);
         Assert.False(received.IsExchange);
         Assert.Equal(receivedReturn.Id, received.Id);
+
+        var byStatus = await service.GetPostSaleAsync(new SalePostSaleQueryDTO
+        {
+            IsExchange = false,
+            StatusId = (int)SaleReturnStatusOption.Received
+        });
+        Assert.Equal(receivedReturn.Id, Assert.Single(byStatus.Items).Id);
+
+        var all = await service.GetPostSaleAsync(new SalePostSaleQueryDTO { IncludeAll = true });
+        Assert.Equal(3, all.TotalCount);
     }
 
     [Theory]

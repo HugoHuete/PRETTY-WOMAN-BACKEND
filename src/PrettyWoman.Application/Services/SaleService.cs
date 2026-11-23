@@ -25,6 +25,9 @@ public class SaleService(
 
     public async Task<PaginatedResult<SalePostSaleListItemDTO>> GetPostSaleAsync(SalePostSaleQueryDTO query)
     {
+        if (query.StatusId.HasValue && !query.IsExchange.HasValue)
+            throw new AppBadRequestException("Debes indicar isExchange al filtrar por statusId.");
+
         const int pageSize = 20;
         var exchanges = _context.SaleExchanges.AsNoTracking().Select(exchange => new SalePostSaleListItemDTO
         {
@@ -50,7 +53,14 @@ public class SaleService(
                 || saleReturn.StatusId == (int)SaleReturnStatusOption.PickedUpAndRefunded
                 && saleReturn.MethodId == (int)SaleReturnMethodOption.DeliveryAgency
         });
-        var items = exchanges.Concat(returns).Where(item => item.PendingReceipt != query.History);
+        var items = exchanges.Concat(returns);
+        if (query.IsExchange is bool isExchange)
+            items = items.Where(item => item.IsExchange == isExchange);
+        if (query.StatusId is int statusId)
+            items = items.Where(item => item.StatusId == statusId);
+        else if (!query.IncludeAll)
+            items = items.Where(item => item.PendingReceipt != query.History);
+
         if (!string.IsNullOrWhiteSpace(query.Search))
         {
             var search = query.Search.Trim().ToLowerInvariant();
