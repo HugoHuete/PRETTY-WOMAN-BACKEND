@@ -42,6 +42,13 @@ public class SalesController(
         return Ok(deliveries);
     }
 
+    [HttpGet("post-sale")]
+    public async Task<ActionResult<PaginatedResult<SalePostSaleListItemDTO>>> GetPostSale(
+        [FromQuery] SalePostSaleQueryDTO query)
+    {
+        return Ok(await _saleService.GetPostSaleAsync(query));
+    }
+
     /// <summary>Obtiene el detalle de una venta cuando se necesita consultar o gestionar una venta específica.</summary>
     [HttpGet("{id:int}")]
     [ProducesResponseType(typeof(SaleDTO), StatusCodes.Status200OK)]

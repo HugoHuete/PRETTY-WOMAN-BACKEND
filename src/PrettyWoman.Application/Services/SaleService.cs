@@ -23,6 +23,60 @@ public class SaleService(
     private readonly ISaleDeliveryService _deliveryService = deliveryService;
     private readonly IInventoryService _inventoryService = inventoryService;
 
+    public async Task<PaginatedResult<SalePostSaleListItemDTO>> GetPostSaleAsync(SalePostSaleQueryDTO query)
+    {
+        const int pageSize = 20;
+        var exchanges = _context.SaleExchanges.AsNoTracking().Select(exchange => new SalePostSaleListItemDTO
+        {
+            Id = exchange.Id,
+            SaleId = exchange.OriginalSaleId,
+            IsExchange = true,
+            StatusId = exchange.StatusId,
+            CreatedAt = exchange.CreatedAt,
+            ClientName = exchange.OriginalSale!.Client!.Name,
+            PendingReceipt = exchange.StatusId == (int)SaleExchangeStatusOption.Requested
+                || exchange.StatusId != (int)SaleExchangeStatusOption.Cancelled
+                && exchange.ReturnItems.Any(item => item.StatusId == (int)ExchangeReturnItemStatusOption.AwaitingReturn)
+        });
+        var returns = _context.SaleReturns.AsNoTracking().Select(saleReturn => new SalePostSaleListItemDTO
+        {
+            Id = saleReturn.Id,
+            SaleId = saleReturn.OriginalSaleId,
+            IsExchange = false,
+            StatusId = saleReturn.StatusId,
+            CreatedAt = saleReturn.CreatedAt,
+            ClientName = saleReturn.OriginalSale!.Client!.Name,
+            PendingReceipt = saleReturn.StatusId == (int)SaleReturnStatusOption.Requested
+                || saleReturn.StatusId == (int)SaleReturnStatusOption.PickedUpAndRefunded
+                && saleReturn.MethodId == (int)SaleReturnMethodOption.DeliveryAgency
+        });
+        var items = exchanges.Concat(returns).Where(item => item.PendingReceipt != query.History);
+        if (!string.IsNullOrWhiteSpace(query.Search))
+        {
+            var search = query.Search.Trim().ToLowerInvariant();
+            if (int.TryParse(search.TrimStart('#'), out var saleId))
+                items = items.Where(item => item.SaleId == saleId);
+            else
+                items = items.Where(item => item.ClientName != null && item.ClientName.ToLower().Contains(search));
+        }
+
+        var count = await items.CountAsync();
+        var lastPage = Math.Max(1, (int)Math.Ceiling(count / (double)pageSize));
+        var page = Math.Clamp(query.Page, 1, lastPage);
+        return new PaginatedResult<SalePostSaleListItemDTO>
+        {
+            Page = page,
+            PageSize = pageSize,
+            TotalCount = count,
+            Items = await items.OrderByDescending(item => item.CreatedAt)
+                .ThenBy(item => item.IsExchange)
+                .ThenByDescending(item => item.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .ToListAsync()
+        };
+    }
+
     public async Task<PaginatedResult<SaleDTO>> GetAllAsync(SaleQueryDTO query)
     {
         NormalizePagination(query);

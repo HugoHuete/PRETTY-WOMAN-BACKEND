@@ -6,6 +6,7 @@ namespace PrettyWoman.Application.Interfaces;
 public interface ISaleService
 {
     Task<PaginatedResult<SaleDTO>> GetAllAsync(SaleQueryDTO query);
+    Task<PaginatedResult<SalePostSaleListItemDTO>> GetPostSaleAsync(SalePostSaleQueryDTO query);
     Task<SaleDTO> GetByIdAsync(int id);
     Task<int> CreateAsync(CreateSaleDTO createSaleDTO);
     Task<int> CreateMigrationAsync(CreateMigrationSaleDTO createSaleDTO);

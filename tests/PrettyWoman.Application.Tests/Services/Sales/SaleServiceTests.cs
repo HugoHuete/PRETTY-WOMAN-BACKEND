@@ -13,6 +13,48 @@ namespace PrettyWoman.Application.Tests.Services.Sales;
 
 public class SaleServiceTests
 {
+    [Fact]
+    public async Task GetPostSaleAsync_ListsPendingReceiptsAcrossSalesAndFiltersHistory()
+    {
+        await using var context = CreateContext();
+        var client = new Client { Name = "Ana Pérez" };
+        var sale = new Sale { UserId = "test-user", Client = client };
+        var otherSale = new Sale { UserId = "test-user" };
+        var exchange = new SaleExchange
+        {
+            OriginalSale = sale,
+            StatusId = (int)SaleExchangeStatusOption.AwaitingReturn,
+            ReturnItems = [new ExchangeReturnItem { StatusId = (int)ExchangeReturnItemStatusOption.AwaitingReturn }]
+        };
+        var pendingReturn = new SaleReturn
+        {
+            OriginalSale = otherSale,
+            MethodId = (int)SaleReturnMethodOption.DeliveryAgency,
+            StatusId = (int)SaleReturnStatusOption.PickedUpAndRefunded
+        };
+        var receivedReturn = new SaleReturn
+        {
+            OriginalSale = sale,
+            StatusId = (int)SaleReturnStatusOption.Received
+        };
+        context.AddRange(exchange, pendingReturn, receivedReturn);
+        await context.SaveChangesAsync();
+        var service = CreateService(context);
+
+        var pending = await service.GetPostSaleAsync(new SalePostSaleQueryDTO());
+        Assert.Equal(2, pending.TotalCount);
+        Assert.Contains(pending.Items, item => item.IsExchange && item.Id == exchange.Id);
+        Assert.Contains(pending.Items, item => !item.IsExchange && item.Id == pendingReturn.Id && item.ClientName == null);
+
+        var byClient = await service.GetPostSaleAsync(new SalePostSaleQueryDTO { Search = " PÉREZ " });
+        Assert.Equal(exchange.Id, Assert.Single(byClient.Items).Id);
+
+        var history = await service.GetPostSaleAsync(new SalePostSaleQueryDTO { Search = $"#{sale.Id}", History = true });
+        var received = Assert.Single(history.Items);
+        Assert.False(received.IsExchange);
+        Assert.Equal(receivedReturn.Id, received.Id);
+    }
+
     [Theory]
     [InlineData(SaleStatusOption.Pending)]
     [InlineData(SaleStatusOption.Reserved)]
