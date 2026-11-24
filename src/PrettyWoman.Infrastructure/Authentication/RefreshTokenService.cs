@@ -27,6 +27,7 @@ public class RefreshTokenService(
     public async Task<(User User, string RefreshToken)> RotateAsync(string rawToken)
     {
         await using var transaction = await _context.Database.BeginTransactionAsync();
+        await RefreshTokenMaintenance.LockForRotationAsync(_context);
         var now = DateTime.UtcNow;
         var token = await _context.RefreshTokens.Include(token => token.User)
             .SingleOrDefaultAsync(token => token.TokenHash == Hash(rawToken))

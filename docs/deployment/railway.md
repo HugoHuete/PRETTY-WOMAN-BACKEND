@@ -93,3 +93,24 @@ Después del despliegue, comprueba desde dos clientes con IP distintas que las v
 No uses el filesystem del contenedor para imágenes, comprobantes ni datos de negocio: Railway puede reemplazar el contenedor en cualquier despliegue o reinicio. La implementación actual envía únicamente las variantes generadas a Cloudflare R2; el original se procesa en memoria y el stream de subida, junto con la exportación XLSX, es temporal.
 
 ASP.NET Core Data Protection usa un key ring temporal en el contenedor. Esto no afecta los JWT emitidos, pero tokens basados en Data Protection (por ejemplo, recuperación de contraseña) se invalidan tras un redeploy y no se comparten entre réplicas. Si se habilitan esos flujos o se escala la API, persiste esas claves en un almacén compartido antes de hacerlo.
+
+## Limpieza semanal
+
+Crea un servicio vacío en el mismo proyecto y configura sus ajustes antes de conectarlo al repositorio del backend.
+
+- **Servicio nuevo:** Railway ya no permite activar **Config as Code** heredado. Configura el worker desde el panel.
+- **Servicio que ya usa Config as Code heredado:** antes de conectar el repositorio o habilitar un despliegue automático, selecciona explícitamente `/railway.worker.json` en **Railway Config File**. Con la ruta por defecto, Railway puede aplicar el `railway.json` de la raíz, que selecciona el Dockerfile de la API, ejecuta `./efbundle` y espera `/health`. En este modo, los valores del archivo prevalecen sobre los del panel.
+
+Configura también estos valores en el panel para que el worker pueda funcionar sin el archivo heredado:
+
+- Usa los ajustes del servicio para definir `RAILWAY_DOCKERFILE_PATH=Dockerfile.worker`, **Cron Schedule** con `0 8 * * 0` y política de reinicio **Never**. El horario corresponde al domingo a las 02:00 en Nicaragua (08:00 UTC).
+- Configura `SIXLABORS_LICENSE_KEY` como variable del servicio de limpieza para compilar en Release. Usa la misma clave que usa el build de la API.
+- Configura `ConnectionStrings__DefaultConnection` con las mismas referencias privadas a PostgreSQL que usa la API. Deja el dominio público, el healthcheck HTTP y el comando de migración sin configurar.
+
+Railway deja de aplicar **Config as Code** heredado el **1 de diciembre de 2026**. Migra la configuración heredada antes del corte y confirma que los ajustes del servicio sigan vigentes. Consulta la [guía de migración de Railway](https://docs.railway.com/infrastructure-as-code#migrating-from-config-as-code).
+
+Antes del primer despliegue, revisa la configuración efectiva del worker. Debe seleccionar `Dockerfile.worker` y el cron `0 8 * * 0`. Si aparece el Dockerfile de la API, `./efbundle` o `/health`, corrige la fuente de configuración antes de desplegar.
+
+Despliega primero la API con la coordinación de rotación incluida y confirma que las migraciones estén aplicadas antes de activar el cron. El worker registra los totales eliminados y termina después de cada ejecución.
+
+Se eliminan por completo las selecciones de catálogo vencidas. Después del borrado, sus enlaces responden HTTP 404 y sus claves de idempotencia se pueden volver a usar. También se eliminan los refresh tokens vencidos de familias sin tokens activos. Los antecedentes de una familia activa se conservan para detectar la reutilización de tokens. El worker elimina los refresh tokens en lotes de hasta 1000 y libera el bloqueo al confirmar cada lote. Si hay rotaciones en curso, libera la transacción y reintenta tras una pausa de hasta 100 ms. Deja de iniciar lotes después de 10 segundos, o antes si PostgreSQL cancela un lote por timeout. Luego continúa con la limpieza de selecciones.

@@ -1,0 +1,18 @@
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+ARG SIXLABORS_LICENSE_KEY
+WORKDIR /src
+
+COPY ["src/PrettyWoman.Workers/PrettyWoman.Workers.csproj", "src/PrettyWoman.Workers/"]
+COPY ["src/PrettyWoman.Application/PrettyWoman.Application.csproj", "src/PrettyWoman.Application/"]
+COPY ["src/PrettyWoman.Domain/PrettyWoman.Domain.csproj", "src/PrettyWoman.Domain/"]
+COPY ["src/PrettyWoman.Infrastructure/PrettyWoman.Infrastructure.csproj", "src/PrettyWoman.Infrastructure/"]
+
+RUN dotnet restore src/PrettyWoman.Workers/PrettyWoman.Workers.csproj
+COPY . .
+RUN dotnet publish src/PrettyWoman.Workers/PrettyWoman.Workers.csproj \
+    --configuration Release --no-restore --output /app/publish
+
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
+WORKDIR /app
+COPY --from=build /app/publish .
+ENTRYPOINT ["dotnet", "PrettyWoman.Workers.dll"]
