@@ -15,9 +15,21 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
 
     public async Task<IReadOnlyList<ProductInventorySnapshotDTO>> GetInventorySnapshotAsync(CancellationToken cancellationToken)
     {
-        return await _context.Products.AsNoTracking()
+        var now = DateTime.UtcNow;
+        var products = await _context.Products.AsNoTracking()
             .OrderBy(product => product.Code)
-            .Select(product => new ProductInventorySnapshotDTO(
+            .Include(product => product.DiscountCampaignProducts)
+                .ThenInclude(discount => discount.DiscountCampaign)
+            .Include(product => product.ProductPresentations)
+                .ThenInclude(presentation => presentation.DiscountCampaignProducts)
+                    .ThenInclude(discount => discount.DiscountCampaign)
+            .Include(product => product.ProductPresentations)
+                .ThenInclude(presentation => presentation.ProductVariants.Where(variant => variant.AvailableQuantity > 0))
+                    .ThenInclude(variant => variant.Size)
+            .AsSplitQuery()
+            .ToListAsync(cancellationToken);
+
+        return products.Select(product => new ProductInventorySnapshotDTO(
                 product.Code,
                 product.ProductPresentations
                     .OrderBy(presentation => presentation.SortOrder)
@@ -26,15 +38,16 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
                         presentation.Id,
                         presentation.Name,
                         presentation.ProductVariants
-                            .Where(variant => variant.AvailableQuantity > 0)
                             .OrderBy(variant => variant.Size != null ? variant.Size.DisplayOrder : 0)
                             .ThenBy(variant => variant.Id)
                             .Select(variant => new SizeInventorySnapshotDTO(
-                                variant.Size != null ? variant.Size.Name : null,
-                                variant.AvailableQuantity))
+                                variant.Size?.Name,
+                                variant.AvailableQuantity,
+                                GetBestActiveDiscount(product, presentation, variant, now)?.DiscountedSalePrice
+                                    ?? variant.SalePrice))
                             .ToList()))
                     .ToList()))
-            .ToListAsync(cancellationToken);
+            .ToList();
     }
 
     public async Task<PaginatedResult<ProductDTO>> GetAllAsync(ProductQueryDTO query)

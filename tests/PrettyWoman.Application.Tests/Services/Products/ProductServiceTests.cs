@@ -723,18 +723,27 @@ public class ProductServiceTests
         Assert.Equal("El producto con id '999' no existe.", exception.Message);
     }
 
-    [Fact]
-    public async Task GetInventorySnapshotAsync_ReturnsAvailableSizesAndKeepsPresentationsWithoutStock()
+    [Theory]
+    [InlineData(true, 585)]
+    [InlineData(false, 650)]
+    public async Task GetInventorySnapshotAsync_ReturnsAvailableSizesWithCurrentPrice(bool activeCampaign, int expectedPrice)
     {
         await using var context = CreateContext();
         await SeedProductsAsync(context);
+
+        if (!activeCampaign)
+        {
+            var campaign = await context.DiscountCampaigns.SingleAsync(campaign => campaign.Id == 1);
+            campaign.EndDate = DateTime.UtcNow.AddHours(-1);
+            await context.SaveChangesAsync();
+        }
 
         var snapshot = await CreateService(context).GetInventorySnapshotAsync(CancellationToken.None);
 
         Assert.Equal(new[] { 1001, 1002, 1003 }, snapshot.Select(product => product.Code));
         var inStock = Assert.Single(snapshot[0].Presentations);
         Assert.Equal("Negro", inStock.Name);
-        Assert.Equal(new SizeInventorySnapshotDTO("S", 2), Assert.Single(inStock.Sizes));
+        Assert.Equal(new SizeInventorySnapshotDTO("S", 2, expectedPrice), Assert.Single(inStock.Sizes));
         Assert.Empty(Assert.Single(snapshot[1].Presentations).Sizes);
         Assert.Empty(Assert.Single(snapshot[2].Presentations).Sizes);
     }

@@ -4,4 +4,4 @@ public sealed record ProductInventorySnapshotDTO(int Code, IReadOnlyList<Present
 
 public sealed record PresentationInventorySnapshotDTO(int Id, string? Name, IReadOnlyList<SizeInventorySnapshotDTO> Sizes);
 
-public sealed record SizeInventorySnapshotDTO(string? SizeName, int AvailableQuantity);
+public sealed record SizeInventorySnapshotDTO(string? SizeName, int AvailableQuantity, decimal EffectiveSalePrice);
