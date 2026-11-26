@@ -3286,6 +3286,136 @@ public class SaleServiceTests
     }
 
     [Fact]
+    public async Task SaleExchange_StoresTheActivePresentationDiscountWhenCreated()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var original = await AddProductAsync(context, 1, 800m, 200m);
+        var replacement = await AddProductAsync(context, 1, 800m, 400m);
+        replacement.ProductPresentationId = 10;
+        var now = DateTime.UtcNow;
+        var campaign = new DiscountCampaign
+        {
+            Name = "Oferta", StartDate = now.AddDays(-1), EndDate = now.AddDays(1),
+            DiscountCampaignProducts =
+            [
+                new() { ProductId = replacement.ProductId, DiscountTypeId = (int)DiscountTypeOption.FixedPrice, DiscountValue = 600m },
+                new() { ProductPresentationId = 10, DiscountTypeId = (int)DiscountTypeOption.FixedPrice, DiscountValue = 650m }
+            ]
+        };
+        context.DiscountCampaigns.Add(campaign);
+        await context.SaveChangesAsync();
+        var saleId = await CreateSaleWithProductAsync(context, original.Id, SaleStatusOption.SentForDelivery);
+        var lineId = await context.SaleProducts.Where(item => item.SaleId == saleId).Select(item => item.Id).SingleAsync();
+        var service = CreateExchangeService(context);
+
+        var agencyRequest = new CreateSaleExchangeDTO
+        {
+            DeliveryAgencyId = 1,
+            ShippingChargedToClient = 200m,
+            ReturnItems = [new CreateExchangeReturnItemDTO { OriginalSaleProductId = lineId, Quantity = 1, RecognizedUnitAmount = 800m }],
+            OutboundItems = [new CreateExchangeOutboundItemDTO { ProductId = replacement.Id, Quantity = 1, ItemTypeId = (int)ExchangeOutboundItemTypeOption.Replacement }]
+        };
+        var error = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CreateAsync(saleId, agencyRequest));
+        Assert.Contains("saldo a favor", error.Message);
+        Assert.Empty(context.SaleExchanges);
+        Assert.Equal(1, replacement.AvailableQuantity);
+        Assert.Equal(0, replacement.ReservedQuantity);
+
+        var exchangeId = await service.CreateAsync(saleId, new CreateSaleExchangeDTO
+        {
+            ReturnItems = [new CreateExchangeReturnItemDTO { OriginalSaleProductId = lineId, Quantity = 1, RecognizedUnitAmount = 500m }],
+            OutboundItems = [new CreateExchangeOutboundItemDTO { ProductId = replacement.Id, Quantity = 1, ItemTypeId = (int)ExchangeOutboundItemTypeOption.Replacement }]
+        });
+        campaign.EndDate = now.AddMinutes(-1);
+        await context.SaveChangesAsync();
+
+        var exchange = await context.SaleExchanges.Include(item => item.OutboundItems).SingleAsync(item => item.Id == exchangeId);
+        Assert.Equal(650m, Assert.Single(exchange.OutboundItems).UnitPrice);
+        Assert.Equal(650m, exchange.OutboundItemsTotal);
+        Assert.Equal(150m, exchange.BalanceToCollect);
+    }
+
+    [Fact]
+    public async Task SaleExchange_CorrectsDeliveredVariantAndCostWithoutChangingSettlement()
+    {
+        await using var context = CreateContext(ignoreTransactionWarnings: true);
+        await SeedCatalogAsync(context);
+        context.Products.Add(new Product { Id = 1, Code = 7711, SupplierProductCode = "TEST", Name = "Prenda" });
+        await context.SaveChangesAsync();
+        var original = await AddProductAsync(context, 1, 1000m, 400m);
+        var recorded = await AddProductAsync(context, 1, 1300m, 700m);
+        var actual = await AddProductAsync(context, 1, 1300m, 750m);
+        var saleId = await CreateSaleWithProductAsync(context, original.Id, SaleStatusOption.SentForDelivery);
+        var lineId = await context.SaleProducts.Where(item => item.SaleId == saleId).Select(item => item.Id).SingleAsync();
+        var service = CreateExchangeService(context);
+        var exchangeId = await service.CreateAsync(saleId, new CreateSaleExchangeDTO
+        {
+            ReturnItems = [new CreateExchangeReturnItemDTO { OriginalSaleProductId = lineId, Quantity = 1, RecognizedUnitAmount = 1000m }],
+            OutboundItems = [new CreateExchangeOutboundItemDTO { ProductId = recorded.Id, Quantity = 1, ItemTypeId = (int)ExchangeOutboundItemTypeOption.Replacement }]
+        });
+        await service.CompleteHandoverAsync(saleId, exchangeId);
+        var before = Assert.Single(await service.GetBySaleIdAsync(saleId));
+        await service.MarkReturnReceivedAsync(saleId, exchangeId, Assert.Single(before.ReturnItems).Id);
+        context.SaleExchangeSettlements.Add(new SaleExchangeSettlement
+        {
+            SaleExchangeId = exchangeId,
+            Amount = 300m,
+            MovementDirectionId = (int)MovementDirectionOptions.In,
+            MovementDate = DateTime.UtcNow
+        });
+        await context.SaveChangesAsync();
+        before = Assert.Single(await service.GetBySaleIdAsync(saleId));
+        var outboundId = Assert.Single(before.OutboundItems).Id;
+
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.CorrectOutboundItemAsync(
+            saleId, exchangeId, outboundId, new(recorded.Id, actual.Id, 1200m, "Comprobante 21", 750m, "Recepción 4", "Precio distinto")));
+        actual.SalePrice = 1400m;
+        actual.UnitCostNio = 800m;
+        await context.SaveChangesAsync();
+        var request = new CorrectExchangeOutboundItemDTO(recorded.Id, actual.Id, 1300m, "Comprobante 21", 750m, "Recepción 4", "Código ingresado por error");
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.CorrectOutboundItemAsync(
+            saleId, exchangeId, outboundId, request with { OriginalUnitCost = null }));
+        var auditError = await Assert.ThrowsAsync<AppBadRequestException>(() => service.CorrectOutboundItemAsync(
+            saleId, exchangeId, outboundId, request with
+            {
+                Reason = new string('a', 200), PriceReference = new string('b', 100), CostReference = new string('c', 100)
+            }));
+        Assert.Contains("500", auditError.Message);
+        Assert.Equal(0, recorded.AvailableQuantity);
+        Assert.Equal(1, actual.AvailableQuantity);
+        await service.CorrectOutboundItemAsync(saleId, exchangeId, outboundId, request);
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.CorrectOutboundItemAsync(saleId, exchangeId, outboundId, request));
+
+        var corrected = Assert.Single(await service.GetBySaleIdAsync(saleId));
+        var item = Assert.Single(corrected.OutboundItems);
+        Assert.Equal(actual.Id, item.ProductId);
+        Assert.Equal(750m, item.TotalCost);
+        Assert.Equal(1300m, item.LineTotal);
+        Assert.Equal(before.NetGrossProfit - 50m, corrected.NetGrossProfit);
+        Assert.Equal(before.StatusId, corrected.StatusId);
+        Assert.Equal(before.BalanceToCollect, corrected.BalanceToCollect);
+        Assert.Equal(before.Settlement!.Id, corrected.Settlement!.Id);
+        Assert.Equal(300m, corrected.Settlement.Amount);
+        Assert.Equal(before.ReturnItems.Single().StatusId, corrected.ReturnItems.Single().StatusId);
+        Assert.Equal(1, recorded.AvailableQuantity);
+        Assert.Equal(0, actual.AvailableQuantity);
+
+        var movements = await context.InventoryMovements
+            .Where(row => row.ExchangeOutboundItemId == outboundId && row.InventoryMovementTypeId == (int)InventoryMovementTypeOption.AdjustmentTransfer)
+            .ToListAsync();
+        Assert.Equal(2, movements.Count);
+        Assert.Contains(movements, row => row.ProductId == recorded.Id && row.ToStockBucketId == (int)InventoryStockBucketOption.Available);
+        Assert.Contains(movements, row => row.ProductId == actual.Id && row.ToStockBucketId == (int)InventoryStockBucketOption.OutOfInventory);
+        Assert.All(movements, row =>
+        {
+            Assert.Contains(request.Reason, row.Comments);
+            Assert.Contains(request.PriceReference, row.Comments);
+            Assert.Contains(request.CostReference, row.Comments);
+        });
+    }
+
+    [Fact]
     public async Task SaleExchange_RejectsHandoverAfterCancellationWithoutChangingInventory()
     {
         await using var context = CreateContext();

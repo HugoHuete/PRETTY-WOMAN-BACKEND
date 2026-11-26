@@ -14,6 +14,11 @@ public class ProductVariantConfiguration : IEntityTypeConfiguration<ProductVaria
         builder.Property(p => p.TotalCostNio).HasPrecision(14, 2);
         builder.Property(p => p.UnitCostNio).HasPrecision(18, 6);
         builder.Property(p => p.SalePrice).HasPrecision(12, 2);
+        // Inventory movements are calculated from these counters before SaveChanges.
+        builder.Property(p => p.ReceivedQuantity).IsConcurrencyToken();
+        builder.Property(p => p.AvailableQuantity).IsConcurrencyToken();
+        builder.Property(p => p.ReservedQuantity).IsConcurrencyToken();
+        builder.Property(p => p.UnavailableQuantity).IsConcurrencyToken();
         builder.HasOne(x => x.Size).WithMany().HasForeignKey(x => x.SizeId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Order).WithMany(x => x.ProductVariants).HasForeignKey(x => x.OrderId).OnDelete(DeleteBehavior.Restrict);
         builder.HasOne(x => x.Product).WithMany(x => x.ProductVariants).HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);

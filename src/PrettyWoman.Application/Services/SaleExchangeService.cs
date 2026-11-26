@@ -1,3 +1,5 @@
+using System.Data;
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using PrettyWoman.Application.Common.Extensions;
 using PrettyWoman.Application.DTOs.Sales;
@@ -19,7 +21,7 @@ public class SaleExchangeService(
     {
         var exchanges = await _context.SaleExchanges.AsNoTracking()
             .Include(exchange => exchange.ReturnItems)
-            .Include(exchange => exchange.OutboundItems)
+            .Include(exchange => exchange.OutboundItems).ThenInclude(item => item.ProductVariant).ThenInclude(variant => variant!.Product)
             .Include(exchange => exchange.PostSaleDelivery).ThenInclude(delivery => delivery!.DeliveryAgency)
             .Include(exchange => exchange.Settlement).ThenInclude(settlement => settlement!.Tenders).ThenInclude(tender => tender.PaymentMethod)
             .Include(exchange => exchange.Settlement).ThenInclude(settlement => settlement!.Tenders).ThenInclude(tender => tender.PaymentTerminal)
@@ -89,7 +91,9 @@ public class SaleExchangeService(
                 throw new AppBadRequestException($"El producto con id {productVariant.Id} no tiene stock disponible suficiente.");
         }
 
-        var exchange = new SaleExchange { OriginalSaleId = saleId, Comments = request.Comments };
+        var now = DateTime.UtcNow;
+        var effectivePrices = await GetOutboundPricesAsync(outputProducts, now);
+        var exchange = new SaleExchange { OriginalSaleId = saleId, Comments = request.Comments, CreatedAt = now };
         if (request.DeliveryAgencyId.HasValue)
         {
             exchange.PostSaleDelivery = new PostSaleDelivery
@@ -117,14 +121,15 @@ public class SaleExchangeService(
         foreach (var item in request.OutboundItems)
         {
             var productVariant = outputProducts.Single(productVariant => productVariant.Id == item.ProductId);
-            var lineTotal = Math.Round(productVariant.SalePrice * item.Quantity, 2);
+            var unitPrice = effectivePrices[productVariant.Id];
+            var lineTotal = Math.Round(unitPrice * item.Quantity, 2);
             exchange.OutboundItems.Add(new ExchangeOutboundItem
             {
                 ProductId = productVariant.Id,
                 ProductVariant = productVariant,
                 Quantity = item.Quantity,
                 ItemTypeId = item.ItemTypeId,
-                UnitPrice = productVariant.SalePrice,
+                UnitPrice = unitPrice,
                 UnitCost = productVariant.UnitCostNio,
                 LineTotal = lineTotal,
                 TotalCost = Math.Round(productVariant.UnitCostNio * item.Quantity, 6),
@@ -134,8 +139,11 @@ public class SaleExchangeService(
         RecalculateTotals(exchange);
         if (exchange.PostSaleDelivery is not null)
         {
+            if (exchange.BalanceToCollect < 0)
+                throw new AppBadRequestException("Los cambios por agencia no admiten saldo a favor de la clienta.");
+
             exchange.PostSaleDelivery.AmountToCollect = Math.Round(
-                Math.Max(0, exchange.BalanceToCollect) + exchange.PostSaleDelivery.ShippingChargedToClient, 2);
+                exchange.BalanceToCollect + exchange.PostSaleDelivery.ShippingChargedToClient, 2);
             if (exchange.PostSaleDelivery.AmountToCollect > 0 && !agencyCanCollectCashOnDelivery.GetValueOrDefault())
                 throw new AppBadRequestException("La agencia debe permitir cobro contra entrega para cobrar el saldo del cambio.");
         }
@@ -303,6 +311,65 @@ public class SaleExchangeService(
         await _context.SaveChangesAsync();
     }
 
+    public async Task CorrectOutboundItemAsync(int saleId, int exchangeId, int itemId, CorrectExchangeOutboundItemDTO request)
+    {
+        var reason = request.Reason.NormalizeOptional();
+        if (reason is null || reason.Length > 200)
+            throw new AppBadRequestException("Indica un motivo de hasta 200 caracteres para la corrección.");
+        var priceReference = request.PriceReference.NormalizeOptional();
+        if (priceReference is null || priceReference.Length > 100)
+            throw new AppBadRequestException("Indica el comprobante o registro del precio original en hasta 100 caracteres.");
+        var costReference = request.CostReference.NormalizeOptional();
+        if (costReference is null || costReference.Length > 100)
+            throw new AppBadRequestException("Indica el comprobante o registro del costo original en hasta 100 caracteres.");
+        const decimal costLimit = 1_000_000_000_000m; // numeric(18, 6)
+        if (request.OriginalUnitCost is not decimal unitCost || unitCost < 0 || unitCost >= costLimit ||
+            decimal.Round(unitCost, 6) != unitCost)
+            throw new AppBadRequestException("Indica el costo unitario original verificado con hasta seis decimales.");
+
+        await using var transaction = await _context.BeginTransactionAsync(IsolationLevel.Serializable);
+        var exchange = await GetExchangeAsync(saleId, exchangeId);
+        var item = exchange.OutboundItems.SingleOrDefault(item => item.Id == itemId)
+            ?? throw new AppNotFoundException("La prenda entregada no existe para el cambio indicado.");
+
+        if (exchange.StatusId != (int)SaleExchangeStatusOption.Completed || !item.Delivered)
+            throw new AppBadRequestException("Solo se pueden corregir prendas entregadas de cambios completados.");
+        if (item.ProductId != request.ExpectedProductId || item.ProductId == request.ReplacementProductId)
+            throw new AppBadRequestException("La línea cambió o se seleccionó la misma variante. Verifica la prenda registrada.");
+
+        if (request.OriginalEffectiveUnitPrice != item.UnitPrice)
+            throw new AppBadRequestException("El precio original verificado de la variante correcta debe coincidir con el precio unitario registrado.");
+        var totalCost = unitCost * item.Quantity;
+        if (totalCost >= costLimit)
+            throw new AppBadRequestException("El costo total de la línea supera el máximo permitido.");
+
+        var replacement = await _context.ProductVariants.Include(variant => variant.Product)
+            .SingleOrDefaultAsync(variant => variant.Id == request.ReplacementProductId)
+            ?? throw new AppNotFoundException("La variante correcta no existe.");
+        if (replacement.AvailableQuantity < item.Quantity)
+            throw new AppBadRequestException("La variante correcta no tiene suficiente inventario disponible.");
+
+        var previous = item.ProductVariant!;
+        var now = DateTime.UtcNow;
+        var audit = string.Create(CultureInfo.InvariantCulture,
+            $"Corrección de entrega. Código {previous.Product?.Code} (variante {previous.Id}, costo {item.UnitCost}) → código {replacement.Product?.Code} (variante {replacement.Id}, costo {unitCost}, ref. {costReference}). Precio original verificado {item.UnitPrice}, ref. {priceReference}. {reason}");
+        if (audit.Length > 500)
+            throw new AppBadRequestException("La auditoría supera los 500 caracteres. Acorta el motivo o las referencias.");
+        var restored = _inventoryService.Move(previous, InventoryStockBucketOption.OutOfInventory,
+            InventoryStockBucketOption.Available, item.Quantity, InventoryMovementTypeOption.AdjustmentTransfer, now, audit);
+        var delivered = _inventoryService.Move(replacement, InventoryStockBucketOption.Available,
+            InventoryStockBucketOption.OutOfInventory, item.Quantity, InventoryMovementTypeOption.AdjustmentTransfer, now, audit);
+        restored.ExchangeOutboundItem = item;
+        delivered.ExchangeOutboundItem = item;
+
+        item.ProductId = replacement.Id;
+        item.ProductVariant = replacement;
+        item.UnitCost = unitCost;
+        item.TotalCost = totalCost;
+        await _context.SaveChangesAsync();
+        await transaction.CommitAsync();
+    }
+
     public async Task CancelAsync(int saleId, int exchangeId)
     {
         var exchange = await GetExchangeAsync(saleId, exchangeId);
@@ -315,10 +382,27 @@ public class SaleExchangeService(
         await _context.SaveChangesAsync();
     }
 
+    private async Task<Dictionary<int, decimal>> GetOutboundPricesAsync(IReadOnlyCollection<ProductVariant> variants, DateTime at)
+    {
+        var productIds = variants.Select(variant => (int?)variant.ProductId).Distinct().ToList();
+        var presentationIds = variants.Select(variant => (int?)variant.ProductPresentationId).Distinct().ToList();
+        var targets = await _context.DiscountCampaignProducts.AsNoTracking()
+            .Include(target => target.DiscountCampaign)
+            .Where(target => (productIds.Contains(target.ProductId) || presentationIds.Contains(target.ProductPresentationId)) &&
+                target.DiscountCampaign!.StartDate <= at && target.DiscountCampaign.EndDate >= at &&
+                target.DiscountCampaign.CancelledAt == null)
+            .ToListAsync();
+        var byProduct = targets.ToLookup(target => target.ProductId);
+        var byPresentation = targets.ToLookup(target => target.ProductPresentationId);
+        return variants.ToDictionary(variant => variant.Id, variant =>
+            ProductService.GetBestActiveDiscount(byProduct[variant.ProductId], byPresentation[variant.ProductPresentationId],
+                variant.SalePrice, at)?.DiscountedSalePrice ?? variant.SalePrice);
+    }
+
     private async Task<SaleExchange> GetExchangeAsync(int saleId, int exchangeId)
         => await _context.SaleExchanges
             .Include(exchange => exchange.ReturnItems).ThenInclude(item => item.ProductVariant)
-            .Include(exchange => exchange.OutboundItems).ThenInclude(item => item.ProductVariant)
+            .Include(exchange => exchange.OutboundItems).ThenInclude(item => item.ProductVariant).ThenInclude(variant => variant!.Product)
             .Include(exchange => exchange.PostSaleDelivery).ThenInclude(delivery => delivery!.DeliveryAgency)
             .Include(exchange => exchange.Settlement).ThenInclude(settlement => settlement!.Tenders).ThenInclude(tender => tender.PaymentMethod)
             .Include(exchange => exchange.Settlement).ThenInclude(settlement => settlement!.Tenders).ThenInclude(tender => tender.PaymentTerminal)
@@ -503,7 +587,7 @@ public class SaleExchangeService(
             PostSaleDelivery = exchange.PostSaleDelivery is null ? null : new PostSaleDeliveryDTO { Id = exchange.PostSaleDelivery.Id, SaleReturnId = exchange.PostSaleDelivery.SaleReturnId, SaleExchangeId = exchange.PostSaleDelivery.SaleExchangeId, DeliveryAgencyId = exchange.PostSaleDelivery.DeliveryAgencyId, DeliveryAgencyName = exchange.PostSaleDelivery.DeliveryAgency?.Name, StatusId = exchange.PostSaleDelivery.StatusId, StatusName = ((PostSaleDeliveryStatusOption)exchange.PostSaleDelivery.StatusId).ToString(), Code = exchange.PostSaleDelivery.Code, Address = exchange.PostSaleDelivery.Address, ShippingChargedToClient = exchange.PostSaleDelivery.ShippingChargedToClient, ShippingPaidToAgency = exchange.PostSaleDelivery.ShippingPaidToAgency, AmountToCollect = exchange.PostSaleDelivery.AmountToCollect, AmountCollectedNio = exchange.PostSaleDelivery.AmountCollectedNio, AmountCollectedUsd = exchange.PostSaleDelivery.AmountCollectedUsd, ChangeGivenNio = exchange.PostSaleDelivery.ChangeGivenNio, CollectionExchangeRate = exchange.PostSaleDelivery.CollectionExchangeRate, PickedUpAt = exchange.PostSaleDelivery.PickedUpAt, ReceivedAt = exchange.PostSaleDelivery.ReceivedAt },
             Settlement = exchange.Settlement is null ? null : MapSettlement(exchange.Settlement),
             ReturnItems = exchange.ReturnItems.Select(item => new SaleExchangeReturnItemDTO { Id = item.Id, OriginalSaleProductId = item.OriginalSaleProductId, ProductId = item.ProductId, Quantity = item.Quantity, RecognizedUnitAmount = item.RecognizedUnitAmount, StatusId = item.StatusId, StatusName = ((ExchangeReturnItemStatusOption)item.StatusId).ToString() }).ToList(),
-            OutboundItems = exchange.OutboundItems.Select(item => new SaleExchangeOutboundItemDTO { Id = item.Id, ProductId = item.ProductId, Quantity = item.Quantity, ItemTypeId = item.ItemTypeId, UnitPrice = item.UnitPrice, UnitCost = item.UnitCost, LineTotal = item.LineTotal, TotalCost = item.TotalCost, Delivered = item.Delivered }).ToList()
+            OutboundItems = exchange.OutboundItems.Select(item => new SaleExchangeOutboundItemDTO { Id = item.Id, ProductId = item.ProductId, ProductCode = item.ProductVariant?.Product?.Code, Quantity = item.Quantity, ItemTypeId = item.ItemTypeId, UnitPrice = item.UnitPrice, UnitCost = item.UnitCost, LineTotal = item.LineTotal, TotalCost = item.TotalCost, Delivered = item.Delivered }).ToList()
         };
     }
 

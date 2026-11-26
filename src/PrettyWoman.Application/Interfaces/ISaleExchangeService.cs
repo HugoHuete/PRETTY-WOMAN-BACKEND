@@ -9,5 +9,6 @@ public interface ISaleExchangeService
     Task<SaleExchangeSettlementDTO> SettleAsync(int saleId, int exchangeId, CreateSaleExchangeSettlementDTO request);
     Task CompleteHandoverAsync(int saleId, int exchangeId);
     Task MarkReturnReceivedAsync(int saleId, int exchangeId, int returnItemId);
+    Task CorrectOutboundItemAsync(int saleId, int exchangeId, int itemId, CorrectExchangeOutboundItemDTO request);
     Task CancelAsync(int saleId, int exchangeId);
 }

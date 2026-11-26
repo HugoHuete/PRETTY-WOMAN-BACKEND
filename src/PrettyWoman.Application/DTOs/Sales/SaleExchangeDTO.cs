@@ -32,6 +32,7 @@ public class SaleExchangeOutboundItemDTO
 {
     public int Id { get; set; }
     public int ProductId { get; set; }
+    public int? ProductCode { get; set; }
     public int Quantity { get; set; }
     public int ItemTypeId { get; set; }
     public decimal UnitPrice { get; set; }
@@ -40,3 +41,5 @@ public class SaleExchangeOutboundItemDTO
     public decimal TotalCost { get; set; }
     public bool Delivered { get; set; }
 }
+
+public record CorrectExchangeOutboundItemDTO(int ExpectedProductId, int ReplacementProductId, decimal? OriginalEffectiveUnitPrice, string PriceReference, decimal? OriginalUnitCost, string CostReference, string Reason);

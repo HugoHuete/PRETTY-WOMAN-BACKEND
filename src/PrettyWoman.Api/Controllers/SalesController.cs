@@ -174,6 +174,16 @@ public class SalesController(
         return NoContent();
     }
 
+    /// <summary>Corrige la variante entregada de una línea de un cambio completado.</summary>
+    [Authorize(Policy = AppPolicies.RequireAdminRole)]
+    [HttpPost("{id:int}/exchanges/{exchangeId:int}/outbound-items/{itemId:int}/correct")]
+    public async Task<IActionResult> CorrectExchangeOutboundItem(
+        int id, int exchangeId, int itemId, [FromBody] CorrectExchangeOutboundItemDTO request)
+    {
+        await _saleExchangeService.CorrectOutboundItemAsync(id, exchangeId, itemId, request);
+        return NoContent();
+    }
+
     /// <summary>Cancela un intercambio cuando ya no debe continuar su procesamiento.</summary>
     [Authorize(Policy = AppPolicies.RequireAdminRole)]
     [HttpPost("{id:int}/exchanges/{exchangeId:int}/cancel")]

@@ -1,6 +1,9 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using PrettyWoman.Application.Exceptions;
+using PrettyWoman.Domain.Entities;
 
 namespace PrettyWoman.Api.Middlewares;
 
@@ -26,6 +29,17 @@ public class ExceptionHandlingMiddleware
         catch (AppExceptionBase ex)
         {
             await WriteProblemDetailsAsync(context, (int)ex.StatusCode, ex.Message);
+        }
+        catch (DbUpdateConcurrencyException ex) when (ex.Entries.Any(entry => entry.Entity is ProductVariant))
+        {
+            await WriteProblemDetailsAsync(context, StatusCodes.Status409Conflict,
+                "El inventario cambió durante la operación. Actualiza las existencias y vuelve a intentarlo.");
+        }
+        catch (Exception ex) when (ex is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure } ||
+            ex is DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.SerializationFailure } })
+        {
+            await WriteProblemDetailsAsync(context, StatusCodes.Status409Conflict,
+                "Los datos cambiaron durante la operación. Actualiza el detalle y vuelve a intentarlo.");
         }
         catch (Exception ex)
         {
@@ -70,6 +84,7 @@ public class ExceptionHandlingMiddleware
         StatusCodes.Status401Unauthorized => "No autorizado",
         StatusCodes.Status403Forbidden => "Acceso denegado",
         StatusCodes.Status404NotFound => "Recurso no encontrado",
+        StatusCodes.Status409Conflict => "Conflicto de actualización",
         StatusCodes.Status415UnsupportedMediaType => "Tipo de contenido no compatible",
         StatusCodes.Status500InternalServerError => "Error interno del servidor",
         _ => "Error de solicitud"

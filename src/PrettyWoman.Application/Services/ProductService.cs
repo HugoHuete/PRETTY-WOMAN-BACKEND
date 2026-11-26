@@ -735,31 +735,29 @@ public class ProductService(IApplicationDbContext context, IMediaUrlResolver med
         ProductVariant productVariant,
         DateTime now)
     {
-        var presentationDiscounts = presentation.DiscountCampaignProducts
+        return GetBestActiveDiscount(product.DiscountCampaignProducts, presentation.DiscountCampaignProducts,
+            productVariant.SalePrice, now);
+    }
+
+    internal static ActiveDiscountDTO? GetBestActiveDiscount(
+        IEnumerable<DiscountCampaignProduct> productTargets,
+        IEnumerable<DiscountCampaignProduct> presentationTargets,
+        decimal salePrice,
+        DateTime now)
+    {
+        IEnumerable<ActiveDiscountDTO> Eligible(IEnumerable<DiscountCampaignProduct> targets) => targets
             .Where(discount =>
-                discount.DiscountCampaign is { CancelledAt: null } &&
-                discount.DiscountCampaign.StartDate <= now &&
-                discount.DiscountCampaign.EndDate >= now)
+                discount.DiscountCampaign is { CancelledAt: null } campaign &&
+                campaign.StartDate <= now &&
+                campaign.EndDate >= now)
             .Select(discount => new ActiveDiscountDTO(
                 discount.DiscountCampaignId,
                 discount.DiscountCampaign!.Name,
-                CalculateDiscountedPrice(productVariant.SalePrice, discount.DiscountTypeId, discount.DiscountValue)))
-            .Where(discount => discount.DiscountedSalePrice < productVariant.SalePrice)
-            .ToList();
+                CalculateDiscountedPrice(salePrice, discount.DiscountTypeId, discount.DiscountValue)))
+            .Where(discount => discount.DiscountedSalePrice < salePrice);
 
-        var candidateDiscounts = presentationDiscounts.Count > 0
-            ? presentationDiscounts
-            : product.DiscountCampaignProducts
-                .Where(discount =>
-                    discount.DiscountCampaign is { CancelledAt: null } &&
-                    discount.DiscountCampaign.StartDate <= now &&
-                    discount.DiscountCampaign.EndDate >= now)
-                .Select(discount => new ActiveDiscountDTO(
-                    discount.DiscountCampaignId,
-                    discount.DiscountCampaign!.Name,
-                    CalculateDiscountedPrice(productVariant.SalePrice, discount.DiscountTypeId, discount.DiscountValue)))
-                .Where(discount => discount.DiscountedSalePrice < productVariant.SalePrice)
-                .ToList();
+        var presentationDiscounts = Eligible(presentationTargets).ToList();
+        var candidateDiscounts = presentationDiscounts.Count > 0 ? presentationDiscounts : Eligible(productTargets);
 
         return candidateDiscounts
             .OrderBy(discount => discount.DiscountedSalePrice)
