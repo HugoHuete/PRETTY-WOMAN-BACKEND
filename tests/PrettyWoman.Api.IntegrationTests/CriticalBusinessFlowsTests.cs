@@ -21,6 +21,34 @@ public class CriticalBusinessFlowsTests(PrettyWomanApiFactory factory)
     private readonly PrettyWomanApiFactory _factory = factory;
 
     [Fact]
+    public async Task EmployeeCanReplaceProductsOnSavedSale()
+    {
+        var original = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);
+        var replacement = await _factory.SeedProductAsync(quantity: 2, receivedQuantity: 2, availableQuantity: 2, salePrice: 300m);
+        using var employee = await CreateEmployeeClientAsync();
+        var created = await employee.PostAsJsonAsync("/api/v1/sales", new CreateSaleDTO
+        {
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            ProductVariants = [new CreateSaleProductDTO { ProductId = original.ProductVariantId, Quantity = 1 }]
+        });
+        Assert.Equal(HttpStatusCode.Created, created.StatusCode);
+        var id = await created.Content.ReadFromJsonAsync<int>();
+
+        var response = await employee.PutAsJsonAsync($"/api/v1/sales/{id}/products", new ReplaceSaleProductsDTO
+        {
+            ProductVariants = [new ReplaceSaleProductDTO { ProductId = replacement.ProductVariantId, Quantity = 2 }]
+        });
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        var sale = await employee.GetFromJsonAsync<SaleDTO>($"/api/v1/sales/{id}");
+        Assert.NotNull(sale);
+        var line = Assert.Single(sale.ProductVariants);
+        Assert.Equal(replacement.ProductVariantId, line.ProductId);
+        Assert.Equal(2, line.Quantity);
+        Assert.Equal(600m, sale.Total);
+    }
+
+    [Fact]
     public async Task EmployeeCanUpdatePendingSaleDelivery()
     {
         var product = await _factory.SeedProductAsync(quantity: 1, receivedQuantity: 1, availableQuantity: 1, salePrice: 500m);

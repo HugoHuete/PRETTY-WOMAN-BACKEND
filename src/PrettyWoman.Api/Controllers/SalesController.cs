@@ -89,7 +89,7 @@ public class SalesController(
     }
 
     /// <summary>Sincroniza la lista final de productos conservando las líneas identificadas por saleProductId.</summary>
-    [Authorize(Policy = AppPolicies.RequireAdminRole)]
+    [Authorize(Policy = AppPolicies.RequireEmployeeRole)]
     [HttpPut("{id:int}/products")]
     public async Task<IActionResult> ReplaceProducts(int id, [FromBody] ReplaceSaleProductsDTO replaceSaleProductsDTO)
     {
