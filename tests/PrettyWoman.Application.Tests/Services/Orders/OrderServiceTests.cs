@@ -326,6 +326,45 @@ public class OrderServiceTests
         var movement = await context.FinancialMovements.SingleAsync(item => item.FinancialMovementTypeId == (int)FinancialMovementTypeOption.SupplierRefund);
         Assert.Equal((int)MovementDirectionOptions.In, movement.MovementDirectionId);
         Assert.Equal(200m, movement.Amount);
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.ReopenShortagesAsync(orderId));
+    }
+
+    [Fact]
+    public async Task ReopenShortagesAsync_RestoresExpectedUnitsAndCostUntilTheMissingPackageIsReceived()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        var service = CreateService(context);
+        var orderId = await service.CreateAsync(CreateOrderRequest("SOHO-REAPERTURA", "Paquete encontrado"));
+        var original = await service.GetByIdAsync(orderId);
+        var receiptService = new OrderReceiptService(context, new InventoryService(context));
+        var variant = await context.ProductVariants.SingleAsync(item => item.OrderId == orderId);
+        var receipt = new ReceiveOrderDTO
+        {
+            ProductVariants = [new ReceiveOrderProductDTO { ProductId = variant.Id, Quantity = 1, SalePrice = 700m }]
+        };
+        await receiptService.ReceiveAsync(orderId, receipt);
+        var closed = await service.CloseShortagesAsync(orderId, new CloseOrderShortagesDTO());
+        Assert.Equal((int)OrderStatusCode.PendingRefund, closed.OrderStatusId);
+
+        var reopened = await service.ReopenShortagesAsync(orderId);
+
+        Assert.Equal((int)OrderStatusCode.PartiallyReceived, reopened.OrderStatusId);
+        Assert.Empty(reopened.PurchaseShortages);
+        Assert.Empty(await context.PurchaseShortages.ToListAsync());
+        Assert.Equal(original.MerchandiseTotalNio, reopened.MerchandiseTotalNio);
+        Assert.Equal(original.TotalCostNio, reopened.TotalCostNio);
+        Assert.Equal(original.AmountUsd, reopened.AmountUsd);
+        Assert.Equal(292m, reopened.ReceivedAmountNio);
+        Assert.Equal(2, variant.Quantity);
+        Assert.Equal(1, variant.AvailableQuantity);
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.ReopenShortagesAsync(orderId));
+        await Assert.ThrowsAsync<AppBadRequestException>(() =>
+            service.CreateSupplierRefundAsync(orderId, new CreateSupplierRefundDTO { AmountNio = 100m }));
+
+        var finalReceipt = await receiptService.ReceiveAsync(orderId, receipt);
+        Assert.Equal((int)OrderStatusCode.Received, finalReceipt.OrderStatusId);
+        Assert.Equal(2, variant.AvailableQuantity);
     }
 
     [Fact]
@@ -376,6 +415,7 @@ public class OrderServiceTests
             Comments = "Proveedor no emitirá crédito."
         });
 
+        await Assert.ThrowsAsync<AppBadRequestException>(() => service.ReopenShortagesAsync(orderId));
         Assert.Null(declinedOrder.SupplierRefund);
         Assert.NotNull(declinedOrder.SupplierRefundDeclinedAt);
         Assert.Equal("Proveedor no emitirá crédito.", declinedOrder.SupplierRefundDeclineComments);

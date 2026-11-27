@@ -12,6 +12,7 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(x => x.Comments).HasMaxLength(300);
         builder.Property(x => x.SupplierRefundDeclineComments).HasMaxLength(300);
         builder.Property(x => x.SupplierRefundResolution).IsConcurrencyToken();
+        builder.Property(x => x.OrderStatusId).IsConcurrencyToken();
         builder.Property(x => x.PurchaseCurrencyId).HasDefaultValue((int)PurchaseCurrencyOption.Usd);
         builder.Property(x => x.AmountUsd).HasPrecision(14, 2);
         builder.Property(x => x.ExchangeRate).HasPrecision(10, 4);

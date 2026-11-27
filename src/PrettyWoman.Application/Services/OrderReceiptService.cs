@@ -507,7 +507,7 @@ public class OrderReceiptService(
             : (int)OrderStatusCode.PartiallyReceived;
     }
 
-    private static decimal CalculateReceivedAmountNio(Order order)
+    internal static decimal CalculateReceivedAmountNio(Order order)
     {
         if (order.ProductVariants.All(productVariant => productVariant.ReceivedQuantity >= productVariant.Quantity))
         {
@@ -520,7 +520,7 @@ public class OrderReceiptService(
                 : productVariant.MerchandiseTotalCostNio * Math.Min(productVariant.ReceivedQuantity, productVariant.Quantity) / productVariant.Quantity), 2);
     }
 
-    private static decimal CalculateUnitCostNio(ProductVariant productVariant)
+    internal static decimal CalculateUnitCostNio(ProductVariant productVariant)
     {
         var receivedCostQuantity = Math.Max(productVariant.Quantity, productVariant.ReceivedQuantity);
         return receivedCostQuantity == 0 ? 0 : Math.Round(productVariant.TotalCostNio / receivedCostQuantity, 6);

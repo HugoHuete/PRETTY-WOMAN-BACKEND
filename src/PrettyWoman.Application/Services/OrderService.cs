@@ -266,6 +266,44 @@ public class OrderService(IApplicationDbContext context, IMapper mapper, IMediaU
         return await GetByIdAsync(id);
     }
 
+    public async Task<OrderDTO> ReopenShortagesAsync(int id)
+    {
+        var order = await GetOrderForShortageUpdateAsync(id);
+        if (order.OrderStatusId != (int)OrderStatusCode.PendingRefund ||
+            order.PurchaseShortages.Count == 0 ||
+            order.SupplierRefund is not null ||
+            order.SupplierRefundResolution.HasValue ||
+            order.SupplierRefundDeclinedAt.HasValue)
+        {
+            throw new AppBadRequestException("Solo se pueden reabrir faltantes pendientes sin reembolso ni pérdida confirmada.");
+        }
+
+        var variants = order.ProductVariants.ToDictionary(variant => variant.Id);
+        foreach (var shortage in order.PurchaseShortages)
+        {
+            var variant = variants[shortage.ProductId];
+            variant.Quantity += shortage.Quantity;
+            variant.MerchandiseTotalCostNio += shortage.LossAmountNio;
+            variant.TotalCostNio = variant.MerchandiseTotalCostNio + variant.AllocatedShippingCostNio;
+            variant.UnitCostNio = OrderReceiptService.CalculateUnitCostNio(variant);
+            variant.UnitCostUsd = order.ExchangeRate == 0 ? 0 : Math.Round(variant.UnitCostNio / order.ExchangeRate, 2);
+        }
+
+        order.MerchandiseTotalNio = order.ProductVariants.Sum(variant => variant.MerchandiseTotalCostNio);
+        order.TotalCostNio = order.ProductVariants.Sum(variant => variant.TotalCostNio);
+        order.AmountUsd = order.ExchangeRate == 0 ? 0 : Math.Round(order.MerchandiseTotalNio / order.ExchangeRate, 2);
+        order.ReceivedAmountNio = OrderReceiptService.CalculateReceivedAmountNio(order);
+        order.OrderStatusId = order.ProductVariants.All(variant => variant.ReceivedQuantity >= variant.Quantity)
+            ? (int)OrderStatusCode.Received
+            : order.ProductVariants.Any(variant => variant.ReceivedQuantity > 0)
+                ? (int)OrderStatusCode.PartiallyReceived
+                : (int)OrderStatusCode.Pending;
+
+        _context.PurchaseShortages.RemoveRange(order.PurchaseShortages.ToArray());
+        await SaveSupplierRefundResolutionAsync();
+        return await GetByIdAsync(id);
+    }
+
     public async Task<OrderDTO> CreateSupplierRefundAsync(int id, CreateSupplierRefundDTO createSupplierRefundDTO)
     {
         createSupplierRefundDTO.Reference = createSupplierRefundDTO.Reference.NormalizeOptional();

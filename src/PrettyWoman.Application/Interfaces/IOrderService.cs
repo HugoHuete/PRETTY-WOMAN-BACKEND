@@ -13,6 +13,7 @@ public interface IOrderService
     Task<int> CreateAsync(CreateOrderDTO createOrderDTO);
     Task UpdateAsync(int id, UpdateOrderDTO updateOrderDTO);
     Task<OrderDTO> CloseShortagesAsync(int id, CloseOrderShortagesDTO closeShortagesDTO);
+    Task<OrderDTO> ReopenShortagesAsync(int id);
     Task<OrderDTO> CreateSupplierRefundAsync(int id, CreateSupplierRefundDTO createSupplierRefundDTO);
     Task<OrderDTO> DeclineSupplierRefundAsync(int id, DeclineSupplierRefundDTO declineSupplierRefundDTO);
     Task<IEnumerable<OrderTrackingNumberDTO>> AddTrackingNumbersAsync(int orderId, IEnumerable<CreateOrderTrackingNumberDTO> createTrackingDTOs);
