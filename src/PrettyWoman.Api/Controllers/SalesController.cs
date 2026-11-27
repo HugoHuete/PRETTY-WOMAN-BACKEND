@@ -24,7 +24,7 @@ public class SalesController(
     private readonly ISaleReturnService _saleReturnService = saleReturnService;
     private readonly ILogger<SalesController> _logger = logger;
 
-    /// <summary>Consulta ventas paginadas y permite filtrar por estado, pago, canal, clienta y fechas.</summary>
+    /// <summary>Consulta ventas paginadas y permite filtrar por estado, pago, canal, clienta, producto y fechas.</summary>
     [HttpGet]
     [ProducesResponseType(typeof(PaginatedResult<SaleDTO>), StatusCodes.Status200OK)]
     public async Task<ActionResult<PaginatedResult<SaleDTO>>> GetAll([FromQuery] SaleQueryDTO query)

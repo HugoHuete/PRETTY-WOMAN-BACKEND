@@ -336,6 +336,55 @@ public class SaleServiceTests
     }
 
     [Fact]
+    public async Task GetAllAsync_FiltersByProductCodeAndClientContactBeforePagination()
+    {
+        await using var context = CreateContext();
+        await SeedCatalogAsync(context);
+        context.Products.Add(new Product { Id = 1, Code = 7857, Name = "Zapato", SupplierProductCode = "SKU" });
+        var variant = await AddProductAsync(context, 5, 500m, 200m);
+        var client = new Client
+        {
+            Name = "Diana Morgan", PhoneNumber = "87860777",
+            InstagramUser = "Diana.Morgan", MessengerUser = "Diana Morgan NI"
+        };
+        var target = new Sale
+        {
+            SaleDate = new DateTime(2026, 11, 25, 0, 0, 0, DateTimeKind.Utc),
+            SaleChannelId = (int)SaleChannelOption.Whatsapp,
+            UserId = "seller-1",
+            Client = client,
+            ProductVariants = [new SaleProduct { ProductVariant = variant, Quantity = 1 }]
+        };
+        context.Sales.AddRange(target,
+            new Sale { SaleDate = target.SaleDate.AddDays(1), SaleChannelId = target.SaleChannelId, UserId = "seller-2",
+                Client = new Client { Name = "Diana Morgan", PhoneNumber = "87860777", InstagramUser = "otra.cuenta", MessengerUser = "Otra cuenta" },
+                ProductVariants = [new SaleProduct { ProductVariant = variant, Quantity = 1 }] },
+            new Sale { SaleDate = target.SaleDate.AddDays(2), SaleChannelId = target.SaleChannelId, UserId = "seller-1" });
+        await context.SaveChangesAsync();
+
+        var service = CreateService(context);
+        var query = new SaleQueryDTO { ProductCode = 7857, ClientName = " MORGAN ", ClientPhone = "8786-07", ClientInstagramUser = " @DIANA.MORGAN ", ClientMessengerUser = "MORGAN NI", PageSize = 1 };
+        var result = await service.GetAllAsync(query);
+
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal(target.Id, Assert.Single(result.Items).Id);
+        query.ProductCode = 785;
+        Assert.Empty((await service.GetAllAsync(query)).Items);
+        query.ProductCode = 7857;
+        query.ClientName = "Otro nombre";
+        Assert.Empty((await service.GetAllAsync(query)).Items);
+        query.ClientName = "Diana";
+        query.ClientPhone = "1234";
+        Assert.Empty((await service.GetAllAsync(query)).Items);
+        query.ClientPhone = "8786";
+        query.ClientInstagramUser = "otra.cuenta";
+        Assert.Empty((await service.GetAllAsync(query)).Items);
+        query.ClientInstagramUser = "morgan";
+        query.ClientMessengerUser = "otra cuenta";
+        Assert.Empty((await service.GetAllAsync(query)).Items);
+    }
+
+    [Fact]
     public async Task GetAllAsync_FiltersByTheMostRecentlyCreatedDeliveryStatus()
     {
         await using var context = CreateContext();

@@ -1482,6 +1482,29 @@ public class SaleService(
         }
         if (query.ClientId.HasValue)
             salesQuery = salesQuery.Where(sale => sale.ClientId == query.ClientId.Value);
+        if (query.ProductCode is int productCode)
+            salesQuery = salesQuery.Where(sale => sale.ProductVariants.Any(line =>
+                line.ProductVariant!.Product!.Code == productCode));
+        if (query.ClientName.NormalizeOptional() is { } clientName)
+        {
+            var search = clientName.ToLowerInvariant();
+            salesQuery = salesQuery.Where(sale => sale.Client != null && sale.Client.Name.ToLower().Contains(search));
+        }
+        if (query.ClientPhone.RemovePhoneSeparators().NormalizeOptional() is { } clientPhone)
+            salesQuery = salesQuery.Where(sale => sale.Client != null && sale.Client.PhoneNumber != null &&
+                sale.Client.PhoneNumber.Contains(clientPhone));
+        if (query.ClientInstagramUser.NormalizeOptional()?.TrimStart('@').NormalizeOptional() is { } instagramUser)
+        {
+            var search = instagramUser.ToLowerInvariant();
+            salesQuery = salesQuery.Where(sale => sale.Client != null && sale.Client.InstagramUser != null &&
+                sale.Client.InstagramUser.ToLower().Contains(search));
+        }
+        if (query.ClientMessengerUser.NormalizeOptional() is { } messengerUser)
+        {
+            var search = messengerUser.ToLowerInvariant();
+            salesQuery = salesQuery.Where(sale => sale.Client != null && sale.Client.MessengerUser != null &&
+                sale.Client.MessengerUser.ToLower().Contains(search));
+        }
         if (query.StartDate.HasValue)
             salesQuery = salesQuery.Where(sale => sale.SaleDate >= query.StartDate.Value);
         if (query.EndDate.HasValue)
